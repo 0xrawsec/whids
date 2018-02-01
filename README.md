@@ -7,7 +7,7 @@ rules are simple to write and easy to understand so that everyone can
 understand why a rule has triggered.
 
 With the democratisation of Sysmon, this tools is perfect to quickly build
-hunting rules or rules to monitoring things of interest happening on your
+hunting rules or simply monitoring rules to screen things of interest happening on your
 machine(s). With WHIDS you don't have to bother with an over 
 complicated Sysmon configuration which often turns to the nightmare when you want
 to be very specific.The simplest thing is just to enable all the logging 
@@ -48,4 +48,4 @@ bunch of other rules on our [repository](https://github.com/0xrawsec/gene-rules)
 }
 ```
 
-![WHIDS Mimikatz Demo](https://rawsec.lu/img/gifs/whids.gif)
+![WHIDS Mimikatz Demo](https://github.com/0xrawsec/whids/blob/master/demo/whids.gif)
