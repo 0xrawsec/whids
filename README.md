@@ -25,8 +25,7 @@ SIEM.
 # Example
 
 Here is an example of a rule designed to catch suspicious access to *lsass.exe*
-as it is done by the well known Mimikatz credential dump tool. You can find a 
-bunch of other rules on our [repository](https://github.com/0xrawsec/gene-rules).
+as it is done by the well known Mimikatz credential dump tool. 
 
 ```json
 {
@@ -48,4 +47,43 @@ bunch of other rules on our [repository](https://github.com/0xrawsec/gene-rules)
 }
 ```
 
+You can find a bunch of other rules on our [repository](https://github.com/0xrawsec/gene-rules).
+
+# Demo
+
+Running WHIDS with an already running Powershell Empire agent which invokes
+Mimikatz module.
+
 ![WHIDS Mimikatz Demo](https://github.com/0xrawsec/whids/blob/master/demo/whids.gif)
+
+Herafter is the kind of output returned by WHIDS. An additional section is added to the
+JSON event where the criticality of the alert is reported along with the different signatures
+which matched the event.
+
+```json
+{
+  "Event": {
+    "EventData": {
+      "CallTrace": "C:\\Windows\\SYSTEM32\\ntdll.dll+4bf9a|C:\\Windows\\system32\\KERNELBASE.dll+189b7|C:\\Windows\\system32\\taskmgr.exe+140e3|C:\\Windows\\system32\\taskmgr.exe+14f01|C:\\Windows\\system32\\taskmgr.exe+15a28|C:\\Windows\\system32\\taskmgr.exe+79d7|C:\\Windows\\system32\\taskmgr.exe+9695|C:\\Windows\\system32\\USER32.dll+2798b|C:\\Windows\\system32\\USER32.dll+27766|C:\\Windows\\system32\\USER32.dll+27696|C:\\Windows\\system32\\USER32.dll+19bbd|C:\\Windows\\system32\\USER32.dll+1729b|C:\\Windows\\system32\\USER32.dll+167e9|C:\\Windows\\SYSTEM32\\ntdll.dll+4bc65|UNKNOWN(FFFFF80002B72AF2)|UNKNOWN(FFFFF960001A2149)|UNKNOWN(FFFFF960001696EB)|UNKNOWN(FFFFF96000239B0D)|UNKNOWN(FFFFF960001E1AF5)|UNKNOWN(FFFFF9600017E1C6)|UNKNOWN(FFFFF9600018413C)|UNKNOWN(FFFFF96000175E87)|UNKNOWN(FFFFF96000183626)|UNKNOWN(FFFFF80002880C13)",
+      "GrantedAccess": "0x1400",
+      "SourceImage": "C:\\Windows\\system32\\taskmgr.exe",
+      "SourceProcessGUID": "{49F1AF32-1388-5A73-0000-0010524A3600}",
+      "SourceProcessId": "3592",
+      "SourceThreadId": "3736",
+      "TargetImage": "C:\\Windows\\system32\\lsass.exe",
+      "TargetProcessGUID": "{49F1AF32-DB3B-5A72-0000-001013690000}",
+      "TargetProcessId": "492",
+      "UtcTime": "2018-02-01 13:20:22.277"
+    },
+    "GeneInfo": {
+      "Criticality": 10,
+      "Signature": [
+        "MaliciousLsassAccess"
+      ]
+    },
+    "System": {
+        "Classical Windows Event System Section": "..."
+    }
+  }
+}
+```
