@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0xrawsec/gene/engine"
@@ -71,7 +72,9 @@ var (
 	windowsChannels   args.ListVar
 	timeout           args.DurationVar
 	channelAliases    = map[string]string{
-		"sysmon": "Microsoft-Windows-Sysmon/Operational"}
+		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
+		"security": "Security",
+	}
 	ruleExts = args.ListVar{".gen", ".gene"}
 )
 
@@ -80,8 +83,16 @@ func printInfo(writer io.Writer) {
 
 }
 
+func fmtAliases() string {
+	aliases := make([]string, 0, len(channelAliases))
+	for alias, channel := range channelAliases {
+		aliases = append(aliases, fmt.Sprintf("\t\t%s : %s", alias, channel))
+	}
+	return strings.Join(aliases, "\n")
+}
+
 func main() {
-	flag.Var(&windowsChannels, "c", "Windows channels to monitor")
+	flag.Var(&windowsChannels, "c", fmt.Sprintf("Windows channels to monitor or their aliases.\n\tAvailable aliases:\n%s\n", fmtAliases()))
 	flag.Var(&timeout, "timeout", "Stop working after timeout (format: 1s, 1m, 1h, 1d ...)")
 	flag.BoolVar(&trace, "trace", trace, "Tells the engine to use the trace function of the rules")
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
@@ -150,6 +161,7 @@ func main() {
 				ext := filepath.Ext(fi.Name())
 				rulefile := filepath.Join(wi.Dirpath, fi.Name())
 				log.Debug(ext)
+				// Check if the file extension is in the list of valid rule extension
 				if setRuleExts.Contains(ext) {
 					err := e.Load(rulefile)
 					if err != nil {
@@ -161,7 +173,6 @@ func main() {
 	default:
 		log.LogErrorAndExit(fmt.Errorf("Cannot resolve %s to file or dir", rulesPath), exitFail)
 	}
-
 	log.Infof("Loaded %d rules", e.Count())
 
 	// Register a timeout if specified in Command line
@@ -171,7 +182,9 @@ func main() {
 	if timeout > 0 {
 		go func() {
 			time.Sleep(time.Duration(timeout))
-			signals <- true
+			for _ = range []string(windowsChannels) {
+				signals <- true
+			}
 		}()
 	}
 
@@ -180,33 +193,46 @@ func main() {
 	signal.Notify(osSignals, os.Interrupt)
 	go func() {
 		<-osSignals
-		signals <- true
+		for _ = range []string(windowsChannels) {
+			signals <- true
+		}
 	}()
 
-	for _, winChan := range []string(windowsChannels) {
-		// Try to find an alias to the channel
-		if c, ok := channelAliases[strings.ToLower(winChan)]; ok {
-			winChan = c
-		}
-		ec := wevtapi.GetAllEventsFromChannel(winChan, wevtapi.EvtSubscribeToFutureEvents, signals)
-		for xe := range ec {
-			event, err := XMLEventToGoEvtxMap(xe)
-			if err != nil {
-				log.Errorf("Failed to convert event: %s", err)
-				log.Debugf("Error data: %v", xe)
+	// Loop starting the monitoring of the various channels
+	waitGr := sync.WaitGroup{}
+	for i := range []string(windowsChannels) {
+		winChan := []string(windowsChannels)[i]
+		waitGr.Add(1)
+		// New go routine per channel
+		go func() {
+			defer waitGr.Done()
+			// Try to find an alias to the channel
+			if c, ok := channelAliases[strings.ToLower(winChan)]; ok {
+				winChan = c
 			}
-			if n, crit := e.Match(event); len(n) > 0 {
-				if crit >= criticalityThresh {
-					fmt.Println(string(evtx.ToJSON(event)))
-					alertsCnt++
+			log.Infof("Listening on Windows channel: %s", winChan)
+			ec := wevtapi.GetAllEventsFromChannel(winChan, wevtapi.EvtSubscribeToFutureEvents, signals)
+			for xe := range ec {
+				event, err := XMLEventToGoEvtxMap(xe)
+				if err != nil {
+					log.Errorf("Failed to convert event: %s", err)
+					log.Debugf("Error data: %v", xe)
 				}
+				if n, crit := e.Match(event); len(n) > 0 {
+					if crit >= criticalityThresh {
+						fmt.Println(string(evtx.ToJSON(event)))
+						alertsCnt++
+					}
+				}
+				eventCnt++
 			}
-			eventCnt++
-		}
-		stop := time.Now()
-		log.Infof("Count Event Scanned: %d", eventCnt)
-		log.Infof("Average Event Rate: %.2f EPS", float64(eventCnt)/(stop.Sub(start).Seconds()))
-		log.Infof("Alerts Reported: %d", alertsCnt)
-		log.Infof("Count Rules Used (loaded + generated): %d", e.Count())
+		}()
 	}
+	waitGr.Wait()
+
+	stop := time.Now()
+	log.Infof("Count Event Scanned: %d", eventCnt)
+	log.Infof("Average Event Rate: %.2f EPS", float64(eventCnt)/(stop.Sub(start).Seconds()))
+	log.Infof("Alerts Reported: %d", alertsCnt)
+	log.Infof("Count Rules Used (loaded + generated): %d", e.Count())
 }
