@@ -1,6 +1,6 @@
-RELEASE=release
+RELEASE=$(GOPATH)/release
 MAIN_BASEN_SRC=whids
-VERSION=v1.0
+VERSION=v1.1
 
 # Strips symbols and dwarf to make binary smaller
 OPTS=-ldflags "-s -w"
@@ -23,8 +23,8 @@ install:
 compile:windows
 
 windows:
-	GOARCH=386 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-386.exe $(MAIN_BASEN_SRC).go
-	GOARCH=amd64 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-amd64.exe $(MAIN_BASEN_SRC).go
+	GOARCH=386 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-$(VERSION)-386.exe $(MAIN_BASEN_SRC).go
+	GOARCH=amd64 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-$(VERSION)-amd64.exe $(MAIN_BASEN_SRC).go
 	cd $(RELEASE)/windows; shasum -a 256 * > sha256.txt
 	cd $(RELEASE)/windows; tar -cvzf ../windows-$(VERSION).tar.gz *
 

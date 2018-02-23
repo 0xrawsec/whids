@@ -5,12 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"utils"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -54,15 +56,20 @@ const (
 	 ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝
 	           Windows Host IDS
 	`
-	version   = "1.0"
+	version   = "1.1"
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
 	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
+
+	geneRulesRepo = "https://github.com/0xrawsec/gene-rules/archive/master.zip"
+	databaseZip   = "latest-database.zip"
+	databasePath  = "latest-database"
 )
 
 var (
 	debug             bool
 	trace             bool
 	versionFlag       bool
+	update            bool
 	rulesPath         string
 	criticalityThresh int
 	tags              []string
@@ -97,6 +104,7 @@ func main() {
 	flag.BoolVar(&trace, "trace", trace, "Tells the engine to use the trace function of the rules")
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
 	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
+	flag.BoolVar(&update, "u", update, fmt.Sprintf("Update gene database and use it in addition to the other rule paths (Repo: %s)", geneRulesRepo))
 	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
 	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
 
@@ -118,6 +126,21 @@ func main() {
 	// Enabling debug if needed
 	if debug {
 		log.InitLogger(log.LDebug)
+	}
+
+	// Update Database
+	if update {
+		log.Infof("Downloading rules from: %s", geneRulesRepo)
+		client := &http.Client{}
+		err := utils.HTTPGet(client, geneRulesRepo, databaseZip)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Could not download latest gene-rules: %s", err), exitFail)
+		}
+		err = utils.Unzip(databaseZip, databasePath)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Could not unzip latest gene-rules: %s", err), exitFail)
+		}
+		rulesPath = databasePath
 	}
 
 	// Control parameters
@@ -200,8 +223,9 @@ func main() {
 
 	// Loop starting the monitoring of the various channels
 	waitGr := sync.WaitGroup{}
-	for i := range []string(windowsChannels) {
-		winChan := []string(windowsChannels)[i]
+	channels := []string(windowsChannels)
+	for i := range channels {
+		winChan := channels[i]
 		waitGr.Add(1)
 		// New go routine per channel
 		go func() {
