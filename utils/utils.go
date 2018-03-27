@@ -7,7 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
+	"utils/powershell"
+
+	"github.com/0xrawsec/golang-utils/datastructs"
 
 	"github.com/0xrawsec/golang-utils/log"
 )
@@ -84,4 +90,56 @@ func Unzip(zipfile, dest string) (err error) {
 		}
 	}
 	return nil
+}
+
+// EnableDNSLogs through wevutil command line
+func EnableDNSLogs() error {
+	cmd := exec.Command("wevtutil.exe", "sl", "Microsoft-Windows-DNS-Client/Operational", "/e:true")
+	return cmd.Run()
+}
+
+/////////////////////////////// Windows Logger ////////////////////////////////
+
+const (
+	newEventLog    = `New-EventLog -Source "%s" -LogName "%s"`
+	writeEventLog  = `Write-EventLog -LogName "%s" -Source "%s" -EventID %d -EntryType %s -Message '%s'`
+	removeEventLog = `Remove-EventLog -Source "%s"`
+)
+
+var (
+	entryTypesAllowed = datastructs.NewInitSyncedSet("Error", "Information", "FailureAudit", "SuccessAudit", "Warning")
+)
+
+// WindowsLogger structure definition
+type WindowsLogger struct {
+	p       *powershell.Powershell
+	Channel string
+	Source  string
+}
+
+// NewWindowsLogger creates a new WindowsLogger structure
+func NewWindowsLogger(channel, source string) (wl *WindowsLogger, err error) {
+	wl = &WindowsLogger{Channel: channel, Source: source}
+	wl.p, err = powershell.NewShell()
+	if err != nil {
+		return
+	}
+	wl.p.ExecuteString(fmt.Sprintf(newEventLog, wl.Source, wl.Channel))
+	return
+}
+
+// Log logs a message through powershell Write-EventLog
+func (w *WindowsLogger) Log(eventid int, entrytype, message string) {
+	if !entryTypesAllowed.Contains(entrytype) {
+		entrytype = "Information"
+	}
+	message = strings.Replace(message, "\n", "\\n", -1)
+	w.p.ExecuteString(fmt.Sprintf(writeEventLog, w.Channel, w.Source, eventid, entrytype, message))
+}
+
+// Close closes the logger in a clean fashion
+func (w *WindowsLogger) Close() error {
+	w.p.ExecuteString(fmt.Sprintf(removeEventLog, w.Source))
+	time.Sleep(1 * time.Second)
+	return w.p.Kill()
 }

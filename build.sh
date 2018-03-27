@@ -1,4 +1,4 @@
 #!/usr/bin/bash
 
 ./update.sh
-make -j 8
+./make.sh

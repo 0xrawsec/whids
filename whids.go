@@ -21,6 +21,7 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/golang-utils/readers"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
 )
 
@@ -56,13 +57,19 @@ const (
 	 ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝
 	           Windows Host IDS
 	`
-	version   = "1.1"
+	version   = "1.2"
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
 	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
 
+	// Rule update constants
 	geneRulesRepo = "https://github.com/0xrawsec/gene-rules/archive/master.zip"
 	databaseZip   = "latest-database.zip"
 	databasePath  = "latest-database"
+
+	// Windows Logging constants
+	winLogChannel = "Application"
+	winLogSource  = "Whids"
+	winLogEventID = 1337
 )
 
 var (
@@ -70,10 +77,15 @@ var (
 	trace             bool
 	versionFlag       bool
 	update            bool
+	winLog            bool
+	enDNSLog          bool
 	rulesPath         string
+	whitelist         string
+	blacklist         string
 	criticalityThresh int
 	tags              []string
 	names             []string
+	listeningChannels []string
 	tagsVar           args.ListVar
 	namesVar          args.ListVar
 	windowsChannels   args.ListVar
@@ -81,13 +93,14 @@ var (
 	channelAliases    = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
 		"security": "Security",
+		"dns":      "Microsoft-Windows-DNS-Client/Operational",
+		"all":      "All aliased channels",
 	}
 	ruleExts = args.ListVar{".gen", ".gene"}
 )
 
 func printInfo(writer io.Writer) {
 	fmt.Fprintf(writer, "%s\nVersion: %s\nCopyright: %s\nLicense: %s\n\n", banner, version, copyright, license)
-
 }
 
 func fmtAliases() string {
@@ -98,6 +111,34 @@ func fmtAliases() string {
 	return strings.Join(aliases, "\n")
 }
 
+func allChannels() []string {
+	channels := make([]string, 0, len(channelAliases))
+	for alias, channel := range channelAliases {
+		if alias != "all" {
+			channels = append(channels, channel)
+		}
+	}
+	log.Infof("%v", channels)
+	return channels
+}
+
+func prepareChannels() []string {
+	uniqChannels := datastructs.NewSyncedSet()
+	for _, channel := range []string(windowsChannels) {
+		if channel == "all" {
+			allChans := allChannels()
+			uniqChannels.Add(datastructs.ToInterfaceSlice(allChans)...)
+		} else {
+			uniqChannels.Add(channel)
+		}
+	}
+	channels := make([]string, 0, uniqChannels.Len())
+	for _, channel := range *uniqChannels.List() {
+		channels = append(channels, channel.(string))
+	}
+	return channels
+}
+
 func main() {
 	flag.Var(&windowsChannels, "c", fmt.Sprintf("Windows channels to monitor or their aliases.\n\tAvailable aliases:\n%s\n", fmtAliases()))
 	flag.Var(&timeout, "timeout", "Stop working after timeout (format: 1s, 1m, 1h, 1d ...)")
@@ -105,6 +146,10 @@ func main() {
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
 	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
 	flag.BoolVar(&update, "u", update, fmt.Sprintf("Update gene database and use it in addition to the other rule paths (Repo: %s)", geneRulesRepo))
+	flag.BoolVar(&winLog, "winlog", winLog, fmt.Sprintf("Enable windows logging in channel %s", winLogChannel))
+	flag.BoolVar(&enDNSLog, "dns", enDNSLog, "Enable DNS logging (not disabled when whids quits)")
+	flag.StringVar(&whitelist, "wl", whitelist, "File containing values to insert into the whitelist")
+	flag.StringVar(&blacklist, "bl", blacklist, "File containing values to insert into the blacklist")
 	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
 	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
 
@@ -117,6 +162,9 @@ func main() {
 
 	flag.Parse()
 
+	// prepare the channels and set listeningChannels
+	listeningChannels = prepareChannels()
+
 	// Print version information and exit
 	if versionFlag {
 		printInfo(os.Stderr)
@@ -126,6 +174,14 @@ func main() {
 	// Enabling debug if needed
 	if debug {
 		log.InitLogger(log.LDebug)
+	}
+
+	if enDNSLog {
+		log.Info("Enabling DNS client logging")
+		err := utils.EnableDNSLogs()
+		if err != nil {
+			log.Errorf("Cannot enable DNS logging: %s", err)
+		}
 	}
 
 	// Update Database
@@ -164,6 +220,32 @@ func main() {
 	for _, e := range ruleExts {
 		setRuleExts.Add(e)
 	}
+
+	// We have to load the containers befor the rules
+	// For the Whitelist
+	if whitelist != "" {
+		wlf, err := os.Open(whitelist)
+		if err != nil {
+			log.LogErrorAndExit(err, exitFail)
+		}
+		for line := range readers.Readlines(wlf) {
+			e.Whitelist(string(line))
+		}
+		wlf.Close()
+	}
+	log.Infof("Size of whitelist container: %d", e.WhitelistLen())
+	// For the Blacklist
+	if blacklist != "" {
+		blf, err := os.Open(blacklist)
+		if err != nil {
+			log.LogErrorAndExit(err, exitFail)
+		}
+		for line := range readers.Readlines(blf) {
+			e.Blacklist(string(line))
+		}
+		blf.Close()
+	}
+	log.Infof("Size of blacklist container: %d", e.BlacklistLen())
 
 	// Loading the rules
 	realPath, err := fsutil.ResolveLink(rulesPath)
@@ -216,16 +298,24 @@ func main() {
 	signal.Notify(osSignals, os.Interrupt)
 	go func() {
 		<-osSignals
-		for _ = range []string(windowsChannels) {
+		for _ = range []string(listeningChannels) {
 			signals <- true
 		}
 	}()
 
 	// Loop starting the monitoring of the various channels
 	waitGr := sync.WaitGroup{}
-	channels := []string(windowsChannels)
-	for i := range channels {
-		winChan := channels[i]
+	winLogger, err := utils.NewWindowsLogger(winLogChannel, winLogSource)
+	if err != nil {
+		log.LogErrorAndExit(fmt.Errorf("Cannot create windows logger: %s", err))
+	}
+	defer func() {
+		log.Infof("Closing windows logger")
+		winLogger.Close()
+	}()
+
+	for i := range listeningChannels {
+		winChan := listeningChannels[i]
 		waitGr.Add(1)
 		// New go routine per channel
 		go func() {
@@ -245,6 +335,9 @@ func main() {
 				if n, crit := e.Match(event); len(n) > 0 {
 					if crit >= criticalityThresh {
 						fmt.Println(string(evtx.ToJSON(event)))
+						if winLog {
+							winLogger.Log(winLogEventID, "Warning", string(evtx.ToJSON(event)))
+						}
 						alertsCnt++
 					}
 				}

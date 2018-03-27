@@ -1,4 +1,4 @@
-$version = "v1.1"
+$version = "v1.2"
 $url = "https://github.com/0xrawsec/whids/releases/download/$version"
 $arch = $ENV:PROCESSOR_ARCHITECTURE
 $bin = "$PWD\"+"whids.exe"
@@ -17,4 +17,4 @@ $client = New-Object System.Net.WebClient
 $client.DownloadFile($url, $bin)
 
 & $bin -v
-& $bin -t 1 -u -c "security,sysmon"
+& $bin -t 1 -u -c all

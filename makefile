@@ -1,6 +1,6 @@
 RELEASE=$(GOPATH)/release
 MAIN_BASEN_SRC=whids
-VERSION=v1.1
+VERSION=v1.2
 
 # Strips symbols and dwarf to make binary smaller
 OPTS=-ldflags "-s -w"
