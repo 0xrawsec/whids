@@ -97,6 +97,7 @@ var (
 		"all":      "All aliased channels",
 	}
 	ruleExts = args.ListVar{".gen", ".gene"}
+	tplExt   = ".tpl"
 )
 
 func printInfo(writer io.Writer) {
@@ -253,6 +254,25 @@ func main() {
 		log.LogErrorAndExit(err, exitFail)
 	}
 
+	// Loading the templates first
+	templateDir := realPath
+	if fsutil.IsFile(realPath) {
+		templateDir = filepath.Dir(realPath)
+	}
+	for wi := range fswalker.Walk(templateDir) {
+		for _, fi := range wi.Files {
+			ext := filepath.Ext(fi.Name())
+			templateFile := filepath.Join(wi.Dirpath, fi.Name())
+			if ext == tplExt {
+				log.Infof("Loading regexp templates from file: %s", templateFile)
+				err := e.LoadTemplate(templateFile)
+				if err != nil {
+					log.Errorf("Error loading %s: %s", templateFile, err)
+				}
+			}
+		}
+	}
+
 	// Handle both rules argument as file or directory
 	switch {
 	case fsutil.IsFile(realPath):
@@ -316,6 +336,13 @@ func main() {
 
 	for i := range listeningChannels {
 		winChan := listeningChannels[i]
+
+		// We flush DNS cache before monitoring DNS channel
+		if winChan == "dns" || winChan == channelAliases["dns"] {
+			log.Info("Flushing DNS Cache")
+			utils.FlushDNSCache()
+		}
+
 		waitGr.Add(1)
 		// New go routine per channel
 		go func() {

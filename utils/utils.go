@@ -98,6 +98,12 @@ func EnableDNSLogs() error {
 	return cmd.Run()
 }
 
+// FlushDNSCache executes windows command to flush the DNS cache
+func FlushDNSCache() error {
+	cmd := exec.Command("ipconfig.exe", "/flushdns")
+	return cmd.Run()
+}
+
 /////////////////////////////// Windows Logger ////////////////////////////////
 
 const (
