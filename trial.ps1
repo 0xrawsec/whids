@@ -1,4 +1,4 @@
-$version = "v1.2"
+$version = "v1.2.1"
 $url = "https://github.com/0xrawsec/whids/releases/download/$version"
 $arch = $ENV:PROCESSOR_ARCHITECTURE
 $bin = "$PWD\"+"whids.exe"
