@@ -95,6 +95,27 @@ Please visit: https://rawsec.lu/doc/gene/1.3/
 
 # Changelog
 
+## v1.3
+  * **Event Hook** introduction
+    * Can modify the events before going through detection engine
+    * Created hooks to overcome domain name resolution issue
+    * Implemented hooks to enrich Sysmon events 1, 6 and 7 with the size of the PE image
+    * Implemented several other hooks
+  * Can run in **service mode**:
+    * restart in case of failure
+    * log alerts to compressed file and rotate file automatically
+    * log messages to a file
+  * Installation script
+    * creates a scheduled start running at boot to start Whids
+    * agenerate an uninstall script dropped in the install folder
+  * Number of new command lines arguments
+    * **-hooks**: control event hook activation
+    * **-protect**: dummy protection against crypto-locker (can be seen as a nice POC of event hooks)
+    * **-all**: option to enable logging of **all** the events coming from the monitored channels
+    should not be used in production, it is more for debugging purposes
+    * ...
+  * Some minor code refactoring
+
 ## v1.2
   * Log to Windows Application channel
   * Updated with latest version of gene so it benefits of its new features
