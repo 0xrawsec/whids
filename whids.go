@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hooks"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"utils"
 
@@ -20,8 +23,10 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
+	"github.com/0xrawsec/golang-utils/fsutil/logfile"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/readers"
+	"github.com/0xrawsec/golang-win32/win32/kernel32"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
 )
 
@@ -57,19 +62,22 @@ const (
 	 ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝
 	           Windows Host IDS
 	`
-	version   = "1.2"
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
 	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
 
 	// Rule update constants
 	geneRulesRepo = "https://github.com/0xrawsec/gene-rules/archive/master.zip"
 	databaseZip   = "latest-database.zip"
-	databasePath  = "latest-database"
 
 	// Windows Logging constants
 	winLogChannel = "Application"
 	winLogSource  = "Whids"
 	winLogEventID = 1337
+
+	// Default permissions for output files
+	defaultPerms = 0640
+
+	serviceCLFlag = "service"
 )
 
 var (
@@ -79,9 +87,17 @@ var (
 	update            bool
 	winLog            bool
 	enDNSLog          bool
+	enHooks           bool
+	enCryptoProt      bool
+	flagProcTermEn    bool // set the flag to true if process termination is enabled
+	flagPrintAll      bool
+	flagService       bool
+	flagPhenix        bool
 	rulesPath         string
 	whitelist         string
 	blacklist         string
+	output            string
+	logOut            string
 	criticalityThresh int
 	tags              []string
 	names             []string
@@ -90,7 +106,12 @@ var (
 	namesVar          args.ListVar
 	windowsChannels   args.ListVar
 	timeout           args.DurationVar
-	channelAliases    = map[string]string{
+	writer            io.Writer
+
+	abs, _       = filepath.Abs(filepath.Dir(os.Args[0]))
+	databasePath = filepath.Join(abs, "latest-database")
+
+	channelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
 		"security": "Security",
 		"dns":      "Microsoft-Windows-DNS-Client/Operational",
@@ -98,10 +119,22 @@ var (
 	}
 	ruleExts = args.ListVar{".gen", ".gene"}
 	tplExt   = ".tpl"
+
+	// Needed by Hooks
+	selfGUID                    = ""
+	selfPath, _                 = filepath.Abs(os.Args[0])
+	cryptoLockerFilecreateLimit = int64(50)
+
+	fileSizeMB = int64(100)
+
+	// Number of retries between rules updates
+	dlRetries = 40
+
+	osSignals = make(chan os.Signal)
 )
 
 func printInfo(writer io.Writer) {
-	fmt.Fprintf(writer, "%s\nVersion: %s\nCopyright: %s\nLicense: %s\n\n", banner, version, copyright, license)
+	fmt.Fprintf(writer, "%s\nVersion: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", banner, version, commitID, copyright, license)
 }
 
 func fmtAliases() string {
@@ -119,7 +152,6 @@ func allChannels() []string {
 			channels = append(channels, channel)
 		}
 	}
-	log.Infof("%v", channels)
 	return channels
 }
 
@@ -140,25 +172,115 @@ func prepareChannels() []string {
 	return channels
 }
 
+func service() {
+	path := os.Args[0]
+	args := os.Args[1:]
+	for i, a := range args {
+		if a == fmt.Sprintf("-%s", serviceCLFlag) {
+			if i != len(args)-1 {
+				args = append(args[:i], args[i+1:]...)
+			} else {
+				args = args[:i]
+			}
+		}
+	}
+
+	osSignals := make(chan os.Signal)
+	signal.Notify(osSignals, os.Interrupt, os.Kill)
+	go func() {
+		<-osSignals
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
+	}()
+
+	for {
+		cmd := exec.Command(path, args...)
+		log.Infof("Running: %s %s", path, strings.Join(args, " "))
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stdout
+		err := cmd.Run()
+		log.Errorf("Process stopped running: %s", err)
+	}
+}
+
+func monitorParentProcess() {
+	var ppid int
+	tmpPpid := syscall.Getppid()
+	fn, err := kernel32.GetModuleFilenameFromPID(tmpPpid)
+	if err != nil {
+		log.Errorf("Cannot get parent Image: %s", err)
+	}
+	sfn, err := kernel32.GetModuleFilenameSelf()
+	if err != nil {
+		log.Errorf("Cannot get self module filename: %s", err)
+	}
+	log.Infof("Parent Process Image: %s", fn)
+	log.Infof("Process Image: %s", sfn)
+	upFn, upSfn := strings.ToUpper(sfn), strings.ToUpper(fn)
+	if upSfn == upFn {
+		// We are a child of whids so running as service
+		ppid = tmpPpid
+		go func() {
+			for {
+				fn, _ := kernel32.GetModuleFilenameFromPID(ppid)
+				sfn, err := kernel32.GetModuleFilenameSelf()
+				upFn, upSfn := strings.ToUpper(sfn), strings.ToUpper(fn)
+				if err != nil {
+					log.Errorf("Cannot get self module filename: %s", err)
+				}
+				if upSfn != upFn {
+					// If we want Whids to reborn
+					if flagPhenix {
+						// service option
+						args := []string{fmt.Sprintf("-%s", serviceCLFlag)}
+						if len(os.Args) > 1 {
+							args = append(args, os.Args[1:]...)
+						}
+						cmd := exec.Command(os.Args[0], args...)
+						log.Infof("Manager has been terminated, restarting it")
+						cmd.Start()
+					}
+					// If we are here it means our parent service has been terminated
+					// so we abourt ourself in a gentle way
+					osSignals <- os.Interrupt
+					return
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}()
+	}
+}
+
 func main() {
 	flag.Var(&windowsChannels, "c", fmt.Sprintf("Windows channels to monitor or their aliases.\n\tAvailable aliases:\n%s\n", fmtAliases()))
 	flag.Var(&timeout, "timeout", "Stop working after timeout (format: 1s, 1m, 1h, 1d ...)")
 	flag.BoolVar(&trace, "trace", trace, "Tells the engine to use the trace function of the rules")
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
 	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
-	flag.BoolVar(&update, "u", update, fmt.Sprintf("Update gene database and use it in addition to the other rule paths (Repo: %s)", geneRulesRepo))
+	flag.BoolVar(&update, "u", update, fmt.Sprintf(`Update gene database and use it in 
+addition to the other rule paths (Repo: %s)`, geneRulesRepo))
 	flag.BoolVar(&winLog, "winlog", winLog, fmt.Sprintf("Enable windows logging in channel %s", winLogChannel))
 	flag.BoolVar(&enDNSLog, "dns", enDNSLog, "Enable DNS logging (not disabled when whids quits)")
+	flag.BoolVar(&enHooks, "hooks", enHooks, `Enable Hooking functions to enrich events before they go through the engine 
+When this option is enabled, DNS logging is also enabled`)
+	flag.BoolVar(&enCryptoProt, "protect", enCryptoProt, "Enable basic protection against crypto lockers")
+	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all the events")
+	flag.BoolVar(&flagService, serviceCLFlag, flagService, "Run in simple service mode (restart after child failure)")
+	flag.BoolVar(&flagPhenix, "phenix", flagPhenix, "Phenix mode (i.e. never dies)")
 	flag.StringVar(&whitelist, "wl", whitelist, "File containing values to insert into the whitelist")
 	flag.StringVar(&blacklist, "bl", blacklist, "File containing values to insert into the blacklist")
 	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
+	flag.StringVar(&output, "o", output, "Write alerts to file instead of stdout")
+	flag.StringVar(&logOut, "l", logOut, "Write logs to file instead of stderr")
+	flag.StringVar(&databasePath, "update-dir", databasePath, "Directory where rules will be downloaded")
 	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
+	flag.IntVar(&dlRetries, "update-retries", dlRetries, "Number of retries (every 5s) when uploading the rules (will retry forever if rule download path does not exist)")
+	flag.Int64Var(&fileSizeMB, "size", fileSizeMB, "Maximum output file size (in MB) before rotation")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
-		os.Exit(exitSuccess)
 	}
 
 	flag.Parse()
@@ -177,6 +299,54 @@ func main() {
 		log.InitLogger(log.LDebug)
 	}
 
+	// Initializing the output file
+	if output != "" {
+		log.Infof("Writing output to: %s", output)
+		var err error
+		writer, err = logfile.OpenFile(output, defaultPerms, fileSizeMB*logfile.MB)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Cannot create output file: %s", err), exitFail)
+		}
+	} else {
+		writer = os.Stdout
+	}
+
+	if logOut != "" {
+		log.SetLogfile(logOut, defaultPerms)
+	}
+
+	// If we want to run it as a service
+	if flagService {
+		service()
+		os.Exit(exitSuccess)
+	} else {
+		// We monitor parent process if needed
+		monitorParentProcess()
+	}
+
+	// HookManager initialization
+	hookMan := hooks.NewHookMan()
+	// We enable those hooks anyway since it is needed to skip
+	// events generated by WHIDS process
+	hookMan.Hook(hookSelfGUID, sysmonEventsWithImage)
+	hookMan.Hook(hookProcTerm, sysmonProcTermination)
+	hookMan.Hook(hookStats, statFilter)
+	hookMan.Hook(hookTrack, statFilter)
+	// if crypto protect enabled
+	if enCryptoProt {
+		hookMan.Hook(hookCryptoProtect, statFilter)
+		hookMan.Hook(hookTerminator, statFilter)
+	}
+
+	if enHooks {
+		log.Info("Enabling Hooks")
+		hookMan.Hook(hookDNS, dnsFilter)
+		hookMan.Hook(hookNetConn, sysmonNetConnFilter)
+		hookMan.Hook(hookSetImageSize, sysmonEventsWithImage)
+		// needs DNS logs to be enabled as well
+		enDNSLog = true
+	}
+
 	if enDNSLog {
 		log.Info("Enabling DNS client logging")
 		err := utils.EnableDNSLogs()
@@ -188,21 +358,34 @@ func main() {
 	// Update Database
 	if update {
 		log.Infof("Downloading rules from: %s", geneRulesRepo)
-		client := &http.Client{}
-		err := utils.HTTPGet(client, geneRulesRepo, databaseZip)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Could not download latest gene-rules: %s", err), exitFail)
-		}
-		err = utils.Unzip(databaseZip, databasePath)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Could not unzip latest gene-rules: %s", err), exitFail)
+		// Kind of infinite loop while databasePath does not exist
+		for i := 0; i < dlRetries; {
+			client := &http.Client{}
+			err := utils.HTTPGet(client, geneRulesRepo, databaseZip)
+			if err != nil {
+				log.Errorf("Failed to download latest gene-rules: %s", err)
+			} else {
+				err = utils.Unzip(databaseZip, databasePath)
+				if err != nil {
+					log.Errorf("Could not unzip latest gene-rules: %s", err)
+				}
+				break
+			}
+			// We increment because we know that we will have rules
+			// available anyway
+			if fsutil.IsDir(databasePath) {
+				i++
+			}
+			log.Info("Retrying to download rules update")
+			time.Sleep(5 * time.Second)
 		}
 		rulesPath = databasePath
 	}
 
 	// Control parameters
 	if rulesPath == "" {
-		log.LogErrorAndExit(fmt.Errorf("No rule file to load"), exitFail)
+		//log.LogErrorAndExit(fmt.Errorf("No rule file to load"), exitFail)
+		log.Warn("No rule file to load")
 	}
 
 	// Initialization
@@ -259,15 +442,17 @@ func main() {
 	if fsutil.IsFile(realPath) {
 		templateDir = filepath.Dir(realPath)
 	}
-	for wi := range fswalker.Walk(templateDir) {
-		for _, fi := range wi.Files {
-			ext := filepath.Ext(fi.Name())
-			templateFile := filepath.Join(wi.Dirpath, fi.Name())
-			if ext == tplExt {
-				log.Infof("Loading regexp templates from file: %s", templateFile)
-				err := e.LoadTemplate(templateFile)
-				if err != nil {
-					log.Errorf("Error loading %s: %s", templateFile, err)
+	if templateDir != "" {
+		for wi := range fswalker.Walk(templateDir) {
+			for _, fi := range wi.Files {
+				ext := filepath.Ext(fi.Name())
+				templateFile := filepath.Join(wi.Dirpath, fi.Name())
+				if ext == tplExt {
+					log.Infof("Loading regexp templates from file: %s", templateFile)
+					err := e.LoadTemplate(templateFile)
+					if err != nil {
+						log.Errorf("Error loading %s: %s", templateFile, err)
+					}
 				}
 			}
 		}
@@ -296,7 +481,7 @@ func main() {
 			}
 		}
 	default:
-		log.LogErrorAndExit(fmt.Errorf("Cannot resolve %s to file or dir", rulesPath), exitFail)
+		//log.LogErrorAndExit(fmt.Errorf("Cannot resolve %s to file or dir", rulesPath), exitFail)
 	}
 	log.Infof("Loaded %d rules", e.Count())
 
@@ -313,13 +498,15 @@ func main() {
 		}()
 	}
 
-	// Registering handler for interrupt signal
-	osSignals := make(chan os.Signal)
 	signal.Notify(osSignals, os.Interrupt)
 	go func() {
 		<-osSignals
 		for _ = range []string(listeningChannels) {
 			signals <- true
+		}
+		// Close the writer properly if not Stdout
+		if l, ok := writer.(*logfile.LogFile); ok {
+			l.Close()
 		}
 	}()
 
@@ -347,7 +534,7 @@ func main() {
 		// New go routine per channel
 		go func() {
 			defer waitGr.Done()
-			// Try to find an alias to the channel
+			// Try to find an alias for the channel
 			if c, ok := channelAliases[strings.ToLower(winChan)]; ok {
 				winChan = c
 			}
@@ -359,19 +546,37 @@ func main() {
 					log.Errorf("Failed to convert event: %s", err)
 					log.Debugf("Error data: %v", xe)
 				}
+				// Place Hooks over here
+				hookMan.RunHooksOn(event)
+
+				// We skip if it is one of our Event
+				if isSelf(event) {
+					continue
+				}
+
 				if n, crit := e.Match(event); len(n) > 0 {
 					if crit >= criticalityThresh {
-						fmt.Println(string(evtx.ToJSON(event)))
+						fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
 						if winLog {
 							winLogger.Log(winLogEventID, "Warning", string(evtx.ToJSON(event)))
 						}
 						alertsCnt++
 					}
+				} else {
+					if flagPrintAll {
+						fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
+					}
+				}
+				if w, ok := writer.(*logfile.LogFile); ok {
+					w.Flush()
 				}
 				eventCnt++
 			}
 		}()
 	}
+	// Run bullshit command so that at least one Process Terminate
+	// is generated (used to check if process termination events are enabled)
+	exec.Command(os.Args[0], "-h").Start()
 	waitGr.Wait()
 
 	stop := time.Now()
