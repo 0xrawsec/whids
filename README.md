@@ -91,7 +91,7 @@ which matched the event.
 
 # Documentation
 
-Please visit: https://rawsec.lu/doc/gene/1.3/
+Please visit: https://rawsec.lu/doc/gene/1.4/
 
 # Changelog
 
