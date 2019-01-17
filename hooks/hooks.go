@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/datastructs"
@@ -40,6 +41,7 @@ type Hook func(*evtx.GoEvtxMap)
 
 // HookManager structure definition to easier handle hooks
 type HookManager struct {
+	sync.RWMutex
 	Filters []*Filter
 	Hooks   []Hook
 	memory  map[string][]int // used to memorize hooks given a couple of (channel, eventid)
@@ -47,9 +49,9 @@ type HookManager struct {
 
 // NewHookMan creates a new HookManager structure
 func NewHookMan() *HookManager {
-	return &HookManager{make([]*Filter, 0),
-		make([]Hook, 0),
-		make(map[string][]int)}
+	return &HookManager{Filters: make([]*Filter, 0),
+		Hooks:  make([]Hook, 0),
+		memory: make(map[string][]int)}
 }
 
 // Hook register a hook for a given filter
@@ -72,6 +74,7 @@ func (hm *HookManager) RunHooksOn(e *evtx.GoEvtxMap) (ret bool) {
 	key := eventIdentifier(e)
 	// We have to check all the filters if we don't know yet
 	// which hooks should apply on this kind of event
+	hm.Lock()
 	if _, ok := hm.memory[key]; !ok {
 		for i, f := range hm.Filters {
 			if f.Match(e) {
@@ -82,6 +85,8 @@ func (hm *HookManager) RunHooksOn(e *evtx.GoEvtxMap) (ret bool) {
 			}
 		}
 	}
+	hm.Unlock()
+	hm.RLock()
 	// hi: hook index
 	for _, hi := range hm.memory[key] {
 		hook := hm.Hooks[hi]
@@ -89,5 +94,6 @@ func (hm *HookManager) RunHooksOn(e *evtx.GoEvtxMap) (ret bool) {
 		// We set return value to true if a hook has been applied
 		ret = true
 	}
+	hm.RUnlock()
 	return
 }

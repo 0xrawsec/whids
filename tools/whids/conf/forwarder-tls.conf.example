@@ -1,0 +1,12 @@
+// Example file: remove comments to use it. It must follow JSON syntax
+// Look at forwarder.conf.example for fields not documented here
+{
+    "proto": "https",
+    "host": "192.168.56.1",
+    "port": 8080,
+    "key": "mysecretapikey",
+    "queue-dir": "Queue",
+    "unsafe": true,             // In case of self signed certificate
+    "server-key": ""            // Key used to authenticate the server (checked against manager's key).
+                                // if blank or not defined server authentication is not enforced
+}

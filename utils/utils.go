@@ -3,19 +3,26 @@ package utils
 import (
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"utils/powershell"
 
 	"github.com/0xrawsec/golang-utils/datastructs"
 
 	"github.com/0xrawsec/golang-utils/log"
+)
+
+const (
+	Mega = 1 << 20
 )
 
 // HTTPGet helper function to issue a simple HTTP GET method
@@ -92,6 +99,34 @@ func Unzip(zipfile, dest string) (err error) {
 	return nil
 }
 
+// GzipFile compresses a file to gzip and deletes the original file
+func GzipFile(path string) (err error) {
+	var buf [Mega]byte
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	//defer f.Close()
+	of, err := os.Create(fmt.Sprintf("%s.gz", path))
+	if err != nil {
+		return
+	}
+	defer of.Close()
+	w := gzip.NewWriter(of)
+	for n, err := f.Read(buf[:]); err != io.EOF; {
+		w.Write(buf[:n])
+		n, err = f.Read(buf[:])
+	}
+	w.Flush()
+	w.Close()
+	f.Close()
+	log.Infof("Removing original dumpfile: %s", path)
+	if err := os.Remove(path); err != nil {
+		log.Errorf("Cannot remove original dumpfile: %s", err)
+	}
+	return nil
+}
+
 // EnableDNSLogs through wevutil command line
 func EnableDNSLogs() error {
 	cmd := exec.Command("wevtutil.exe", "sl", "Microsoft-Windows-DNS-Client/Operational", "/e:true")
@@ -130,7 +165,9 @@ func NewWindowsLogger(channel, source string) (wl *WindowsLogger, err error) {
 	if err != nil {
 		return
 	}
-	wl.p.ExecuteString(fmt.Sprintf(newEventLog, wl.Source, wl.Channel))
+	command := fmt.Sprintf(newEventLog, wl.Source, wl.Channel)
+	log.Debug(command)
+	wl.p.ExecuteString(command)
 	return
 }
 
@@ -140,12 +177,62 @@ func (w *WindowsLogger) Log(eventid int, entrytype, message string) {
 		entrytype = "Information"
 	}
 	message = strings.Replace(message, "\n", "\\n", -1)
-	w.p.ExecuteString(fmt.Sprintf(writeEventLog, w.Channel, w.Source, eventid, entrytype, message))
+	command := fmt.Sprintf(writeEventLog, w.Channel, w.Source, eventid, entrytype, message)
+	log.Debug(command)
+	w.p.ExecuteString(command)
 }
 
 // Close closes the logger in a clean fashion
 func (w *WindowsLogger) Close() error {
-	w.p.ExecuteString(fmt.Sprintf(removeEventLog, w.Source))
+	command := fmt.Sprintf(removeEventLog, w.Source)
+	w.p.ExecuteString(command)
+	log.Debug(command)
 	time.Sleep(1 * time.Second)
 	return w.p.Kill()
+}
+
+// Round float f to precision
+func Round(f float64, precision int) float64 {
+	pow := math.Pow10(precision)
+	return float64(int64(f*pow)) / pow
+}
+
+// ArgvFromCommandLine returns an argv slice given a command line
+// provided in argument
+func ArgvFromCommandLine(cl string) (argv []string, err error) {
+	argc := int32(0)
+	utf16ClPtr, err := syscall.UTF16PtrFromString(cl)
+	if err != nil {
+		return
+	}
+	utf16Argv, err := syscall.CommandLineToArgv(utf16ClPtr, &argc)
+	if err != nil {
+		return
+	}
+	argv = make([]string, argc)
+	for i, utf16Ptr := range utf16Argv[:argc] {
+		argv[i] = syscall.UTF16ToString((*utf16Ptr)[:])
+	}
+	return
+}
+
+// IsPipePath checks whether the argument path is a pipe
+func IsPipePath(path string) bool {
+	return strings.HasPrefix(path, `\\.\`)
+}
+
+type ByteSlice []byte
+
+func (b ByteSlice) Len() int {
+	return len(b)
+}
+
+func (b ByteSlice) Swap(i, j int) {
+	s := b[i]
+	b[i] = b[j]
+	b[j] = s
+}
+
+func (b ByteSlice) Less(i, j int) bool {
+	return b[i] < b[j]
 }

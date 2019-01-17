@@ -1,11 +1,13 @@
 package main
 
 import (
+	"collector"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"hooks"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -93,11 +95,13 @@ var (
 	flagPrintAll      bool
 	flagService       bool
 	flagPhenix        bool
+	flagDumpCompress  bool
 	rulesPath         string
 	whitelist         string
 	blacklist         string
 	output            string
 	logOut            string
+	collect           string
 	criticalityThresh int
 	tags              []string
 	names             []string
@@ -108,8 +112,14 @@ var (
 	timeout           args.DurationVar
 	writer            io.Writer
 
-	abs, _       = filepath.Abs(filepath.Dir(os.Args[0]))
-	databasePath = filepath.Join(abs, "latest-database")
+	forwarder *collector.Forwarder
+
+	abs, _        = filepath.Abs(filepath.Dir(os.Args[0]))
+	databasePath  = filepath.Join(abs, "latest-database")
+	dumpDirectory = filepath.Join(abs, "dumps")
+	dump          = "none"
+	dumpOptions   = []string{"memory", "file", "all"}
+	dumpTresh     = 8
 
 	channelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
@@ -121,8 +131,10 @@ var (
 	tplExt   = ".tpl"
 
 	// Needed by Hooks
-	selfGUID                    = ""
-	selfPath, _                 = filepath.Abs(os.Args[0])
+	selfGUID    = ""
+	selfPath, _ = filepath.Abs(os.Args[0])
+	selfPid     = os.Getpid()
+
 	cryptoLockerFilecreateLimit = int64(50)
 
 	fileSizeMB = int64(100)
@@ -216,7 +228,7 @@ func monitorParentProcess() {
 	}
 	log.Infof("Parent Process Image: %s", fn)
 	log.Infof("Process Image: %s", sfn)
-	upFn, upSfn := strings.ToUpper(sfn), strings.ToUpper(fn)
+	upFn, upSfn := strings.ToUpper(fn), strings.ToUpper(sfn)
 	if upSfn == upFn {
 		// We are a child of whids so running as service
 		ppid = tmpPpid
@@ -240,14 +252,21 @@ func monitorParentProcess() {
 						log.Infof("Manager has been terminated, restarting it")
 						cmd.Start()
 					}
-					// If we are here it means our parent service has been terminated
-					// so we abourt ourself in a gentle way
 					osSignals <- os.Interrupt
 					return
 				}
 				time.Sleep(500 * time.Millisecond)
 			}
 		}()
+	}
+}
+
+func gotSignaled() (bool, os.Signal) {
+	select {
+	case sig := <-osSignals:
+		return true, sig
+	default:
+		return false, nil
 	}
 }
 
@@ -267,15 +286,20 @@ When this option is enabled, DNS logging is also enabled`)
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all the events")
 	flag.BoolVar(&flagService, serviceCLFlag, flagService, "Run in simple service mode (restart after child failure)")
 	flag.BoolVar(&flagPhenix, "phenix", flagPhenix, "Phenix mode (i.e. never dies)")
+	flag.BoolVar(&flagDumpCompress, "C", flagDumpCompress, "Enable dumped files compression")
 	flag.StringVar(&whitelist, "wl", whitelist, "File containing values to insert into the whitelist")
 	flag.StringVar(&blacklist, "bl", blacklist, "File containing values to insert into the blacklist")
 	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
 	flag.StringVar(&output, "o", output, "Write alerts to file instead of stdout")
+	flag.StringVar(&collect, "forward", collect, "Forward the alerts to a remote server.")
 	flag.StringVar(&logOut, "l", logOut, "Write logs to file instead of stderr")
 	flag.StringVar(&databasePath, "update-dir", databasePath, "Directory where rules will be downloaded")
+	flag.StringVar(&dump, "dump", dump, fmt.Sprintf("Dumping options available through hooks. Available: %s", strings.Join(dumpOptions, ", ")))
+	flag.StringVar(&dumpDirectory, "dump-dir", dumpDirectory, "Dump directory, where to dump the files collected")
+	flag.IntVar(&dumpTresh, "dt", dumpTresh, "Dumping threshold file/memory only if alert is >= treshold")
 	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
-	flag.IntVar(&dlRetries, "update-retries", dlRetries, "Number of retries (every 5s) when uploading the rules (will retry forever if rule download path does not exist)")
-	flag.Int64Var(&fileSizeMB, "size", fileSizeMB, "Maximum output file size (in MB) before rotation")
+	flag.IntVar(&dlRetries, "update-retries", dlRetries, "Number of retries (every 5s) when updating the rules (will retry forever if rule download path does not exist)")
+	flag.Int64Var(&fileSizeMB, "size", fileSizeMB, "Maximum output file «size (in MB) before rotation")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -305,10 +329,35 @@ When this option is enabled, DNS logging is also enabled`)
 		var err error
 		writer, err = logfile.OpenFile(output, defaultPerms, fileSizeMB*logfile.MB)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Cannot create output file: %s", err), exitFail)
+			log.LogErrorAndExit(fmt.Errorf("Failed to create output file: %s", err), exitFail)
 		}
 	} else {
 		writer = os.Stdout
+	}
+
+	// Initializing forwarder and make it run
+	if collect != "" {
+		var fconf collector.ForwarderConfig
+		cfd, err := os.Open(collect)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to open forwarder configuration file: %s", err), exitFail)
+		}
+		b, err := ioutil.ReadAll(cfd)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to read forwarder configuration file: %s", err), exitFail)
+		}
+		err = json.Unmarshal(b, &fconf)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to parse forwarder configuration: %s", err), exitFail)
+		}
+		forwarder, err = collector.NewForwarder(&fconf)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to initialize forwarder: %s", err), exitFail)
+		}
+		// Run the forwarder in a separate thread
+		forwarder.Run()
+		// We can close configuration file
+		cfd.Close()
 	}
 
 	if logOut != "" {
@@ -325,26 +374,41 @@ When this option is enabled, DNS logging is also enabled`)
 	}
 
 	// HookManager initialization
-	hookMan := hooks.NewHookMan()
+	// hooks to be applied before detection
+	preDetHookMan := hooks.NewHookMan()
+	// hooks to be applied post detection
+	postDetHookMan := hooks.NewHookMan()
+
 	// We enable those hooks anyway since it is needed to skip
 	// events generated by WHIDS process
-	hookMan.Hook(hookSelfGUID, sysmonEventsWithImage)
-	hookMan.Hook(hookProcTerm, sysmonProcTermination)
-	hookMan.Hook(hookStats, statFilter)
-	hookMan.Hook(hookTrack, statFilter)
+	preDetHookMan.Hook(hookSelfGUID, sysmonEventsWithImage)
+	preDetHookMan.Hook(hookProcTerm, sysmonProcTermination)
+	preDetHookMan.Hook(hookStats, statFilter)
+	preDetHookMan.Hook(hookTrack, statFilter)
+
 	// if crypto protect enabled
 	if enCryptoProt {
-		hookMan.Hook(hookCryptoProtect, statFilter)
-		hookMan.Hook(hookTerminator, statFilter)
+		preDetHookMan.Hook(hookCryptoProtect, statFilter)
+		preDetHookMan.Hook(hookTerminator, statFilter)
 	}
 
 	if enHooks {
 		log.Info("Enabling Hooks")
-		hookMan.Hook(hookDNS, dnsFilter)
-		hookMan.Hook(hookNetConn, sysmonNetConnFilter)
-		hookMan.Hook(hookSetImageSize, sysmonEventsWithImage)
+		preDetHookMan.Hook(hookDNS, dnsFilter)
+		preDetHookMan.Hook(hookNetConn, sysmonNetConnFilter)
+		preDetHookMan.Hook(hookSetImageSize, sysmonEventsWithImage)
+		preDetHookMan.Hook(hookProcessIntegrity, sysmonEventsWithImage)
 		// needs DNS logs to be enabled as well
 		enDNSLog = true
+		switch dump {
+		case "memory":
+			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
+		case "file":
+			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
+		case "all":
+			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
+			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
+		}
 	}
 
 	if enDNSLog {
@@ -376,7 +440,14 @@ When this option is enabled, DNS logging is also enabled`)
 			if fsutil.IsDir(databasePath) {
 				i++
 			}
-			log.Info("Retrying to download rules update")
+
+			// We stop running if we got signaled
+			if ok, sig := gotSignaled(); ok {
+				log.Infof("Aborting, received signal: %s", sig)
+				os.Exit(exitFail)
+			}
+
+			log.Info("Retrying to download rules")
 			time.Sleep(5 * time.Second)
 		}
 		rulesPath = databasePath
@@ -508,6 +579,10 @@ When this option is enabled, DNS logging is also enabled`)
 		if l, ok := writer.(*logfile.LogFile); ok {
 			l.Close()
 		}
+		// Close the forwarder if not nil
+		if forwarder != nil {
+			forwarder.Close()
+		}
 	}()
 
 	// Loop starting the monitoring of the various channels
@@ -547,7 +622,7 @@ When this option is enabled, DNS logging is also enabled`)
 					log.Debugf("Error data: %v", xe)
 				}
 				// Place Hooks over here
-				hookMan.RunHooksOn(event)
+				preDetHookMan.RunHooksOn(event)
 
 				// We skip if it is one of our Event
 				if isSelf(event) {
@@ -557,9 +632,15 @@ When this option is enabled, DNS logging is also enabled`)
 				if n, crit := e.Match(event); len(n) > 0 {
 					if crit >= criticalityThresh {
 						fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
+						// Pipe the event to be sent to the forwarder
+						if forwarder != nil {
+							forwarder.PipeEvent(event)
+						}
 						if winLog {
 							winLogger.Log(winLogEventID, "Warning", string(evtx.ToJSON(event)))
 						}
+						// Run hooks post detection
+						postDetHookMan.RunHooksOn(event)
 						alertsCnt++
 					}
 				} else {

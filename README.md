@@ -95,6 +95,33 @@ Please visit: https://rawsec.lu/doc/gene/1.4/
 
 # Changelog
 
+## v1.4
+  * Dump hooks
+    * dump file: dump as many relevant files as possible when an alert above threshold is raised
+      * dump anything which is a file and that appears in Sysmon fields, depending on the event
+      * can dump ADS
+      * can dump scripts
+      * can dump executables
+    * dump memory: creates a **MS full minidump** of a process that triggers an alert above threshold
+  * Process integrity hook
+    * Two fields are added to the Sysmon **CreateProcess** events **ProcessIntegrity** and **ParentProcessIntegrity**. If value is **-1** it means process integrity could not be 
+    computed. Otherwise it is a float value in **[0;100]** measuring the degree of similarity between the image loaded in memory and the image on the disk. The **higher** the value is, the more likely the process image **has been modified**.
+  * Builtin alert forwarder
+    * New command line utility **whids-man** aiming at collecting the logs and being deployed on a remote machine (**windows, linux, macos ...**)
+      * HTTP / HTTPS are supported (HTTPS is preferred)
+      * Builtin cert and key generation (convenient for testing but better with OpenSSL for prod)
+      * Client authentication via API key to forward the logs
+      * Server authentication can be enforced on client side via authentication key
+      * Alerts are dumped in a GZIP file automatically rotated when **100MB** size is reached
+    * New command line switch **-forward** to configure forwarding on Host side
+      * if manager is offline, we store the alerts in a local queue and upload them when the manager comes up again
+      * builtin queue file rotation
+      * builtin queued files cleaning if disk space is too high
+  * Install script has been updated
+    * Protects the installation directory to be accessible / modifiable only by users member of Administrators group or SYSTEM user
+    * The scheduled tasks now starts **whids-launcher.bat** located in installation directory, instead of starting WHIDS directly. This way it is easier to modify the command line arguments.
+  * Project tree has a bit changed, **main** code has been moved to **tools** directory
+      
 ## v1.3
   * **Event Hook** introduction
     * Can modify the events before going through detection engine

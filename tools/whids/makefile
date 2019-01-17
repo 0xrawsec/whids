@@ -1,6 +1,7 @@
-RELEASE=$(GOPATH)/release
+TEST=$(GOPATH)/test
 MAIN_BASEN_SRC=whids
-VERSION=1.3
+RELEASE=$(GOPATH)/release/$(MAIN_BASEN_SRC)
+VERSION=1.4
 COMMITID=$(shell git rev-parse HEAD)
 
 # Strips symbols and dwarf to make binary smaller
@@ -16,6 +17,10 @@ all:
 	$(MAKE) additional
 	$(MAKE) compile
 
+test: all
+	cp -r $(RELEASE) $(TEST)
+
+
 init:
 	mkdir -p $(RELEASE)
 	mkdir -p $(RELEASE)/windows
@@ -28,6 +33,7 @@ compile:windows
 windows:
 	GOARCH=386 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-v$(VERSION)-386.exe *.go
 	GOARCH=amd64 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-v$(VERSION)-amd64.exe *.go
+	cp -r conf $(RELEASE)/windows
 	cd $(RELEASE)/windows; shasum -a 256 * > sha256.txt
 	cd $(RELEASE)/windows; tar -cvzf ../windows-$(VERSION).tar.gz *
 

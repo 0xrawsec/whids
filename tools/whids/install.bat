@@ -11,7 +11,11 @@ set LOGFILE=%LOGDIR%\Whids.log
 set ALERTDIR=%INSTALL_DIR%\Alerts
 set ALERTFILE=%ALERTDIR%\Alerts.json.gz
 set TN=Whids
-set CMD=\"%BINPATH%\" -service -phenix -c all -u -update-dir \"%DATABASEDIR%\" -l \"%LOGFILE%\" -o \"%ALERTFILE%\"
+'set OPTIONS=-service -phenix -c all -u -update-dir \"%DATABASEDIR%\" -l \"%LOGFILE%\" -o \"%ALERTFILE%\"
+'set CMD=\"%BINPATH%\" %OPTIONS%
+set OPTIONS=-service -phenix -c all -u -update-dir "%DATABASEDIR%" -l "%LOGFILE%" -o "%ALERTFILE%"
+set CMD="%BINPATH%" %OPTIONS%
+set LAUNCHER=%INSTALL_DIR%\whids-launcher.bat
 
 mkdir "%INSTALL_DIR%"
 mkdir "%LOGDIR%"
@@ -25,8 +29,12 @@ if %PROCESSOR_ARCHITECTURE%==AMD64 (
     echo F | xcopy /Y /X "%~dp0whids-v%VERSION%-386.exe" "%BINPATH%"
 )
 
+echo "[+] Setting up writes to installation directory"
+icacls "%INSTALL_DIR%" /inheritance:r /grant:r Administrators:(OI)(CI)F /grant:r SYSTEM:(OI)(CI)F
+
 echo "[+] Creating scheduled task to start Whids at boot"
-schtasks.exe /Create /RU SYSTEM /TN %TN% /SC ONSTART /F /TR "%CMD%"
+echo %CMD% > "%LAUNCHER%"
+schtasks.exe /Create /RU SYSTEM /TN %TN% /SC ONSTART /F /TR "%LAUNCHER%"
 
 echo "[+] Running the task just created"
 schtasks.exe /Run /TN %TN%

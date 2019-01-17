@@ -1,0 +1,16 @@
+// Example file: remove comments to use it. It must follow JSON syntax
+{
+    "host": "192.168.56.1",                     // IP address we listen at
+    "port": 8080,                               // Port used
+    "logfile": "example.log",                   // Name of the logfile (rotated automatically)
+    "authorized": ["client_secret_api_key"],    // Authorized client API keys (new ones can be 
+                                                // generated with whids-man). Although it is technically
+                                                // possible to share the same API key between several
+                                                // clients, it is not recommended to do so.
+    "tls": {
+        "cert": "cert.pem",                     // Certificate to use for SSL communication
+        "key": "key.pem"                        // Key file to use for SSL communication
+    },
+    "key": ""                                   // Server authentication key to authenticate 
+                                                // server on client side
+}
