@@ -1,7 +1,6 @@
 package main
 
 import (
-	"collector"
 	"compress/gzip"
 	"crypto/rand"
 	"encoding/json"
@@ -13,27 +12,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/scanner"
 	"github.com/0xrawsec/golang-utils/sync/semaphore"
-
-	"github.com/0xrawsec/golang-evtx/evtx"
-
-	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/whids/collector"
 )
 
 var (
 	fconf = collector.ForwarderConfig{
-		Proto:    "http",
-		Host:     "localhost",
-		Port:     8000,
-		Key:      "don'tcomplain",
+		Client:   cconf,
 		QueueDir: "queued",
 	}
 
 	mconf = collector.ManagerConfig{
-		Host:    "",
-		Port:    8000,
-		Logfile: "",
+		Host:          "",
+		Port:          8000,
+		Logfile:       "",
+		RulesDir:      "./",
+		DumpDir:       "./uploads/",
+		ContainersDir: "./containers",
 	}
 
 	event = `
@@ -148,7 +146,7 @@ func TestForwarderBasic(t *testing.T) {
 	r.Run()
 	defer r.Shutdown()
 
-	fconf.Key = key
+	fconf.Client.Key = key
 	f, err := collector.NewForwarder(&fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
@@ -191,8 +189,8 @@ func TestCollectorAuthFailure(t *testing.T) {
 	r.Run()
 	defer r.Shutdown()
 
-	fconf.Key = key
-	fconf.ServerKey = collector.KeyGen(collector.DefaultKeySize)
+	fconf.Client.Key = key
+	fconf.Client.ServerKey = collector.KeyGen(collector.DefaultKeySize)
 	f, err := collector.NewForwarder(&fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
@@ -212,7 +210,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 	// shuts down the receiver before counting lines
 	r.Shutdown()
 	if n := countLinesInGzFile(testfile); n != 0 {
-		t.Errorf("Some events were logs while it should not")
+		t.Errorf("Some events were logged while it should not")
 	}
 
 	clean(&mconf, &fconf)
@@ -236,8 +234,8 @@ func TestCollectorAuthSuccess(t *testing.T) {
 	r.Run()
 	defer r.Shutdown()
 
-	fconf.Key = key
-	fconf.ServerKey = serverKey
+	fconf.Client.Key = key
+	fconf.Client.ServerKey = serverKey
 	f, err := collector.NewForwarder(&fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
@@ -285,7 +283,7 @@ func TestForwarderParallel(t *testing.T) {
 		go func() {
 			defer jobs.Release()
 			defer wg.Done()
-			fconf.Key = key
+			fconf.Client.Key = key
 			c, err := collector.NewForwarder(&fconf)
 			if err != nil {
 				t.Errorf("Failed to create collector: %s", err)
@@ -326,7 +324,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	r.AddAuthKey(key)
 
 	// Inititialize the forwarder
-	fconf.Key = key
+	fconf.Client.Key = key
 	f, err := collector.NewForwarder(&fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
@@ -424,5 +422,4 @@ func TestForwarderCleanup(t *testing.T) {
 	}
 
 	defer f.Close()
-
 }

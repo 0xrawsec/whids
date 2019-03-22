@@ -14,11 +14,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"utils/powershell"
 
 	"github.com/0xrawsec/golang-utils/datastructs"
-
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/whids/utils/powershell"
 )
 
 const (
@@ -107,27 +106,34 @@ func GzipFile(path string) (err error) {
 		return
 	}
 	//defer f.Close()
-	of, err := os.Create(fmt.Sprintf("%s.gz", path))
+	fname := fmt.Sprintf("%s.gz", path)
+	partname := fmt.Sprintf("%s.part", fname)
+	of, err := os.Create(partname)
 	if err != nil {
 		return
 	}
-	defer of.Close()
+
 	w := gzip.NewWriter(of)
 	for n, err := f.Read(buf[:]); err != io.EOF; {
 		w.Write(buf[:n])
 		n, err = f.Read(buf[:])
 	}
 	w.Flush()
+	// gzip writer
 	w.Close()
+	// original file
 	f.Close()
+	// part file
+	of.Close()
 	log.Infof("Removing original dumpfile: %s", path)
 	if err := os.Remove(path); err != nil {
 		log.Errorf("Cannot remove original dumpfile: %s", err)
 	}
-	return nil
+	// rename the file to its final name
+	return os.Rename(partname, fname)
 }
 
-// EnableDNSLogs through wevutil command line
+// EnableDNSLogs through wevutil command line
 func EnableDNSLogs() error {
 	cmd := exec.Command("wevtutil.exe", "sl", "Microsoft-Windows-DNS-Client/Operational", "/e:true")
 	return cmd.Run()

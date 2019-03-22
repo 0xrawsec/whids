@@ -93,6 +93,10 @@ which matched the event.
 
 Please visit: https://rawsec.lu/doc/gene/1.4/
 
+# Known Issues
+
+* Does not work properly when ran from a network share (this case prevent whids to identify itself and thus generate some noise)
+
 # Changelog
 
 ## v1.4

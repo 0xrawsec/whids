@@ -1,7 +1,6 @@
 package main
 
 import (
-	"collector"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/whids/collector"
 )
 
 const (

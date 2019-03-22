@@ -11,6 +11,8 @@
         "cert": "cert.pem",                     // Certificate to use for SSL communication
         "key": "key.pem"                        // Key file to use for SSL communication
     },
-    "key": ""                                   // Server authentication key to authenticate 
+    "key": "",                                  // Server authentication key to authenticate 
                                                 // server on client side
+    "rules-dir": "./gene-rules",
+    "dump-dir": "./uploads"
 }

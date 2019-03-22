@@ -1,11 +1,10 @@
 package main
 
 import (
-	"collector"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"hooks"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,15 +12,16 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-	"utils"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/args"
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
@@ -30,6 +30,9 @@ import (
 	"github.com/0xrawsec/golang-utils/readers"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
+	"github.com/0xrawsec/whids/collector"
+	"github.com/0xrawsec/whids/hooks"
+	"github.com/0xrawsec/whids/utils"
 )
 
 /////////////////////////////////// Main ///////////////////////////////////////
@@ -96,12 +99,14 @@ var (
 	flagService       bool
 	flagPhenix        bool
 	flagDumpCompress  bool
+	flagDumpEnable    bool
+	flagProfile       bool
 	rulesPath         string
 	whitelist         string
 	blacklist         string
 	output            string
 	logOut            string
-	collect           string
+	manager           string
 	criticalityThresh int
 	tags              []string
 	names             []string
@@ -114,17 +119,19 @@ var (
 
 	forwarder *collector.Forwarder
 
-	abs, _        = filepath.Abs(filepath.Dir(os.Args[0]))
-	databasePath  = filepath.Join(abs, "latest-database")
-	dumpDirectory = filepath.Join(abs, "dumps")
-	dump          = "none"
-	dumpOptions   = []string{"memory", "file", "all"}
-	dumpTresh     = 8
+	abs, _            = filepath.Abs(filepath.Dir(os.Args[0]))
+	databasePath      = filepath.Join(abs, "latest-database")
+	managerRulesCache = filepath.Join(databasePath, "manager-cache.gen")
+	dumpDirectory     = filepath.Join(abs, "dumps")
+	dump              = "none"
+	dumpOptions       = []string{"memory", "file", "all"}
+	dumpTresh         = 8
 
 	channelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
 		"security": "Security",
 		"dns":      "Microsoft-Windows-DNS-Client/Operational",
+		"ps":       "Microsoft-Windows-PowerShell/Operational",
 		"all":      "All aliased channels",
 	}
 	ruleExts = args.ListVar{".gen", ".gene"}
@@ -273,6 +280,7 @@ func gotSignaled() (bool, os.Signal) {
 func main() {
 	flag.Var(&windowsChannels, "c", fmt.Sprintf("Windows channels to monitor or their aliases.\n\tAvailable aliases:\n%s\n", fmtAliases()))
 	flag.Var(&timeout, "timeout", "Stop working after timeout (format: 1s, 1m, 1h, 1d ...)")
+
 	flag.BoolVar(&trace, "trace", trace, "Tells the engine to use the trace function of the rules")
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
 	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
@@ -287,15 +295,18 @@ When this option is enabled, DNS logging is also enabled`)
 	flag.BoolVar(&flagService, serviceCLFlag, flagService, "Run in simple service mode (restart after child failure)")
 	flag.BoolVar(&flagPhenix, "phenix", flagPhenix, "Phenix mode (i.e. never dies)")
 	flag.BoolVar(&flagDumpCompress, "C", flagDumpCompress, "Enable dumped files compression")
+	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
+
 	flag.StringVar(&whitelist, "wl", whitelist, "File containing values to insert into the whitelist")
 	flag.StringVar(&blacklist, "bl", blacklist, "File containing values to insert into the blacklist")
 	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
 	flag.StringVar(&output, "o", output, "Write alerts to file instead of stdout")
-	flag.StringVar(&collect, "forward", collect, "Forward the alerts to a remote server.")
+	flag.StringVar(&manager, "man", manager, "Works with a manager running on a foreign server")
 	flag.StringVar(&logOut, "l", logOut, "Write logs to file instead of stderr")
 	flag.StringVar(&databasePath, "update-dir", databasePath, "Directory where rules will be downloaded")
 	flag.StringVar(&dump, "dump", dump, fmt.Sprintf("Dumping options available through hooks. Available: %s", strings.Join(dumpOptions, ", ")))
 	flag.StringVar(&dumpDirectory, "dump-dir", dumpDirectory, "Dump directory, where to dump the files collected")
+
 	flag.IntVar(&dumpTresh, "dt", dumpTresh, "Dumping threshold file/memory only if alert is >= treshold")
 	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
 	flag.IntVar(&dlRetries, "update-retries", dlRetries, "Number of retries (every 5s) when updating the rules (will retry forever if rule download path does not exist)")
@@ -308,6 +319,16 @@ When this option is enabled, DNS logging is also enabled`)
 	}
 
 	flag.Parse()
+
+	// profile the program
+	if flagProfile {
+		f, err := os.Create("cpu.pprof")
+		if err != nil {
+			log.Errorf("Failed to create profile file")
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	// prepare the channels and set listeningChannels
 	listeningChannels = prepareChannels()
@@ -336,23 +357,23 @@ When this option is enabled, DNS logging is also enabled`)
 	}
 
 	// Initializing forwarder and make it run
-	if collect != "" {
+	if manager != "" {
 		var fconf collector.ForwarderConfig
-		cfd, err := os.Open(collect)
+		cfd, err := os.Open(manager)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to open forwarder configuration file: %s", err), exitFail)
+			log.LogErrorAndExit(fmt.Errorf("Failed to open manager configuration file: %s", err), exitFail)
 		}
 		b, err := ioutil.ReadAll(cfd)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to read forwarder configuration file: %s", err), exitFail)
+			log.LogErrorAndExit(fmt.Errorf("Failed to read manager configuration file: %s", err), exitFail)
 		}
 		err = json.Unmarshal(b, &fconf)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to parse forwarder configuration: %s", err), exitFail)
+			log.LogErrorAndExit(fmt.Errorf("Failed to parse manager configuration: %s", err), exitFail)
 		}
 		forwarder, err = collector.NewForwarder(&fconf)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to initialize forwarder: %s", err), exitFail)
+			log.LogErrorAndExit(fmt.Errorf("Failed to initialize manager: %s", err), exitFail)
 		}
 		// Run the forwarder in a separate thread
 		forwarder.Run()
@@ -402,13 +423,51 @@ When this option is enabled, DNS logging is also enabled`)
 		enDNSLog = true
 		switch dump {
 		case "memory":
+			flagDumpEnable = true
 			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
 		case "file":
+			flagDumpEnable = true
 			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
 		case "all":
+			flagDumpEnable = true
 			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
 			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
 		}
+	}
+
+	// Create a go routine to forward automatically the dumps to the manager
+	if flagDumpEnable && forwarder != nil {
+		// force compression in this case
+		flagDumpCompress = true
+		go func() {
+			for {
+				for wi := range fswalker.Walk(dumpDirectory) {
+					for _, fi := range wi.Files {
+						sp := strings.Split(wi.Dirpath, string(os.PathSeparator))
+						// dump only compressed files
+						if filepath.Ext(fi.Name()) == ".gz" {
+							if len(sp) >= 2 {
+								fullpath := filepath.Join(wi.Dirpath, fi.Name())
+								fu, err := forwarder.Client.PrepareFileUpload(fullpath, sp[len(sp)-2], sp[len(sp)-1], fi.Name())
+								if err != nil {
+									log.Errorf("Failed to prepare dump file to upload: %s", err)
+									continue
+								}
+								if err := forwarder.Client.PostDump(fu); err != nil {
+									log.Errorf("%s", err)
+									continue
+								}
+								log.Infof("Dump file successfully sent to manager, deleting: %s", fullpath)
+								os.Remove(fullpath)
+							} else {
+								log.Errorf("Unexpected directory layout, cannot send dump to manager")
+							}
+						}
+					}
+				}
+				time.Sleep(60 * time.Second)
+			}
+		}()
 	}
 
 	if enDNSLog {
@@ -420,7 +479,7 @@ When this option is enabled, DNS logging is also enabled`)
 	}
 
 	// Update Database
-	if update {
+	if update && forwarder == nil {
 		log.Infof("Downloading rules from: %s", geneRulesRepo)
 		// Kind of infinite loop while databasePath does not exist
 		for i := 0; i < dlRetries; {
@@ -476,83 +535,73 @@ When this option is enabled, DNS logging is also enabled`)
 		setRuleExts.Add(e)
 	}
 
-	// We have to load the containers befor the rules
-	// For the Whitelist
-	if whitelist != "" {
-		wlf, err := os.Open(whitelist)
-		if err != nil {
-			log.LogErrorAndExit(err, exitFail)
-		}
-		for line := range readers.Readlines(wlf) {
-			e.Whitelist(string(line))
-		}
-		wlf.Close()
-	}
-	log.Infof("Size of whitelist container: %d", e.WhitelistLen())
-	// For the Blacklist
-	if blacklist != "" {
-		blf, err := os.Open(blacklist)
-		if err != nil {
-			log.LogErrorAndExit(err, exitFail)
-		}
-		for line := range readers.Readlines(blf) {
-			e.Blacklist(string(line))
-		}
-		blf.Close()
-	}
-	log.Infof("Size of blacklist container: %d", e.BlacklistLen())
-
-	// Loading the rules
-	realPath, err := fsutil.ResolveLink(rulesPath)
-	if err != nil {
-		log.LogErrorAndExit(err, exitFail)
-	}
-
-	// Loading the templates first
-	templateDir := realPath
-	if fsutil.IsFile(realPath) {
-		templateDir = filepath.Dir(realPath)
-	}
-	if templateDir != "" {
-		for wi := range fswalker.Walk(templateDir) {
-			for _, fi := range wi.Files {
-				ext := filepath.Ext(fi.Name())
-				templateFile := filepath.Join(wi.Dirpath, fi.Name())
-				if ext == tplExt {
-					log.Infof("Loading regexp templates from file: %s", templateFile)
-					err := e.LoadTemplate(templateFile)
-					if err != nil {
-						log.Errorf("Error loading %s: %s", templateFile, err)
-					}
-				}
+	if forwarder == nil {
+		// We have to load the containers before the rules
+		// For the Whitelist
+		if whitelist != "" {
+			wlf, err := os.Open(whitelist)
+			if err != nil {
+				log.LogErrorAndExit(err, exitFail)
 			}
+			for line := range readers.Readlines(wlf) {
+				e.Whitelist(string(line))
+			}
+			wlf.Close()
 		}
-	}
+		log.Infof("Size of whitelist container: %d", e.WhitelistLen())
+		// For the Blacklist
+		if blacklist != "" {
+			blf, err := os.Open(blacklist)
+			if err != nil {
+				log.LogErrorAndExit(err, exitFail)
+			}
+			for line := range readers.Readlines(blf) {
+				e.Blacklist(string(line))
+			}
+			blf.Close()
+		}
+		log.Infof("Size of blacklist container: %d", e.BlacklistLen())
 
-	// Handle both rules argument as file or directory
-	switch {
-	case fsutil.IsFile(realPath):
-		err := e.Load(realPath)
+		// Loading the rules
+		e.LoadDirectory(rulesPath)
+	} else {
+		var rules string
+		log.Infof("Loading rules available in manager")
+		sha256, err := forwarder.Client.GetRulesSha256()
 		if err != nil {
 			log.Error(err)
+			goto backup
 		}
-	case fsutil.IsDir(realPath):
-		for wi := range fswalker.Walk(realPath) {
-			for _, fi := range wi.Files {
-				ext := filepath.Ext(fi.Name())
-				rulefile := filepath.Join(wi.Dirpath, fi.Name())
-				log.Debug(ext)
-				// Check if the file extension is in the list of valid rule extension
-				if setRuleExts.Contains(ext) {
-					err := e.Load(rulefile)
-					if err != nil {
-						log.Errorf("Error loading %s: %s", rulefile, err)
-					}
+		rules, err = forwarder.Client.GetRules()
+		if err != nil {
+			log.Error(err)
+			goto backup
+		}
+		if sha256 != data.Sha256([]byte(rules)) {
+			log.Errorf("Failed to verify rules integrity")
+			goto backup
+		}
+		err = e.LoadReader(bytes.NewReader([]byte(rules)))
+	backup:
+		if err != nil {
+			log.Warnf("Cannot get rules from manager, trying to load latest rule database: %s", databasePath)
+			if err := e.LoadDirectory(databasePath); err != nil {
+				log.Errorf("Failed to load latest rule database: %s", err)
+			}
+		} else {
+			if !fsutil.IsDir(databasePath) {
+				if err := os.MkdirAll(databasePath, defaultPerms); err != nil {
+					log.Errorf("Failed to create directory (%s): %s", databasePath, err)
 				}
 			}
+			fd, err := os.Create(managerRulesCache)
+			if err != nil {
+				log.Errorf("Failed to create manager rules cache (%s): %s", managerRulesCache, err)
+			} else {
+				fd.WriteString(rules)
+				fd.Close()
+			}
 		}
-	default:
-		//log.LogErrorAndExit(fmt.Errorf("Cannot resolve %s to file or dir", rulesPath), exitFail)
 	}
 	log.Infof("Loaded %d rules", e.Count())
 
@@ -563,16 +612,18 @@ When this option is enabled, DNS logging is also enabled`)
 	if timeout > 0 {
 		go func() {
 			time.Sleep(time.Duration(timeout))
-			for _ = range []string(windowsChannels) {
+			for i := 0; i < len(listeningChannels); i++ {
 				signals <- true
 			}
 		}()
 	}
 
+	// Register SIGINT handler to stop listening on channels
 	signal.Notify(osSignals, os.Interrupt)
 	go func() {
 		<-osSignals
-		for _ = range []string(listeningChannels) {
+		log.Infof("Received SIGINT")
+		for i := 0; i < len(listeningChannels); i++ {
 			signals <- true
 		}
 		// Close the writer properly if not Stdout
@@ -631,14 +682,15 @@ When this option is enabled, DNS logging is also enabled`)
 
 				if n, crit := e.Match(event); len(n) > 0 {
 					if crit >= criticalityThresh {
-						fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
-						// Pipe the event to be sent to the forwarder
-						if forwarder != nil {
+						switch {
+						case forwarder != nil:
 							forwarder.PipeEvent(event)
-						}
-						if winLog {
+						case winLog:
 							winLogger.Log(winLogEventID, "Warning", string(evtx.ToJSON(event)))
+						default:
+							fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
 						}
+						// Pipe the event to be sent to the forwarder
 						// Run hooks post detection
 						postDetHookMan.RunHooksOn(event)
 						alertsCnt++

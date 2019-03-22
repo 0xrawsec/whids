@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"hooks"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,11 +9,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"utils"
-
-	"github.com/0xrawsec/golang-utils/crypto/data"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
@@ -22,6 +19,8 @@ import (
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/dbghelp"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
+	"github.com/0xrawsec/whids/hooks"
+	"github.com/0xrawsec/whids/utils"
 )
 
 ////////////////////////////////// Hooks //////////////////////////////////
@@ -179,7 +178,7 @@ func hookDNS(e *evtx.GoEvtxMap) {
 func hookTrack(e *evtx.GoEvtxMap) {
 	// We need to be sure that process termination is enabled
 	// before initiating process tracking not to fill up memory
-	// with never freed data
+	// with structures that will never be freed
 	if e.EventID() == 1 && flagProcTermEn {
 		if guid, err := e.GetString(&sysmonProcessGUID); err == nil {
 			if pid, err := e.GetInt(&sysmonProcessId); err == nil {
@@ -445,7 +444,7 @@ func compress(path string) {
 	}
 }
 
-func dumpPid(pid int, guid, id string) {
+func dumpPidAndCompress(pid int, guid, id string) {
 	// prevent stopping ourself (><)
 	if kernel32.IsPIDRunning(pid) && pid != selfPid && !memdumped.Contains(guid) && !memdumping.Contains(guid) {
 		//kernel32.SuspendProcess(int(pid))
@@ -542,7 +541,7 @@ func hookDumpProcess(e *evtx.GoEvtxMap) {
 		if guid, err := e.GetString(procGUIDPath); err == nil {
 			if pid, err := e.GetInt(pidPath); err == nil {
 				dumpEventAndCompress(e, guid)
-				dumpPid(int(pid), guid, idFromEvent(e))
+				dumpPidAndCompress(int(pid), guid, idFromEvent(e))
 			}
 		}
 
@@ -558,7 +557,7 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 	parallelHooks.Acquire()
 	go func() {
 		defer parallelHooks.Release()
-		guid := "{UNKNOWN_GUID}"
+		guid := "{00000000-0000-0000-0000-000000000000}"
 		if tmpGUID, err := e.GetString(&sysmonProcessGUID); err == nil {
 			guid = tmpGUID
 		}

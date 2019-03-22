@@ -3,67 +3,30 @@ package collector
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/tls"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-
-	"github.com/0xrawsec/golang-utils/fsutil/logfile"
-
-	"github.com/0xrawsec/golang-utils/fsutil"
-
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/golang-utils/fsutil"
+	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
+	"github.com/0xrawsec/golang-utils/fsutil/logfile"
 	"github.com/0xrawsec/golang-utils/log"
 )
 
 const (
-	CollectURL     = "/collect"
-	ServerKeyURL   = "/key"
-	UserAgent      = "Whids-Event-Collector/1.0"
+	// DefaultDirPerm default log directory permissions for forwarder
 	DefaultDirPerm = 0700
-
+	// DefaultLogfileSize default forwarder logfile size
 	DefaultLogfileSize = logfile.MB * 5
 	// DiskSpaceThreshold allow 100MB of queued events
 	DiskSpaceThreshold = DefaultLogfileSize * 20
 )
 
-var (
-	NoProxyTransport http.RoundTripper = &http.Transport{
-		Proxy: nil,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	NoProxyUnsafeTransport http.RoundTripper = &http.Transport{
-		Proxy: nil,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-	}
-)
+var ()
 
 func buildURI(proto, host, port, url string) string {
 	url = strings.Trim(url, "/")
@@ -73,28 +36,18 @@ func buildURI(proto, host, port, url string) string {
 
 // ForwarderConfig structure definition
 type ForwarderConfig struct {
-	Host      string `json:"host"`
-	Port      int    `json:"port`
-	Proto     string `json:"proto"`
-	Key       string `json:"key"`
-	ServerKey string `json:"server-key"`
-	QueueDir  string `json:"queue-dir"`
-	Unsafe    bool   `json:"unsafe"`
+	Client   ClientConfig `json:"client"`
+	QueueDir string       `json:"queue-dir"`
 }
 
 // Forwarder structure definition
 type Forwarder struct {
 	sync.Mutex
-	httpClient http.Client
-	proto      string
-	host       string
-	port       string
-	key        string
-	serverKey  string
-	queueDir   string
-	stop       chan bool
-	done       chan bool
-	logfile    *logfile.LogFile
+	Client   *ManagerClient
+	queueDir string
+	stop     chan bool
+	done     chan bool
+	logfile  *logfile.LogFile
 
 	TimeTresh   time.Duration
 	EventTresh  uint64
@@ -103,54 +56,22 @@ type Forwarder struct {
 }
 
 // NewForwarder creates a new Forwarder structure
+// Todo: needs update with client
 func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	var err error
 
-	// Type of HTTP transport to use
-	tpt := NoProxyTransport
-	if c.Unsafe {
-		tpt = NoProxyUnsafeTransport
-	}
-
 	// Initialize the Forwarder
 	co := Forwarder{
-		httpClient: http.Client{Transport: tpt},
 		TimeTresh:  time.Second * 10,
 		EventTresh: 50,
 		Pipe:       new(bytes.Buffer),
 		stop:       make(chan bool),
 		done:       make(chan bool),
 	}
-	// host
-	co.host = c.Host
-	if c.Host == "" {
-		return nil, fmt.Errorf("Field \"host\" is missing from configuration")
-	}
-	// protocol
-	co.proto = c.Proto
-	if c.Proto == "" {
-		co.proto = "https"
-	}
-	switch co.proto {
-	case "http", "https":
-	default:
-		return nil, fmt.Errorf("Protocol not supported (only http(s))")
-	}
 
-	// port
-	co.port = fmt.Sprintf("%d", c.Port)
-	if c.Port == 0 {
-		co.port = DefaultPort
+	if co.Client, err = NewManagerClient(&c.Client); err != nil {
+		return nil, fmt.Errorf("Field to initialize manager client: %s", err)
 	}
-
-	// key
-	co.key = c.Key
-	if c.Key == "" {
-		return nil, fmt.Errorf("Field \"key\" is missing from configuration")
-	}
-
-	// server-key
-	co.serverKey = c.ServerKey
 
 	// queue directory
 	co.queueDir = c.QueueDir
@@ -169,72 +90,12 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	return &co, nil
 }
 
-func (f *Forwarder) setHeaders(r *http.Request) {
-	r.Header.Add("User-Agent", UserAgent)
-	r.Header.Add("Api-Key", f.key)
-}
-
-func (f *Forwarder) prepCollectReq(r io.Reader) (*http.Request, error) {
-	body := new(bytes.Buffer)
-	w := gzip.NewWriter(body)
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	w.Write(b)
-	w.Close()
-	req, err := http.NewRequest("POST", buildURI(f.proto, f.host, f.port, CollectURL), bytes.NewBuffer(body.Bytes()))
-	if err != nil {
-		return nil, err
-	}
-	f.setHeaders(req)
-	req.Header.Add("Accept-Encoding", "gzip")
-	return req, nil
-}
-
 // LogfilePath returns the path of the logfile if it exists else returns empty string
 func (f *Forwarder) LogfilePath() string {
 	if f.logfile != nil {
 		return f.logfile.Path()
 	}
 	return ""
-}
-
-// IsServerAuthEnforced returns true if server authentication is requested by the client
-func (f *Forwarder) IsServerAuthEnforced() bool {
-	return f.serverKey != ""
-}
-
-// IsSafeToSend checks whether the receiver is ready to receive logs
-func (f *Forwarder) IsSafeToSend() bool {
-	get, err := http.NewRequest("GET", buildURI(f.proto, f.host, f.port, ServerKeyURL), nil)
-	if err != nil {
-		log.Errorf("Cannot create server key request: %s", err)
-		return false
-	}
-	f.setHeaders(get)
-	resp, err := f.httpClient.Do(get)
-	if err != nil {
-		log.Errorf("Cannot issue server key request: %s", err)
-		return false
-	}
-	if resp != nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == 200 {
-			key, _ := ioutil.ReadAll(resp.Body)
-			if f.IsServerAuthEnforced() {
-				if f.serverKey == string(key) {
-					// if the server can be authenticated
-					return true
-				}
-				log.Warn("Failed to authenticate remote server")
-				// if the server is not authenticated
-				return false
-			}
-			return true
-		}
-	}
-	return false
 }
 
 // PipeEvent pipes an event to be sent through the forwarder
@@ -323,20 +184,16 @@ func (f *Forwarder) DiskSpaceQueue() int64 {
 }
 
 // ProcessQueue processes the events queued
+// Todo: needs update with client
 func (f *Forwarder) ProcessQueue() {
 	f.Lock()
 	defer f.Unlock()
 	log.Info("Processing queued files")
 
-	// Verify it is safe to send the logs to the manager, if not abort
-	if !f.IsSafeToSend() {
-		log.Error("Do not process queue, receiver down or authentication issue (client or server)")
-		return
-	}
-
 	if f.logfile != nil {
 		f.logfile.Close()
 	}
+
 	// Reset logfile for latter Save function use
 	f.logfile = nil
 	for wi := range fswalker.Walk(f.queueDir) {
@@ -359,34 +216,15 @@ func (f *Forwarder) ProcessQueue() {
 				continue
 			}
 
-			// preparing the request
-			post, err := f.prepCollectReq(gzr)
-			if err != nil {
-				log.Errorf("Failed to prepare collect request for queued file (%s): %s", fp, err)
-				// close readers
-				gzr.Close()
-				fd.Close()
-				continue
-			}
+			err = f.Client.PostLogs(gzr)
+
 			// we can close the reader since we don't need those anymore
 			gzr.Close()
 			fd.Close()
 
-			// issuing the request to the server
-			resp, err := f.httpClient.Do(post)
+			// We do not remove the logs if we failed to send
 			if err != nil {
-				log.Errorf("Failed to send queued file (%s): %s", fp, err)
-				continue
-			}
-
-			// we continue if response is nil
-			if resp == nil {
-				continue
-			}
-
-			// we continue if we receive bad HTTP status
-			if resp.StatusCode != 200 {
-				log.Errorf("Received wrong HTTP status while sending queued file: %s", resp.Status)
+				log.Errorf("%s", err)
 				continue
 			}
 
@@ -405,6 +243,7 @@ func (f *Forwarder) Reset() {
 }
 
 // Send sends the piped event to the remote server
+// Todo: needs update with client
 func (f *Forwarder) Send() {
 	// Locking collector for sending data
 	f.Lock()
@@ -413,54 +252,15 @@ func (f *Forwarder) Send() {
 	// Reset the collector
 	defer f.Reset()
 
-	// Check first if the receiver is up before attempting upload
-	if !f.IsSafeToSend() {
-		log.Error("Do not process queue, receiver down or authentication issue (client or server)")
-		f.Save()
-		return
-	}
-
-	req, err := f.prepCollectReq(bytes.NewBuffer(f.Pipe.Bytes()))
+	err := f.Client.PostLogs(bytes.NewBuffer(f.Pipe.Bytes()))
 
 	if err != nil {
-		log.Errorf("Collector failed to prepare request: %s", err)
+		log.Errorf("%s", err)
 		// Save the events in queue directory
 		if err := f.Save(); err != nil {
 			log.Errorf("Failed to save events: %s", err)
 		}
 		return
-	}
-
-	resp, err := f.httpClient.Do(req)
-	log.Debugf("Sending %d events to server", f.EventsPiped)
-	if err != nil {
-		log.Errorf("Collector failed to send events: %s", err)
-		// Save the events in queue directory
-		if err := f.Save(); err != nil {
-			log.Errorf("Failed to save events: %s", err)
-		}
-		return
-	}
-
-	if resp == nil {
-		log.Errorf("HTTP response is nil")
-		// Save the events in queue directory
-		if err := f.Save(); err != nil {
-			log.Errorf("Failed to save events: %s", err)
-		}
-		return
-	}
-
-	// Now we are sure resp is not nil
-	// Close TCP connection when we are done
-	defer resp.Body.Close()
-	// HTTP error
-	if resp.StatusCode != 200 {
-		log.Errorf("Collector received a wrong HTTP status: %s", resp.Status)
-		// Save the events in queue directory
-		if err := f.Save(); err != nil {
-			log.Errorf("Failed to save events: %s", err)
-		}
 	}
 }
 
@@ -497,6 +297,8 @@ func (f *Forwarder) Run() {
 
 // Close closes the forwarder properly
 func (f *Forwarder) Close() {
+	// Close idle connections
+	defer f.Client.Close()
 	f.stop <- true
 	// Waiting forwarder stopped routine is done
 	<-f.done
