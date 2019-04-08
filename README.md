@@ -107,9 +107,9 @@ NB: whenever you go to the installation directory with **File Explorer** and if 
 
 WHIDS configuration file example
 
-```json
+```
 {
-     // Path to the rules directory used for detection
+    // Path to the rules directory used for detection
     "rules-db": "C:\\Program Files\\Whids\\Database\\Rules",
     // Path to the containers used in some of the rules
     // containers must be GZIP compressed and have .cont.gz extension
@@ -172,7 +172,7 @@ WHIDS configuration file example
 
 Manager configuration example
 
-```json
+```
 {
     // Hostname / IP on which to run the manager
     "host": "192.168.56.1",
