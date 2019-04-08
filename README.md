@@ -218,6 +218,15 @@ Please visit: https://rawsec.lu/doc/gene/1.4/
 
 # Changelog
 
+## v1.5
+  * Bunch of code rewritten to make things more consistent:
+    * WHIDS is no longer command line based, most of the options are configured via a configuration file
+    * Some command line switches names have changed
+  * WHIDS manager can now be used as a **true management server**:
+    * Update clients' rules
+    * Update clients' containers
+    * Receive dumps (files, memory) from the clients
+
 ## v1.4
   * Dump hooks
     * dump file: dump as many relevant files as possible when an alert above threshold is raised
