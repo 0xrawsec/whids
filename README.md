@@ -93,11 +93,11 @@ which matched the event.
 
 ## WHIDS
 1. Run `install.bat` as administrator
-*. Verify that files have been created at the **installation directory**
-*. With a text editor **opened as administrator** open `config.json` and modify it as you wish
-*. Skip this if running with a connection to a manager. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. You can get some compiled rules [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen)
-*. Start the HIDS with `Start.bat` script located in **installation directory**
-*. If you configured a **manager** do not forget to run it
+2. Verify that files have been created at the **installation directory**
+3. With a text editor **opened as administrator** open `config.json` and modify it as you wish
+4. Skip this if running with a connection to a manager. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. You can get some compiled rules [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen)
+5. Start the HIDS with `Start.bat` script located in **installation directory**
+6. If you configured a **manager** do not forget to run it
 
 NB: whenever you go to the installation directory with **File Explorer** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator**.
 
