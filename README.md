@@ -99,7 +99,7 @@ which matched the event.
 5. Start the HIDS with `Start.bat` script located in **installation directory**
 6. If you configured a **manager** do not forget to run it
 
-NB: whenever you go to the installation directory with **File Explorer** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator**.
+**NB:** whenever you go to the installation directory with **File Explorer** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator**.
 
 # Configuration
 
