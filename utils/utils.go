@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils/powershell"
 )
@@ -143,6 +146,38 @@ func EnableDNSLogs() error {
 func FlushDNSCache() error {
 	cmd := exec.Command("ipconfig.exe", "/flushdns")
 	return cmd.Run()
+}
+
+// ReadFileString reads bytes from a file
+func ReadFileString(path string) (string, error) {
+	b, err := ioutil.ReadFile(path)
+	return string(b), err
+}
+
+// PrettyJSON returns a JSON pretty string out of i
+func PrettyJSON(i interface{}) string {
+	b, err := json.MarshalIndent(i, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+// JSON returns a JSON string out of i
+func JSON(i interface{}) string {
+	b, err := json.Marshal(i)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+// CountFiles counts files in a directory
+func CountFiles(directory string) (cnt int) {
+	for wi := range fswalker.Walk(directory) {
+		cnt += len(wi.Files)
+	}
+	return
 }
 
 /////////////////////////////// Windows Logger ////////////////////////////////

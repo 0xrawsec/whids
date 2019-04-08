@@ -23,7 +23,7 @@ import (
 // ClientConfig structure definition
 type ClientConfig struct {
 	Host          string `json:"host"`
-	Port          int    `json:"port`
+	Port          int    `json:"port"`
 	Proto         string `json:"proto"`
 	Key           string `json:"key"`
 	ServerKey     string `json:"server-key"`
@@ -268,6 +268,35 @@ func (m *ManagerClient) GetContainer(name string) ([]string, error) {
 			dec := json.NewDecoder(resp.Body)
 			if err = dec.Decode(&ctn); err != nil {
 				return ctn, fmt.Errorf("GetContainer failed to decode container")
+			}
+		}
+	}
+	return ctn, nil
+}
+
+// GetContainersList retrieves the names of the containers available in the manager
+func (m *ManagerClient) GetContainersList() ([]string, error) {
+	ctn := make([]string, 0)
+
+	if auth, _ := m.IsServerAuthenticated(); auth {
+		req, err := m.Prepare("GET", GetContainerListURL, nil)
+		if err != nil {
+			return ctn, fmt.Errorf("GetContainersList failed to prepare request: %s", err)
+		}
+
+		resp, err := m.httpClient.Do(req)
+		if err != nil {
+			return ctn, fmt.Errorf("GetContainersList failed to issue HTTP request: %s", err)
+		}
+
+		if resp != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return ctn, fmt.Errorf("Failed to retrieve containers list, unexpected HTTP status code %d", resp.StatusCode)
+			}
+			dec := json.NewDecoder(resp.Body)
+			if err = dec.Decode(&ctn); err != nil {
+				return ctn, fmt.Errorf("GetContainersList failed to decode container list")
 			}
 		}
 	}

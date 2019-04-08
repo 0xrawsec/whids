@@ -448,7 +448,7 @@ func (m *Manager) ContainerList(wt http.ResponseWriter, rq *http.Request) {
 		list = append(list, cn)
 	}
 	b, err := json.Marshal(list)
-	if err != nil {
+	if err == nil {
 		wt.Write(b)
 	} else {
 		log.Errorf("ContainerList handler failed to JSON encode list")

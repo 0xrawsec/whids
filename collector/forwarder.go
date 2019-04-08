@@ -36,23 +36,25 @@ func buildURI(proto, host, port, url string) string {
 
 // ForwarderConfig structure definition
 type ForwarderConfig struct {
-	Client   ClientConfig `json:"client"`
-	QueueDir string       `json:"queue-dir"`
+	Client  ClientConfig `json:"manager-client"`
+	LogsDir string       `json:"logs-dir"`
+	Local   bool         `json:"local"`
 }
 
 // Forwarder structure definition
 type Forwarder struct {
 	sync.Mutex
-	Client   *ManagerClient
-	queueDir string
-	stop     chan bool
-	done     chan bool
-	logfile  *logfile.LogFile
+	logsDir string
+	stop    chan bool
+	done    chan bool
+	logfile *logfile.LogFile
 
+	Client      *ManagerClient
 	TimeTresh   time.Duration
 	EventTresh  uint64
 	Pipe        *bytes.Buffer
 	EventsPiped uint64
+	Local       bool
 }
 
 // NewForwarder creates a new Forwarder structure
@@ -67,22 +69,25 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 		Pipe:       new(bytes.Buffer),
 		stop:       make(chan bool),
 		done:       make(chan bool),
+		Local:      c.Local,
 	}
 
-	if co.Client, err = NewManagerClient(&c.Client); err != nil {
-		return nil, fmt.Errorf("Field to initialize manager client: %s", err)
+	if !co.Local {
+		if co.Client, err = NewManagerClient(&c.Client); err != nil {
+			return nil, fmt.Errorf("Field to initialize manager client: %s", err)
+		}
 	}
 
 	// queue directory
-	co.queueDir = c.QueueDir
-	if c.QueueDir == "" {
-		return nil, fmt.Errorf("Field \"queue-dir\" is missing from configuration")
+	co.logsDir = c.LogsDir
+	if c.LogsDir == "" {
+		return nil, fmt.Errorf("Field \"logs-dir\" is missing from configuration")
 	}
 
 	// creating the queue directory
-	if !fsutil.Exists(co.queueDir) && !fsutil.IsDir(co.queueDir) {
+	if !fsutil.Exists(co.logsDir) && !fsutil.IsDir(co.logsDir) {
 		// TOCTU may happen here so we double check error code
-		if err = os.Mkdir(co.queueDir, DefaultDirPerm); err != nil && !os.IsExist(err) {
+		if err = os.Mkdir(co.logsDir, DefaultDirPerm); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("Cannot create queue directory : %s", err)
 		}
 	}
@@ -122,8 +127,8 @@ func (f *Forwarder) Save() error {
 	}
 
 	if f.logfile == nil {
-		// This will reopen the first available queue.gz.X file if several
-		lf := filepath.Join(f.queueDir, "queue.gz")
+		// This will reopen the first available alerts.gz.X file if several
+		lf := filepath.Join(f.logsDir, "alerts.gz")
 		if f.logfile, err = logfile.OpenFile(lf, DefaultLogPerm, DefaultLogfileSize); err != nil {
 			return err
 		}
@@ -134,7 +139,7 @@ func (f *Forwarder) Save() error {
 
 // HasQueuedEvents checks whether some events are waiting to be sent
 func (f *Forwarder) HasQueuedEvents() bool {
-	for wi := range fswalker.Walk(f.queueDir) {
+	for wi := range fswalker.Walk(f.logsDir) {
 		if len(wi.Files) > 0 {
 			return true
 		}
@@ -147,18 +152,18 @@ func (f *Forwarder) CleanOlderQueued() error {
 	var older string
 	var olderTime time.Time
 	empty := time.Time{}
-	for wi := range fswalker.Walk(f.queueDir) {
+	for wi := range fswalker.Walk(f.logsDir) {
 		for _, fi := range wi.Files {
 			// initialization
 			if olderTime == empty {
 				olderTime = fi.ModTime()
-				older = filepath.Join(f.queueDir, fi.Name())
+				older = filepath.Join(f.logsDir, fi.Name())
 				continue
 			}
 			// check if we have an older file
 			if fi.ModTime().Before(olderTime) {
 				olderTime = fi.ModTime()
-				older = filepath.Join(f.queueDir, fi.Name())
+				older = filepath.Join(f.logsDir, fi.Name())
 			}
 		}
 	}
@@ -175,7 +180,7 @@ func (f *Forwarder) CleanOlderQueued() error {
 // DiskSpaceQueue compute the disk space (in bytes) taken by queued events
 func (f *Forwarder) DiskSpaceQueue() int64 {
 	var dp int64
-	for wi := range fswalker.Walk(f.queueDir) {
+	for wi := range fswalker.Walk(f.logsDir) {
 		for _, fi := range wi.Files {
 			dp += fi.Size()
 		}
@@ -188,6 +193,12 @@ func (f *Forwarder) DiskSpaceQueue() int64 {
 func (f *Forwarder) ProcessQueue() {
 	f.Lock()
 	defer f.Unlock()
+
+	// if it is a local collector no need to process
+	if f.Local {
+		return
+	}
+
 	log.Info("Processing queued files")
 
 	if f.logfile != nil {
@@ -196,10 +207,10 @@ func (f *Forwarder) ProcessQueue() {
 
 	// Reset logfile for latter Save function use
 	f.logfile = nil
-	for wi := range fswalker.Walk(f.queueDir) {
+	for wi := range fswalker.Walk(f.logsDir) {
 		for _, fi := range wi.Files {
 			// fullpath
-			fp := filepath.Join(f.queueDir, fi.Name())
+			fp := filepath.Join(f.logsDir, fi.Name())
 			log.Debug("Processing queued file: %s", fp)
 			fd, err := os.Open(fp)
 			if err != nil {
@@ -242,9 +253,9 @@ func (f *Forwarder) Reset() {
 	f.EventsPiped = 0
 }
 
-// Send sends the piped event to the remote server
+// Collect sends the piped event to the remote server
 // Todo: needs update with client
-func (f *Forwarder) Send() {
+func (f *Forwarder) Collect() {
 	// Locking collector for sending data
 	f.Lock()
 	// Unlocking collector after sending data
@@ -252,15 +263,22 @@ func (f *Forwarder) Send() {
 	// Reset the collector
 	defer f.Reset()
 
-	err := f.Client.PostLogs(bytes.NewBuffer(f.Pipe.Bytes()))
+	// if not a local forwarder
+	if !f.Local {
+		err := f.Client.PostLogs(bytes.NewBuffer(f.Pipe.Bytes()))
 
-	if err != nil {
-		log.Errorf("%s", err)
+		if err != nil {
+			log.Errorf("%s", err)
+			// Save the events in queue directory
+			if err := f.Save(); err != nil {
+				log.Errorf("Failed to save events: %s", err)
+			}
+		}
+	} else {
 		// Save the events in queue directory
 		if err := f.Save(); err != nil {
 			log.Errorf("Failed to save events: %s", err)
 		}
-		return
 	}
 }
 
@@ -285,7 +303,7 @@ func (f *Forwarder) Run() {
 			if f.EventsPiped >= f.EventTresh || time.Now().After(timer.Add(f.TimeTresh)) {
 				// Send out events if there are pending events
 				if f.EventsPiped > 0 {
-					f.Send()
+					f.Collect()
 				}
 				// reset timer
 				timer = time.Now()
@@ -297,13 +315,15 @@ func (f *Forwarder) Run() {
 
 // Close closes the forwarder properly
 func (f *Forwarder) Close() {
-	// Close idle connections
-	defer f.Client.Close()
+	// Close idle connections if not local
+	if !f.Local {
+		defer f.Client.Close()
+	}
 	f.stop <- true
 	// Waiting forwarder stopped routine is done
 	<-f.done
 	if f.EventsPiped > 0 {
-		f.Send()
+		f.Collect()
 	}
 	if f.logfile != nil {
 		f.logfile.Close()

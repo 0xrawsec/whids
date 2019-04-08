@@ -1,34 +1,24 @@
 package main
 
 import (
-	"bytes"
+	"compress/gzip"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"runtime/pprof"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/golang-utils/args"
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-	"github.com/0xrawsec/golang-utils/fsutil/logfile"
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/golang-utils/readers"
-	"github.com/0xrawsec/golang-win32/win32/kernel32"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
 	"github.com/0xrawsec/whids/collector"
 	"github.com/0xrawsec/whids/hooks"
@@ -56,76 +46,17 @@ func XMLEventToGoEvtxMap(xe *wevtapi.XMLEvent) (*evtx.GoEvtxMap, error) {
 /////////////////////////////////// Main ///////////////////////////////////////
 
 const (
-	exitFail    = 1
-	exitSuccess = 0
-	banner      = `
-	██╗    ██╗██╗  ██╗██╗██████╗ ███████╗
-	██║    ██║██║  ██║██║██╔══██╗██╔════╝
-	██║ █╗ ██║███████║██║██║  ██║███████╗
-	██║███╗██║██╔══██║██║██║  ██║╚════██║
-	╚███╔███╔╝██║  ██║██║██████╔╝███████║
-	 ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝
-	           Windows Host IDS
-	`
-	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
-	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
-
-	// Rule update constants
-	geneRulesRepo = "https://github.com/0xrawsec/gene-rules/archive/master.zip"
-	databaseZip   = "latest-database.zip"
-
-	// Windows Logging constants
-	winLogChannel = "Application"
-	winLogSource  = "Whids"
-	winLogEventID = 1337
-
 	// Default permissions for output files
 	defaultPerms = 0640
 
-	serviceCLFlag = "service"
+	// Container extension
+	containerExt = ".cont.gz"
 )
 
 var (
-	debug             bool
-	trace             bool
-	versionFlag       bool
-	update            bool
-	winLog            bool
-	enDNSLog          bool
-	enHooks           bool
-	enCryptoProt      bool
-	flagProcTermEn    bool // set the flag to true if process termination is enabled
-	flagPrintAll      bool
-	flagService       bool
-	flagPhenix        bool
-	flagDumpCompress  bool
-	flagDumpEnable    bool
-	flagProfile       bool
-	rulesPath         string
-	whitelist         string
-	blacklist         string
-	output            string
-	logOut            string
-	manager           string
-	criticalityThresh int
-	tags              []string
-	names             []string
-	listeningChannels []string
-	tagsVar           args.ListVar
-	namesVar          args.ListVar
-	windowsChannels   args.ListVar
-	timeout           args.DurationVar
-	writer            io.Writer
+	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 
-	forwarder *collector.Forwarder
-
-	abs, _            = filepath.Abs(filepath.Dir(os.Args[0]))
-	databasePath      = filepath.Join(abs, "latest-database")
-	managerRulesCache = filepath.Join(databasePath, "manager-cache.gen")
-	dumpDirectory     = filepath.Join(abs, "dumps")
-	dump              = "none"
-	dumpOptions       = []string{"memory", "file", "all"}
-	dumpTresh         = 8
+	dumpOptions = []string{"memory", "file", "all"}
 
 	channelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
@@ -134,35 +65,10 @@ var (
 		"ps":       "Microsoft-Windows-PowerShell/Operational",
 		"all":      "All aliased channels",
 	}
-	ruleExts = args.ListVar{".gen", ".gene"}
-	tplExt   = ".tpl"
 
-	// Needed by Hooks
-	selfGUID    = ""
-	selfPath, _ = filepath.Abs(os.Args[0])
-	selfPid     = os.Getpid()
-
-	cryptoLockerFilecreateLimit = int64(50)
-
-	fileSizeMB = int64(100)
-
-	// Number of retries between rules updates
-	dlRetries = 40
-
-	osSignals = make(chan os.Signal)
+	// extensions of files to upload to manager
+	uploadExts = datastructs.NewInitSyncedSet(".gz", ".sha256")
 )
-
-func printInfo(writer io.Writer) {
-	fmt.Fprintf(writer, "%s\nVersion: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", banner, version, commitID, copyright, license)
-}
-
-func fmtAliases() string {
-	aliases := make([]string, 0, len(channelAliases))
-	for alias, channel := range channelAliases {
-		aliases = append(aliases, fmt.Sprintf("\t\t%s : %s", alias, channel))
-	}
-	return strings.Join(aliases, "\n")
-}
 
 func allChannels() []string {
 	channels := make([]string, 0, len(channelAliases))
@@ -174,286 +80,490 @@ func allChannels() []string {
 	return channels
 }
 
-func prepareChannels() []string {
-	uniqChannels := datastructs.NewSyncedSet()
-	for _, channel := range []string(windowsChannels) {
-		if channel == "all" {
-			allChans := allChannels()
-			uniqChannels.Add(datastructs.ToInterfaceSlice(allChans)...)
+var (
+	emptyForwarderConfig = collector.ForwarderConfig{}
+	logDir               = filepath.Join(abs, "Logs")
+	// DefaultHIDSConfig is the default HIDS configuration
+	DefaultHIDSConfig = HIDSConfig{
+		RulesDB:      filepath.Join(abs, "Database", "Rules"),
+		ContainersDB: filepath.Join(abs, "Database", "Containers"),
+		FwdConfig: collector.ForwarderConfig{
+			Local: true,
+			Client: collector.ClientConfig{
+				MaxUploadSize: collector.DefaultMaxUploadSize,
+			},
+			LogsDir: filepath.Join(logDir, "Alerts"),
+		},
+		Channels:       []string{"all"},
+		DumpMode:       "file",
+		DumpTresh:      8,
+		DumpDir:        filepath.Join(abs, "Dumps"),
+		DumpComp:       true,
+		CritTresh:      5,
+		UpdateInterval: 60,
+		EnableHooks:    true,
+		EnableDNS:      true,
+		Logfile:        filepath.Join(logDir, "whids.log")}
+)
+
+// HIDSConfig structure
+type HIDSConfig struct {
+	RulesDB        string                    `json:"rules-db"`
+	ContainersDB   string                    `json:"containers-db"`
+	FwdConfig      collector.ForwarderConfig `json:"forwarder"`
+	Channels       []string                  `json:"channels"`
+	DumpMode       string                    `json:"dump-mode"`
+	DumpTresh      int                       `json:"dump-treshold"`
+	DumpDir        string                    `json:"dump-dir"`
+	DumpComp       bool                      `json:"dump-compression"`
+	CritTresh      int                       `json:"criticality-treshold"`
+	UpdateInterval time.Duration             `json:"update-interval"`
+	EnableHooks    bool                      `json:"en-hooks"`
+	EnableDNS      bool                      `json:"en-dns"`
+	Logfile        string                    `json:"logfile"` // for WHIDS log messages (not alerts)
+}
+
+// LoadsHIDSConfig loads a HIDS configuration from a file
+func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
+	fd, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer fd.Close()
+	dec := json.NewDecoder(fd)
+	err = dec.Decode(&c)
+	return
+}
+
+// SetHooksGlobals sets the global variables used by hooks
+func (c *HIDSConfig) SetHooksGlobals() {
+	dumpDirectory = c.DumpDir
+	dumpTresh = c.DumpTresh
+	flagDumpCompress = c.DumpComp
+}
+
+// IsDumpFileEn returns true if file dump is enabled
+func (c *HIDSConfig) IsDumpFileEn() bool {
+	return c.DumpMode == "all" || c.DumpMode == "file"
+}
+
+// IsDumpMemEn returns true if memory dump is enabled
+func (c *HIDSConfig) IsDumpMemEn() bool {
+	return c.DumpMode == "all" || c.DumpMode == "memory"
+}
+
+// IsDumpEnabled returns true if any kind of dump is enabled
+func (c *HIDSConfig) IsDumpEnabled() bool {
+	return c.IsDumpMemEn() || c.IsDumpFileEn()
+}
+
+// IsForwardingEnabled returns true if a forwarder is actually configured to forward logs
+func (c *HIDSConfig) IsForwardingEnabled() bool {
+	return c.FwdConfig != emptyForwarderConfig && !c.FwdConfig.Local
+}
+
+// Prepare creates directory used in the config if not existing
+func (c *HIDSConfig) Prepare() {
+	if !fsutil.Exists(c.RulesDB) {
+		os.MkdirAll(c.RulesDB, 0600)
+	}
+	if !fsutil.Exists(c.ContainersDB) {
+		os.MkdirAll(c.ContainersDB, 0600)
+	}
+	if !fsutil.Exists(c.DumpDir) {
+		os.MkdirAll(c.DumpDir, 0600)
+	}
+	if !fsutil.Exists(filepath.Dir(c.FwdConfig.LogsDir)) {
+		os.MkdirAll(filepath.Dir(c.FwdConfig.LogsDir), 0600)
+	}
+	if !fsutil.Exists(filepath.Dir(c.Logfile)) {
+		os.MkdirAll(filepath.Dir(c.Logfile), 0600)
+	}
+}
+
+// Verify validate HIDS configuration object
+func (c *HIDSConfig) Verify() error {
+	if !fsutil.IsDir(c.RulesDB) {
+		return fmt.Errorf("Rules database must be a directory")
+	}
+	if !fsutil.IsDir(c.ContainersDB) {
+		return fmt.Errorf("Containers database must be a directory")
+	}
+	return nil
+}
+
+// HIDS structure
+type HIDS struct {
+	sync.RWMutex    // Mutex to lock the IDS when updating rules
+	engine          engine.Engine
+	preHooks        *hooks.HookManager
+	postHooks       *hooks.HookManager
+	forwarder       *collector.Forwarder
+	channels        datastructs.SyncedSet // Windows log channels to listen to
+	channelsSignals chan bool
+	config          *HIDSConfig
+	eventScanned    uint64
+	alertReported   uint64
+	startTime       time.Time
+
+	DryRun   bool
+	PrintAll bool
+}
+
+// NewHIDS creates a new HIDS object from configuration
+func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
+	h = &HIDS{
+		preHooks:        hooks.NewHookMan(),
+		postHooks:       hooks.NewHookMan(),
+		channels:        datastructs.NewSyncedSet(),
+		channelsSignals: make(chan bool),
+		config:          c}
+
+	// Creates missing directories
+	c.Prepare()
+
+	// Create logfile asap if needed
+	if c.Logfile != "" {
+		log.SetLogfile(c.Logfile, 600)
+	}
+
+	// Set the globals used by the Hooks
+	c.SetHooksGlobals()
+
+	// Verify configuration
+	if err = c.Verify(); err != nil {
+		return nil, err
+	}
+
+	// loading forwarder config
+	if h.forwarder, err = collector.NewForwarder(&c.FwdConfig); err != nil {
+		return nil, err
+	}
+
+	// cleaning up previous runs
+	h.cleanup()
+
+	// initialization
+	h.initChannels(c.Channels)
+	h.initHooks(c.EnableHooks)
+	// tries to update the engine
+	if err := h.updateEngine(true); err != nil {
+		return h, err
+	}
+	return h, nil
+}
+
+func (h *HIDS) initChannels(channels []string) {
+	for _, c := range channels {
+		if c == "all" {
+			h.channels.Add(datastructs.ToInterfaceSlice(allChannels())...)
+			continue
+		}
+		if rc, ok := channelAliases[c]; ok {
+			h.channels.Add(rc)
 		} else {
-			uniqChannels.Add(channel)
+			h.channels.Add(c)
 		}
-	}
-	channels := make([]string, 0, uniqChannels.Len())
-	for _, channel := range *uniqChannels.List() {
-		channels = append(channels, channel.(string))
-	}
-	return channels
-}
-
-func service() {
-	path := os.Args[0]
-	args := os.Args[1:]
-	for i, a := range args {
-		if a == fmt.Sprintf("-%s", serviceCLFlag) {
-			if i != len(args)-1 {
-				args = append(args[:i], args[i+1:]...)
-			} else {
-				args = args[:i]
-			}
-		}
-	}
-
-	osSignals := make(chan os.Signal)
-	signal.Notify(osSignals, os.Interrupt, os.Kill)
-	go func() {
-		<-osSignals
-		time.Sleep(500 * time.Millisecond)
-		os.Exit(0)
-	}()
-
-	for {
-		cmd := exec.Command(path, args...)
-		log.Infof("Running: %s %s", path, strings.Join(args, " "))
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stdout
-		err := cmd.Run()
-		log.Errorf("Process stopped running: %s", err)
 	}
 }
 
-func monitorParentProcess() {
-	var ppid int
-	tmpPpid := syscall.Getppid()
-	fn, err := kernel32.GetModuleFilenameFromPID(tmpPpid)
-	if err != nil {
-		log.Errorf("Cannot get parent Image: %s", err)
-	}
-	sfn, err := kernel32.GetModuleFilenameSelf()
-	if err != nil {
-		log.Errorf("Cannot get self module filename: %s", err)
-	}
-	log.Infof("Parent Process Image: %s", fn)
-	log.Infof("Process Image: %s", sfn)
-	upFn, upSfn := strings.ToUpper(fn), strings.ToUpper(sfn)
-	if upSfn == upFn {
-		// We are a child of whids so running as service
-		ppid = tmpPpid
-		go func() {
-			for {
-				fn, _ := kernel32.GetModuleFilenameFromPID(ppid)
-				sfn, err := kernel32.GetModuleFilenameSelf()
-				upFn, upSfn := strings.ToUpper(sfn), strings.ToUpper(fn)
-				if err != nil {
-					log.Errorf("Cannot get self module filename: %s", err)
-				}
-				if upSfn != upFn {
-					// If we want Whids to reborn
-					if flagPhenix {
-						// service option
-						args := []string{fmt.Sprintf("-%s", serviceCLFlag)}
-						if len(os.Args) > 1 {
-							args = append(args, os.Args[1:]...)
-						}
-						cmd := exec.Command(os.Args[0], args...)
-						log.Infof("Manager has been terminated, restarting it")
-						cmd.Start()
-					}
-					osSignals <- os.Interrupt
-					return
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-		}()
-	}
-}
-
-func gotSignaled() (bool, os.Signal) {
-	select {
-	case sig := <-osSignals:
-		return true, sig
-	default:
-		return false, nil
-	}
-}
-
-func main() {
-	flag.Var(&windowsChannels, "c", fmt.Sprintf("Windows channels to monitor or their aliases.\n\tAvailable aliases:\n%s\n", fmtAliases()))
-	flag.Var(&timeout, "timeout", "Stop working after timeout (format: 1s, 1m, 1h, 1d ...)")
-
-	flag.BoolVar(&trace, "trace", trace, "Tells the engine to use the trace function of the rules")
-	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
-	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
-	flag.BoolVar(&update, "u", update, fmt.Sprintf(`Update gene database and use it in 
-addition to the other rule paths (Repo: %s)`, geneRulesRepo))
-	flag.BoolVar(&winLog, "winlog", winLog, fmt.Sprintf("Enable windows logging in channel %s", winLogChannel))
-	flag.BoolVar(&enDNSLog, "dns", enDNSLog, "Enable DNS logging (not disabled when whids quits)")
-	flag.BoolVar(&enHooks, "hooks", enHooks, `Enable Hooking functions to enrich events before they go through the engine 
-When this option is enabled, DNS logging is also enabled`)
-	flag.BoolVar(&enCryptoProt, "protect", enCryptoProt, "Enable basic protection against crypto lockers")
-	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all the events")
-	flag.BoolVar(&flagService, serviceCLFlag, flagService, "Run in simple service mode (restart after child failure)")
-	flag.BoolVar(&flagPhenix, "phenix", flagPhenix, "Phenix mode (i.e. never dies)")
-	flag.BoolVar(&flagDumpCompress, "C", flagDumpCompress, "Enable dumped files compression")
-	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
-
-	flag.StringVar(&whitelist, "wl", whitelist, "File containing values to insert into the whitelist")
-	flag.StringVar(&blacklist, "bl", blacklist, "File containing values to insert into the blacklist")
-	flag.StringVar(&rulesPath, "r", rulesPath, "Rule file or directory")
-	flag.StringVar(&output, "o", output, "Write alerts to file instead of stdout")
-	flag.StringVar(&manager, "man", manager, "Works with a manager running on a foreign server")
-	flag.StringVar(&logOut, "l", logOut, "Write logs to file instead of stderr")
-	flag.StringVar(&databasePath, "update-dir", databasePath, "Directory where rules will be downloaded")
-	flag.StringVar(&dump, "dump", dump, fmt.Sprintf("Dumping options available through hooks. Available: %s", strings.Join(dumpOptions, ", ")))
-	flag.StringVar(&dumpDirectory, "dump-dir", dumpDirectory, "Dump directory, where to dump the files collected")
-
-	flag.IntVar(&dumpTresh, "dt", dumpTresh, "Dumping threshold file/memory only if alert is >= treshold")
-	flag.IntVar(&criticalityThresh, "t", criticalityThresh, "Criticality treshold. Prints only if criticality above threshold")
-	flag.IntVar(&dlRetries, "update-retries", dlRetries, "Number of retries (every 5s) when updating the rules (will retry forever if rule download path does not exist)")
-	flag.Int64Var(&fileSizeMB, "size", fileSizeMB, "Maximum output file «size (in MB) before rotation")
-
-	flag.Usage = func() {
-		printInfo(os.Stderr)
-		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", filepath.Base(os.Args[0]))
-		flag.PrintDefaults()
-	}
-
-	flag.Parse()
-
-	// profile the program
-	if flagProfile {
-		f, err := os.Create("cpu.pprof")
-		if err != nil {
-			log.Errorf("Failed to create profile file")
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
-
-	// prepare the channels and set listeningChannels
-	listeningChannels = prepareChannels()
-
-	// Print version information and exit
-	if versionFlag {
-		printInfo(os.Stderr)
-		os.Exit(exitSuccess)
-	}
-
-	// Enabling debug if needed
-	if debug {
-		log.InitLogger(log.LDebug)
-	}
-
-	// Initializing the output file
-	if output != "" {
-		log.Infof("Writing output to: %s", output)
-		var err error
-		writer, err = logfile.OpenFile(output, defaultPerms, fileSizeMB*logfile.MB)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to create output file: %s", err), exitFail)
-		}
-	} else {
-		writer = os.Stdout
-	}
-
-	// Initializing forwarder and make it run
-	if manager != "" {
-		var fconf collector.ForwarderConfig
-		cfd, err := os.Open(manager)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to open manager configuration file: %s", err), exitFail)
-		}
-		b, err := ioutil.ReadAll(cfd)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to read manager configuration file: %s", err), exitFail)
-		}
-		err = json.Unmarshal(b, &fconf)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to parse manager configuration: %s", err), exitFail)
-		}
-		forwarder, err = collector.NewForwarder(&fconf)
-		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to initialize manager: %s", err), exitFail)
-		}
-		// Run the forwarder in a separate thread
-		forwarder.Run()
-		// We can close configuration file
-		cfd.Close()
-	}
-
-	if logOut != "" {
-		log.SetLogfile(logOut, defaultPerms)
-	}
-
-	// If we want to run it as a service
-	if flagService {
-		service()
-		os.Exit(exitSuccess)
-	} else {
-		// We monitor parent process if needed
-		monitorParentProcess()
-	}
-
-	// HookManager initialization
-	// hooks to be applied before detection
-	preDetHookMan := hooks.NewHookMan()
-	// hooks to be applied post detection
-	postDetHookMan := hooks.NewHookMan()
-
+func (h *HIDS) initHooks(advanced bool) {
 	// We enable those hooks anyway since it is needed to skip
-	// events generated by WHIDS process
-	preDetHookMan.Hook(hookSelfGUID, sysmonEventsWithImage)
-	preDetHookMan.Hook(hookProcTerm, sysmonProcTermination)
-	preDetHookMan.Hook(hookStats, statFilter)
-	preDetHookMan.Hook(hookTrack, statFilter)
-
-	// if crypto protect enabled
-	if enCryptoProt {
-		preDetHookMan.Hook(hookCryptoProtect, statFilter)
-		preDetHookMan.Hook(hookTerminator, statFilter)
-	}
-
-	if enHooks {
-		log.Info("Enabling Hooks")
-		preDetHookMan.Hook(hookDNS, dnsFilter)
-		preDetHookMan.Hook(hookNetConn, sysmonNetConnFilter)
-		preDetHookMan.Hook(hookSetImageSize, sysmonEventsWithImage)
-		preDetHookMan.Hook(hookProcessIntegrity, sysmonEventsWithImage)
+	// events generated by WHIDS process. These ar very light hooks
+	h.preHooks.Hook(hookSelfGUID, sysmonEventsWithImage)
+	h.preHooks.Hook(hookProcTerm, sysmonProcTermination)
+	h.preHooks.Hook(hookStats, statFilter)
+	h.preHooks.Hook(hookTrack, statFilter)
+	if advanced {
+		h.preHooks.Hook(hookDNS, dnsFilter)
+		h.preHooks.Hook(hookNetConn, sysmonNetConnFilter)
+		h.preHooks.Hook(hookSetImageSize, sysmonEventsWithImage)
+		h.preHooks.Hook(hookProcessIntegrity, sysmonEventsWithImage)
 		// needs DNS logs to be enabled as well
-		enDNSLog = true
-		switch dump {
+		h.config.EnableDNS = true
+
+		switch h.config.DumpMode {
 		case "memory":
-			flagDumpEnable = true
-			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
+			h.postHooks.Hook(hookDumpProcess, anySysmonEvent)
 		case "file":
-			flagDumpEnable = true
-			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
+			h.postHooks.Hook(hookDumpFile, anySysmonEvent)
 		case "all":
-			flagDumpEnable = true
-			postDetHookMan.Hook(hookDumpProcess, anySysmonEvent)
-			postDetHookMan.Hook(hookDumpFile, anySysmonEvent)
+			h.postHooks.Hook(hookDumpProcess, anySysmonEvent)
+			h.postHooks.Hook(hookDumpFile, anySysmonEvent)
+		}
+	}
+}
+
+// returns true if the update routine is started
+func (h *HIDS) updateRoutine() bool {
+	d := h.config.UpdateInterval * time.Second
+	if h.config.IsForwardingEnabled() {
+		if d > 0 {
+			go func() {
+				t := time.NewTimer(d)
+				for range t.C {
+					if err := h.updateEngine(false); err != nil {
+						log.Error(err)
+					}
+					t.Reset(d)
+				}
+			}()
+			return true
+		}
+	}
+	return false
+}
+
+func (h *HIDS) updateEngine(force bool) error {
+	h.Lock()
+	defer h.Unlock()
+
+	var reloadRules, reloadContainers bool
+
+	// check if we need rule update
+	if h.needsRulesUpdate() {
+		log.Info("Updating WHIDS rules")
+		if err := h.updateRules(); err != nil {
+			log.Errorf("Failed to update rules: %s", err)
+		} else {
+			reloadRules = true
 		}
 	}
 
-	// Create a go routine to forward automatically the dumps to the manager
-	if flagDumpEnable && forwarder != nil {
-		// force compression in this case
+	if h.needsContainersUpdate() {
+		log.Info("Updating WHIDS containers")
+		if err := h.updateContainers(); err != nil {
+			log.Errorf("Failed to update containers: %s", err)
+		} else {
+			reloadContainers = true
+		}
+	}
+
+	if reloadRules || reloadContainers || force {
+		// We need to create a new engine if we received a rule/containers update
+		h.engine = engine.NewEngine(false)
+
+		// containers must be loaded before the rules anyway
+		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.ContainersDB)
+		if err := h.loadContainers(); err != nil {
+			return fmt.Errorf("Error loading containers: %s", err)
+		}
+
+		if reloadRules || force {
+			log.Infof("Loading HIDS rules from: %s", h.config.RulesDB)
+			if err := h.engine.LoadDirectory(h.config.RulesDB); err != nil {
+				return fmt.Errorf("Failed to load rules: %s", err)
+			}
+		}
+	} else {
+		log.Info("Neither rules nor containers need to be updated")
+	}
+
+	return nil
+}
+
+// rules needs to be updated with the new ones available in manager
+func (h *HIDS) needsRulesUpdate() bool {
+	var err error
+	var oldSha256, sha256 string
+	_, rulesSha256Path := h.rulesPaths()
+
+	if h.forwarder.Local {
+		return false
+	}
+
+	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
+		return false
+	}
+	oldSha256, _ = utils.ReadFileString(rulesSha256Path)
+
+	log.Infof("Rules: remote=%s local=%s", sha256, oldSha256)
+	if oldSha256 != sha256 {
+		return true
+	}
+	return false
+}
+
+// at least one container needs to be updated
+func (h *HIDS) needsContainersUpdate() bool {
+	var containers []string
+	var err error
+
+	cl := h.forwarder.Client
+
+	if h.forwarder.Local {
+		return false
+	}
+
+	if containers, err = cl.GetContainersList(); err != nil {
+		return false
+	}
+
+	for _, cont := range containers {
+		if h.needsContainerUpdate(cont) {
+			return true
+		}
+	}
+	return false
+}
+
+// returns true if a container needs to be updated
+func (h *HIDS) needsContainerUpdate(remoteCont string) bool {
+	var localSha256, remoteSha256 string
+	_, locContSha256Path := h.containerPaths(remoteCont)
+	// means that remoteCont is also a local container
+	remoteSha256, _ = h.forwarder.Client.GetContainerSha256(remoteCont)
+	localSha256, _ = utils.ReadFileString(locContSha256Path)
+	log.Infof("container %s: remote=%s local=%s", remoteCont, remoteSha256, localSha256)
+	if localSha256 != remoteSha256 {
+		return true
+	}
+	return false
+}
+
+func (h *HIDS) updateRules() (err error) {
+	var rules, sha256 string
+
+	rulePath, sha256Path := h.rulesPaths()
+
+	log.Infof("Loading rules available in manager")
+	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
+		return err
+	}
+
+	if rules, err = h.forwarder.Client.GetRules(); err != nil {
+		return err
+	}
+
+	if sha256 != data.Sha256([]byte(rules)) {
+		return fmt.Errorf("Failed to verify rules integrity")
+	}
+
+	ioutil.WriteFile(sha256Path, []byte(sha256), 600)
+	return ioutil.WriteFile(rulePath, []byte(rules), 600)
+}
+
+// containerPaths returns the path to the container and the path to its sha256 file
+func (h *HIDS) containerPaths(container string) (path, sha256Path string) {
+	path = filepath.Join(h.config.ContainersDB, fmt.Sprintf("%s%s", container, containerExt))
+	sha256Path = fmt.Sprintf("%s.sha256", path)
+	return
+}
+
+// rulesPaths returns the path used by WHIDS to save gene rules
+func (h *HIDS) rulesPaths() (path, sha256Path string) {
+	path = filepath.Join(h.config.RulesDB, "database.gen")
+	sha256Path = fmt.Sprintf("%s.sha256", path)
+	return
+}
+
+func (h *HIDS) updateContainers() (err error) {
+	var containers []string
+	cl := h.forwarder.Client
+
+	if containers, err = cl.GetContainersList(); err != nil {
+		return nil
+	}
+
+	for _, contName := range containers {
+		// if container needs to be updated
+		if h.needsContainerUpdate(contName) {
+			cont, err := cl.GetContainer(contName)
+			if err != nil {
+				return err
+			}
+
+			// we compare the integrity of the container received
+			compSha256 := collector.Sha256StringArray(cont)
+			sha256, _ := cl.GetContainerSha256(contName)
+			if compSha256 != sha256 {
+				return fmt.Errorf("Failed to verify container \"%s\" integrity", contName)
+			}
+
+			// we dump the container
+			contPath, contSha256Path := h.containerPaths(contName)
+			fd, err := os.Create(contPath)
+			if err != nil {
+				return err
+			}
+			w := gzip.NewWriter(fd)
+			for _, e := range cont {
+				w.Write([]byte(fmt.Sprintln(e)))
+			}
+			w.Flush()
+			w.Close()
+			fd.Close()
+			// Dump current container sha256 to a file
+			ioutil.WriteFile(contSha256Path, []byte(compSha256), 600)
+		}
+	}
+	return nil
+}
+
+// loads containers found in container database directory
+func (h *HIDS) loadContainers() (lastErr error) {
+	for wi := range fswalker.Walk(h.config.ContainersDB) {
+		for _, fi := range wi.Files {
+			path := filepath.Join(wi.Dirpath, fi.Name())
+			// we take only files with good extension
+			if strings.HasSuffix(fi.Name(), containerExt) {
+				cont := strings.SplitN(fi.Name(), ".", 2)[0]
+				fd, err := os.Open(path)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				defer fd.Close()
+				r, err := gzip.NewReader(fd)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				log.Infof("Loading container: %s", cont)
+				h.engine.LoadContainer(cont, r)
+				r.Close()
+				fd.Close()
+			}
+		}
+	}
+	return
+}
+
+func (h *HIDS) cleanup() {
+	// Cleaning up empty dump directories if needed
+	fis, _ := ioutil.ReadDir(h.config.DumpDir)
+	for _, fi := range fis {
+		if fi.IsDir() {
+			fp := filepath.Join(h.config.DumpDir, fi.Name())
+			if utils.CountFiles(fp) == 0 {
+				os.RemoveAll(fp)
+			}
+		}
+	}
+}
+
+var ()
+
+func (h *HIDS) uploadRoutine() bool {
+	// force compression in this case
+	if h.config.IsDumpEnabled() && h.config.IsForwardingEnabled() {
 		flagDumpCompress = true
 		go func() {
 			for {
-				for wi := range fswalker.Walk(dumpDirectory) {
+				// Sending dump files over to the manager
+				for wi := range fswalker.Walk(h.config.DumpDir) {
 					for _, fi := range wi.Files {
 						sp := strings.Split(wi.Dirpath, string(os.PathSeparator))
-						// dump only compressed files
-						if filepath.Ext(fi.Name()) == ".gz" {
+						// upload only file with some extensions
+						if uploadExts.Contains(filepath.Ext(fi.Name())) {
 							if len(sp) >= 2 {
 								fullpath := filepath.Join(wi.Dirpath, fi.Name())
-								fu, err := forwarder.Client.PrepareFileUpload(fullpath, sp[len(sp)-2], sp[len(sp)-1], fi.Name())
+								fu, err := h.forwarder.Client.PrepareFileUpload(fullpath, sp[len(sp)-2], sp[len(sp)-1], fi.Name())
 								if err != nil {
 									log.Errorf("Failed to prepare dump file to upload: %s", err)
 									continue
 								}
-								if err := forwarder.Client.PostDump(fu); err != nil {
+								if err := h.forwarder.Client.PostDump(fu); err != nil {
 									log.Errorf("%s", err)
 									continue
 								}
@@ -464,13 +574,27 @@ When this option is enabled, DNS logging is also enabled`)
 							}
 						}
 					}
+
 				}
 				time.Sleep(60 * time.Second)
 			}
 		}()
+		return true
 	}
+	return false
+}
 
-	if enDNSLog {
+// Run starts the WHIDS engine and waits channel listening is stopped
+func (h *HIDS) Run() {
+	waitGr := sync.WaitGroup{}
+	// Runs the forwarder in a separate thread
+	h.forwarder.Run()
+
+	// Start the update routine
+	log.Infof("Update routine running: %t", h.updateRoutine())
+	log.Infof("Dump forwarding routine running: %t", h.uploadRoutine())
+
+	if h.config.EnableDNS {
 		log.Info("Enabling DNS client logging")
 		err := utils.EnableDNSLogs()
 		if err != nil {
@@ -478,177 +602,16 @@ When this option is enabled, DNS logging is also enabled`)
 		}
 	}
 
-	// Update Database
-	if update && forwarder == nil {
-		log.Infof("Downloading rules from: %s", geneRulesRepo)
-		// Kind of infinite loop while databasePath does not exist
-		for i := 0; i < dlRetries; {
-			client := &http.Client{}
-			err := utils.HTTPGet(client, geneRulesRepo, databaseZip)
-			if err != nil {
-				log.Errorf("Failed to download latest gene-rules: %s", err)
-			} else {
-				err = utils.Unzip(databaseZip, databasePath)
-				if err != nil {
-					log.Errorf("Could not unzip latest gene-rules: %s", err)
-				}
-				break
-			}
-			// We increment because we know that we will have rules
-			// available anyway
-			if fsutil.IsDir(databasePath) {
-				i++
-			}
+	h.startTime = time.Now()
+	for it := range h.channels.Items() {
 
-			// We stop running if we got signaled
-			if ok, sig := gotSignaled(); ok {
-				log.Infof("Aborting, received signal: %s", sig)
-				os.Exit(exitFail)
-			}
+		// channel is a string
+		winChan := it.(string)
 
-			log.Info("Retrying to download rules")
-			time.Sleep(5 * time.Second)
+		if h.DryRun {
+			log.Infof("Dry run: would listen on %s", winChan)
+			continue
 		}
-		rulesPath = databasePath
-	}
-
-	// Control parameters
-	if rulesPath == "" {
-		//log.LogErrorAndExit(fmt.Errorf("No rule file to load"), exitFail)
-		log.Warn("No rule file to load")
-	}
-
-	// Initialization
-	e := engine.NewEngine(trace)
-	setRuleExts := datastructs.NewSyncedSet()
-	tags = []string(tagsVar)
-	names = []string(namesVar)
-
-	// Validation
-	if len(tags) > 0 && len(names) > 0 {
-		log.LogErrorAndExit(fmt.Errorf("Cannot search by tags and names at the same time"), exitFail)
-	}
-	e.SetFilters(names, tags)
-
-	// Initializes the set of rule extensions
-	for _, e := range ruleExts {
-		setRuleExts.Add(e)
-	}
-
-	if forwarder == nil {
-		// We have to load the containers before the rules
-		// For the Whitelist
-		if whitelist != "" {
-			wlf, err := os.Open(whitelist)
-			if err != nil {
-				log.LogErrorAndExit(err, exitFail)
-			}
-			for line := range readers.Readlines(wlf) {
-				e.Whitelist(string(line))
-			}
-			wlf.Close()
-		}
-		log.Infof("Size of whitelist container: %d", e.WhitelistLen())
-		// For the Blacklist
-		if blacklist != "" {
-			blf, err := os.Open(blacklist)
-			if err != nil {
-				log.LogErrorAndExit(err, exitFail)
-			}
-			for line := range readers.Readlines(blf) {
-				e.Blacklist(string(line))
-			}
-			blf.Close()
-		}
-		log.Infof("Size of blacklist container: %d", e.BlacklistLen())
-
-		// Loading the rules
-		e.LoadDirectory(rulesPath)
-	} else {
-		var rules string
-		log.Infof("Loading rules available in manager")
-		sha256, err := forwarder.Client.GetRulesSha256()
-		if err != nil {
-			log.Error(err)
-			goto backup
-		}
-		rules, err = forwarder.Client.GetRules()
-		if err != nil {
-			log.Error(err)
-			goto backup
-		}
-		if sha256 != data.Sha256([]byte(rules)) {
-			log.Errorf("Failed to verify rules integrity")
-			goto backup
-		}
-		err = e.LoadReader(bytes.NewReader([]byte(rules)))
-	backup:
-		if err != nil {
-			log.Warnf("Cannot get rules from manager, trying to load latest rule database: %s", databasePath)
-			if err := e.LoadDirectory(databasePath); err != nil {
-				log.Errorf("Failed to load latest rule database: %s", err)
-			}
-		} else {
-			if !fsutil.IsDir(databasePath) {
-				if err := os.MkdirAll(databasePath, defaultPerms); err != nil {
-					log.Errorf("Failed to create directory (%s): %s", databasePath, err)
-				}
-			}
-			fd, err := os.Create(managerRulesCache)
-			if err != nil {
-				log.Errorf("Failed to create manager rules cache (%s): %s", managerRulesCache, err)
-			} else {
-				fd.WriteString(rules)
-				fd.Close()
-			}
-		}
-	}
-	log.Infof("Loaded %d rules", e.Count())
-
-	// Register a timeout if specified in Command line
-	signals := make(chan bool)
-	eventCnt, alertsCnt := 0, 0
-	start := time.Now()
-	if timeout > 0 {
-		go func() {
-			time.Sleep(time.Duration(timeout))
-			for i := 0; i < len(listeningChannels); i++ {
-				signals <- true
-			}
-		}()
-	}
-
-	// Register SIGINT handler to stop listening on channels
-	signal.Notify(osSignals, os.Interrupt)
-	go func() {
-		<-osSignals
-		log.Infof("Received SIGINT")
-		for i := 0; i < len(listeningChannels); i++ {
-			signals <- true
-		}
-		// Close the writer properly if not Stdout
-		if l, ok := writer.(*logfile.LogFile); ok {
-			l.Close()
-		}
-		// Close the forwarder if not nil
-		if forwarder != nil {
-			forwarder.Close()
-		}
-	}()
-
-	// Loop starting the monitoring of the various channels
-	waitGr := sync.WaitGroup{}
-	winLogger, err := utils.NewWindowsLogger(winLogChannel, winLogSource)
-	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Cannot create windows logger: %s", err))
-	}
-	defer func() {
-		log.Infof("Closing windows logger")
-		winLogger.Close()
-	}()
-
-	for i := range listeningChannels {
-		winChan := listeningChannels[i]
 
 		// We flush DNS cache before monitoring DNS channel
 		if winChan == "dns" || winChan == channelAliases["dns"] {
@@ -660,50 +623,40 @@ When this option is enabled, DNS logging is also enabled`)
 		// New go routine per channel
 		go func() {
 			defer waitGr.Done()
-			// Try to find an alias for the channel
-			if c, ok := channelAliases[strings.ToLower(winChan)]; ok {
-				winChan = c
-			}
 			log.Infof("Listening on Windows channel: %s", winChan)
-			ec := wevtapi.GetAllEventsFromChannel(winChan, wevtapi.EvtSubscribeToFutureEvents, signals)
+			ec := wevtapi.GetAllEventsFromChannel(winChan, wevtapi.EvtSubscribeToFutureEvents, h.channelsSignals)
 			for xe := range ec {
 				event, err := XMLEventToGoEvtxMap(xe)
 				if err != nil {
 					log.Errorf("Failed to convert event: %s", err)
 					log.Debugf("Error data: %v", xe)
 				}
-				// Place Hooks over here
-				preDetHookMan.RunHooksOn(event)
+				// Runs pre detection hooks
+				h.preHooks.RunHooksOn(event)
 
 				// We skip if it is one of our Event
 				if isSelf(event) {
 					continue
 				}
 
-				if n, crit := e.Match(event); len(n) > 0 {
-					if crit >= criticalityThresh {
-						switch {
-						case forwarder != nil:
-							forwarder.PipeEvent(event)
-						case winLog:
-							winLogger.Log(winLogEventID, "Warning", string(evtx.ToJSON(event)))
-						default:
-							fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
+				h.RLock()
+				if n, crit := h.engine.Match(event); len(n) > 0 {
+					if crit >= h.config.CritTresh {
+						if !h.PrintAll {
+							h.forwarder.PipeEvent(event)
 						}
 						// Pipe the event to be sent to the forwarder
 						// Run hooks post detection
-						postDetHookMan.RunHooksOn(event)
-						alertsCnt++
-					}
-				} else {
-					if flagPrintAll {
-						fmt.Fprintf(writer, "%s\n", string(evtx.ToJSON(event)))
+						h.postHooks.RunHooksOn(event)
+						h.alertReported++
 					}
 				}
-				if w, ok := writer.(*logfile.LogFile); ok {
-					w.Flush()
+				// Print everything
+				if h.PrintAll {
+					fmt.Println(utils.JSON(event))
 				}
-				eventCnt++
+				h.RUnlock()
+				h.eventScanned++
 			}
 		}()
 	}
@@ -711,10 +664,26 @@ When this option is enabled, DNS logging is also enabled`)
 	// is generated (used to check if process termination events are enabled)
 	exec.Command(os.Args[0], "-h").Start()
 	waitGr.Wait()
+}
 
+// LogStats logs whids statistics
+func (h *HIDS) LogStats() {
 	stop := time.Now()
-	log.Infof("Count Event Scanned: %d", eventCnt)
-	log.Infof("Average Event Rate: %.2f EPS", float64(eventCnt)/(stop.Sub(start).Seconds()))
-	log.Infof("Alerts Reported: %d", alertsCnt)
-	log.Infof("Count Rules Used (loaded + generated): %d", e.Count())
+	log.Infof("Time Running: %s", stop.Sub(h.startTime))
+	log.Infof("Count Event Scanned: %d", h.eventScanned)
+	log.Infof("Average Event Rate: %.2f EPS", float64(h.eventScanned)/(stop.Sub(h.startTime).Seconds()))
+	log.Infof("Alerts Reported: %d", h.alertReported)
+	log.Infof("Count Rules Used (loaded + generated): %d", h.engine.Count())
+}
+
+// Stop stops the IDS
+func (h *HIDS) Stop() {
+	log.Infof("Stopping HIDS")
+	// gently close forwarder needs to be done before
+	// stop listening othewise we corrupt local logfiles
+	// because of race condition
+	h.forwarder.Close()
+	for range h.channels.Items() {
+		h.channelsSignals <- true
+	}
 }

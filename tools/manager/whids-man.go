@@ -29,8 +29,9 @@ const (
 )
 
 var (
-	keygen  bool
-	certgen bool
+	keygen     bool
+	certgen    bool
+	dumpConfig bool
 
 	managerConf collector.ManagerConfig
 	manager     *collector.Manager
@@ -154,6 +155,7 @@ func main() {
 	flag.BoolVar(&keygen, "key", keygen, "Generate a random client API key. Both client and manager configuration file will needs to be updated with it.")
 	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
 		"The certificate gets generated for the IP address specified in the configuration file.")
+	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -169,6 +171,15 @@ func main() {
 		key := collector.KeyGen(collector.DefaultKeySize)
 		fmt.Printf("New API key: %s\n", key)
 		fmt.Printf("Please manually update client and manager configuration file to make it effective\n")
+		os.Exit(0)
+	}
+
+	if dumpConfig {
+		b, err := json.MarshalIndent(collector.ManagerConfig{}, "", "    ")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(b))
 		os.Exit(0)
 	}
 

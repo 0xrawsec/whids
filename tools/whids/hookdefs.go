@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/0xrawsec/golang-utils/crypto/file"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/crypto/data"
@@ -26,6 +29,21 @@ import (
 ////////////////////////////////// Hooks //////////////////////////////////
 
 var (
+	// Globals needed by Hooks
+	dumpDirectory    string
+	selfGUID         string
+	flagProcTermEn   bool // set the flag to true if process termination is enabled
+	flagDumpCompress bool
+
+	selfPath, _ = filepath.Abs(os.Args[0])
+	selfPid     = os.Getpid()
+
+	cryptoLockerFilecreateLimit = int64(50)
+	dumpTresh                   = 8
+)
+
+var (
+
 	// DNSFilter filters any Windows-DNS-Client log
 	dnsFilter = hooks.NewFilter([]int64{}, []string{"Microsoft-Windows-DNS-Client/Operational"})
 	// SysmonNetConnFilter filters any Sysmon network connection
@@ -57,6 +75,7 @@ var (
 	sysmonCurrentDirectory  = evtx.Path("/Event/EventData/CurrentDirectory")
 	sysmonDetails           = evtx.Path("/Event/EventData/Details")
 	sysmonDestination       = evtx.Path("/Event/EventData/Destination")
+	sysmonSourceImage       = evtx.Path("/Event/EventData/SourceImage")
 
 	// Gene criticality path
 	geneCriticality = evtx.Path("/Event/GeneInfo/Criticality")
@@ -82,6 +101,8 @@ var (
 
 	memdumped  = datastructs.NewSyncedSet()
 	memdumping = datastructs.NewSyncedSet()
+
+	fileDumped = datastructs.NewSyncedSet()
 
 	parallelHooks = semaphore.New(4)
 
@@ -317,6 +338,7 @@ func hookSelfGUID(e *evtx.GoEvtxMap) {
 			// Check parent image first because we launch whids.exe -h to test process termination
 			// and we catch it up if we check image first
 			if pimage, err := e.GetString(&sysmonParentImage); err == nil {
+				//log.Infof("pimage=%s self=%s", pimage, selfPath)
 				if pimage == selfPath {
 					if pguid, err := e.GetString(&sysmonParentProcessGUID); err == nil {
 						selfGUID = pguid
@@ -326,6 +348,7 @@ func hookSelfGUID(e *evtx.GoEvtxMap) {
 				}
 			}
 			if image, err := e.GetString(&sysmonImage); err == nil {
+				//log.Infof("image=%s self=%s", image, selfPath)
 				if image == selfPath {
 					if guid, err := e.GetString(&sysmonProcessGUID); err == nil {
 						selfGUID = guid
@@ -480,14 +503,23 @@ func dumpPidAndCompress(pid int, guid, id string) {
 }
 
 func dumpFileAndCompress(src, path string) error {
+	var err error
 	os.MkdirAll(path, defaultPerms)
+	sha256, err := file.Sha256(src)
+	if err != nil {
+		return err
+	}
 	// replace : in case we are dumping an ADS
 	base := strings.Replace(filepath.Base(src), ":", "_ADS_", -1)
 	dst := filepath.Join(path, fmt.Sprintf("%d_%s.bin", time.Now().Unix(), base))
-	log.Debugf("Dumping file: %s->%s", src, dst)
-	err := fsutil.CopyFile(src, dst)
-	if err == nil {
-		compress(dst)
+	// dump sha256 of file anyway
+	ioutil.WriteFile(fmt.Sprintf("%s.sha256", dst), []byte(sha256), 600)
+	if !fileDumped.Contains(sha256) {
+		log.Debugf("Dumping file: %s->%s", src, dst)
+		if err = fsutil.CopyFile(src, dst); err == nil {
+			compress(dst)
+			fileDumped.Add(sha256)
+		}
 	}
 	return err
 }
@@ -558,9 +590,15 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 	go func() {
 		defer parallelHooks.Release()
 		guid := "{00000000-0000-0000-0000-000000000000}"
-		if tmpGUID, err := e.GetString(&sysmonProcessGUID); err == nil {
+		tmpGUID, err := e.GetString(&sysmonProcessGUID)
+		if err != nil {
+			if tmpGUID, err = e.GetString(&sysmonSourceProcessGUID); err == nil {
+				guid = tmpGUID
+			}
+		} else {
 			guid = tmpGUID
 		}
+
 		dumpPath := filepath.Join(dumpDirectory, guid, idFromEvent(e))
 		dumpEventAndCompress(e, guid)
 
@@ -608,6 +646,12 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 			if im, err := e.GetString(&sysmonImageLoaded); err == nil {
 				if err = dumpFileAndCompress(im, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)
+				}
+			}
+		case 10:
+			if sim, err := e.GetString(&sysmonSourceImage); err == nil {
+				if err = dumpFileAndCompress(sim, dumpPath); err != nil {
+					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), sim, err)
 				}
 			}
 		case 13, 20:

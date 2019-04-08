@@ -89,13 +89,132 @@ which matched the event.
 }
 ```
 
+# Installation
+
+## WHIDS
+1. Run `install.bat` as administrator
+*. Verify that files have been created at the **installation directory**
+*. With a text editor **opened as administrator** open `config.json` and modify it as you wish
+*. Skip this if running with a connection to a manager. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. You can get some compiled rules [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen)
+*. Start the HIDS with `Start.bat` script located in **installation directory**
+*. If you configured a **manager** do not forget to run it
+
+NB: whenever you go to the installation directory with **File Explorer** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator**.
+
+# Configuration
+
+## WHIDS
+
+WHIDS configuration file example
+
+```json
+{
+     // Path to the rules directory used for detection
+    "rules-db": "C:\\Program Files\\Whids\\Database\\Rules",
+    // Path to the containers used in some of the rules
+    // containers must be GZIP compressed and have .cont.gz extension
+    // basename without extension is taken as container name
+    // Example: blacklist.cont.gz will create blacklist container
+    "containers-db": "C:\\Program Files\\Whids\\Database\\Containers",
+    // Forwarder related configuration
+    "forwarder": {
+        "client": {
+            // Hostname or IP address of remote manager
+            "host": "",
+            // Port used by remote manager
+            "port": 0,
+            // Protocol used http or https
+            "proto": "",
+            // Key used to authenticate the client
+            "key": "",
+            // Server key used to authenticate remote server
+            "server-key": "",
+            // Whether or not the TLS certificate should be verified
+            "unsafe": false,
+            // Maximum upload side for dump forwarding
+            "max-upload-size": 104857600
+        },
+        // Path where to store the alerts
+        "logs-dir": "C:\\Program Files\\Whids\\Logs\\Alerts",
+        // If local=true the forwarder won't communicate with manager
+        "local": true
+    },
+    // Windows event log channels to monitor
+    // run "whids -h" to get the list of aliases
+    // otherwise any Windows channel can be used here 
+    "channels": [
+        "all"
+    ],
+    // Dump mode: file, memory or all (can be empty)
+    // file: dumps anything identified as a file in the event
+    // memory: dumps (guilty) process memory in Windows minidump format
+    "dump-mode": "file",
+    // Dumps when criticality of the events is above or equal to treshold
+    "dump-treshold": 8,
+    // Where to store dumps
+    "dump-dir": "C:\\Program Files\\Whids\\Dumps",
+    // Whether or not to enable dump compression
+    "dump-compression": true,
+    // Log events with criticality above or equal to treshold
+    "criticality-treshold": 5,
+    // Sleep time in seconds between two rules updates (negative number means no update)
+    "update-interval": 60,
+    // Whether on not hooks should be enables 
+    "en-hooks": true,
+    // Whether or not DNS-Client logging should be enabled
+    "en-dns": true,
+    // Logfile used to store WHIDS stderr
+    "logfile": "C:\\Program Files\\Whids\\Logs\\whids.log"
+}
+```
+
+## Manager
+
+Manager configuration example
+
+```json
+{
+    // Hostname / IP on which to run the manager
+    "host": "192.168.56.1",
+    // Port used by the manager
+    "port": 1519,
+    // Logfile (automatically rotated) where to store alerts received
+    // the logs are GZIP compressed
+    "logfile": "alerts.gz",
+    // Server authentication key (see server-key in WHIDS config)
+    "key": "someserverkey",
+    // List of authorized client keys (see key in WHIDS config)
+    // If the client is not authorized in this list, all the connections 
+    // to the manager will abort
+    "authorized": [
+      "clientapikey"
+    ],
+    // TLS settings
+    "tls": {
+        // Server certificate to use
+        "cert": "cert.pem",
+        // Server key to use
+        "key": "key.pem"
+    },
+    // Rules directory used to serve rules to the clients
+    "rules-dir": "",
+    // Rules of containers used in rules (served to the clients)
+    // a container name is the basename of the file without extension
+    // Example: /some/container/dir/blacklist.txt will take the content
+    // of the file and use it as being a Gene container named blacklist
+    "containers-dir": ""
+    // Directory used to store dumps sent by the client
+    "dump-dir": "",
+}
+```
+
 # Documentation
 
 Please visit: https://rawsec.lu/doc/gene/1.4/
 
 # Known Issues
 
-* Does not work properly when ran from a network share (this case prevent whids to identify itself and thus generate some noise)
+* Does not work properly when ran from a network share **mapped as a network drive** (this case prevent whids to identify itself and thus generate some noise). Example: if `\\vbox\test` is mounted as `Z:` drive, running `Z:\whids.exe` **won't work** while running `\\vbox\test\whids.exe` actually would.
 
 # Changelog
 

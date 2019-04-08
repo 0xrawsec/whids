@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
+	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/whids/collector"
 )
@@ -82,9 +83,6 @@ func TestClientPostDump(t *testing.T) {
 	}
 }
 func TestClientContainer(t *testing.T) {
-	containers := []string{
-		"blacklist",
-		"whitelist"}
 
 	key := collector.KeyGen(collector.DefaultKeySize)
 
@@ -100,6 +98,18 @@ func TestClientContainer(t *testing.T) {
 	c, err := collector.NewManagerClient(&cconf)
 	if err != nil {
 		panic(err)
+	}
+
+	containers, err := c.GetContainersList()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	verif := datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(containers)...)
+	if !verif.Contains("blacklist") || !verif.Contains("whitelist") {
+		t.Error("Missing containers")
+		t.FailNow()
 	}
 
 	for _, cont := range containers {
