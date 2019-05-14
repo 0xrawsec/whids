@@ -177,7 +177,7 @@ type Manager struct {
 	rulesDir      string
 	containersDir string
 	authorized    datastructs.SyncedSet
-	logfile       *logfile.LogFile
+	logfile       logfile.LogFile
 	tls           TLSConfig
 	srv           *http.Server
 	stop          chan bool
@@ -197,7 +197,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	}
 
 	m := Manager{Host: c.Host, Port: fmt.Sprintf("%d", c.Port)}
-	m.logfile, err = logfile.OpenFile(c.Logfile, DefaultLogPerm, DefaultManagerLogSize)
+	m.logfile, err = logfile.OpenTimeRotateLogFile(c.Logfile, DefaultLogPerm, time.Hour, time.Second*5)
 	m.key = c.Key
 	m.authorized = datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(c.Authorized)...)
 	m.stop = make(chan bool)
@@ -491,11 +491,11 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 		default:
 			// Todo put there code to validate that logs is JSON format
 			log.Debugf("Received Event: %s", tok)
-			m.logfile.WriteString(fmt.Sprintln(tok))
+			m.logfile.Write([]byte(fmt.Sprintln(tok)))
 			cnt++
 		}
 	}
 	// force logfile to flush events to disk
-	m.logfile.Flush()
+	//m.logfile.Flush()
 	log.Debugf("Count Event Received: %d", cnt)
 }

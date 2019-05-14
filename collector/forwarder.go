@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/golang-utils/fileutils"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/fsutil/logfile"
@@ -24,6 +25,8 @@ const (
 	DefaultLogfileSize = logfile.MB * 5
 	// DiskSpaceThreshold allow 100MB of queued events
 	DiskSpaceThreshold = DefaultLogfileSize * 20
+	// MinRotationInterval is the minimum rotation interval allowed
+	MinRotationInterval = time.Minute
 )
 
 var ()
@@ -34,20 +37,36 @@ func buildURI(proto, host, port, url string) string {
 
 }
 
+// LoggingConfig structure to encode Logging configuration of the forwarder
+type LoggingConfig struct {
+	Dir              string `json:"dir"`
+	RotationInterval string `json:"rotation-interval"`
+}
+
+// ParseRotationInterval returns the parsed time.Duration
+// from configuration structure.
+func (l *LoggingConfig) ParseRotationInterval() (d time.Duration, err error) {
+	d, err = time.ParseDuration(l.RotationInterval)
+	if d < MinRotationInterval {
+		d = MinRotationInterval
+	}
+	return
+}
+
 // ForwarderConfig structure definition
 type ForwarderConfig struct {
-	Client  ClientConfig `json:"manager-client"`
-	LogsDir string       `json:"logs-dir"`
-	Local   bool         `json:"local"`
+	Client  ClientConfig  `json:"manager-client"`
+	Logging LoggingConfig `json:"logging"`
+	Local   bool          `json:"local"`
 }
 
 // Forwarder structure definition
 type Forwarder struct {
 	sync.Mutex
-	logsDir string
-	stop    chan bool
-	done    chan bool
-	logfile *logfile.LogFile
+	fwdConfig *ForwarderConfig
+	stop      chan bool
+	done      chan bool
+	logfile   logfile.LogFile
 
 	Client      *ManagerClient
 	TimeTresh   time.Duration
@@ -63,7 +82,9 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	var err error
 
 	// Initialize the Forwarder
+	// TODO: better organize forwarder configuration
 	co := Forwarder{
+		fwdConfig:  c,
 		TimeTresh:  time.Second * 10,
 		EventTresh: 50,
 		Pipe:       new(bytes.Buffer),
@@ -79,15 +100,15 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	}
 
 	// queue directory
-	co.logsDir = c.LogsDir
-	if c.LogsDir == "" {
+	c.Logging.Dir = c.Logging.Dir
+	if c.Logging.Dir == "" {
 		return nil, fmt.Errorf("Field \"logs-dir\" is missing from configuration")
 	}
 
 	// creating the queue directory
-	if !fsutil.Exists(co.logsDir) && !fsutil.IsDir(co.logsDir) {
+	if !fsutil.Exists(c.Logging.Dir) && !fsutil.IsDir(c.Logging.Dir) {
 		// TOCTU may happen here so we double check error code
-		if err = os.Mkdir(co.logsDir, DefaultDirPerm); err != nil && !os.IsExist(err) {
+		if err = os.Mkdir(c.Logging.Dir, DefaultDirPerm); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("Cannot create queue directory : %s", err)
 		}
 	}
@@ -103,6 +124,25 @@ func (f *Forwarder) LogfilePath() string {
 	return ""
 }
 
+// ArchiveLogs archives the old log files not compressed into compressed
+func (f *Forwarder) ArchiveLogs() {
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
+		for _, fi := range wi.Files {
+			// fullpath
+			fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
+			log.Infof("Archiving old log: %s", fp)
+
+			if !strings.HasSuffix(fp, ".gz") {
+				if err := fileutils.GzipFile(fp); err != nil {
+					log.Errorf("Failed to archive log: %s", err)
+
+				}
+			}
+		}
+	}
+
+}
+
 // PipeEvent pipes an event to be sent through the forwarder
 func (f *Forwarder) PipeEvent(e *evtx.GoEvtxMap) {
 	f.Lock()
@@ -114,7 +154,6 @@ func (f *Forwarder) PipeEvent(e *evtx.GoEvtxMap) {
 
 // Save save the piped events to the disks
 func (f *Forwarder) Save() error {
-	var err error
 	log.Infof("Collector saved logs to be sent later on")
 
 	// Clean queued files if needed
@@ -128,18 +167,24 @@ func (f *Forwarder) Save() error {
 
 	if f.logfile == nil {
 		// This will reopen the first available alerts.gz.X file if several
-		lf := filepath.Join(f.logsDir, "alerts.gz")
-		if f.logfile, err = logfile.OpenFile(lf, DefaultLogPerm, DefaultLogfileSize); err != nil {
+		//lf := filepath.Join(f.fwdConfig.LogConf.Dir, "alerts.gz")
+		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts")
+		ri, err := f.fwdConfig.Logging.ParseRotationInterval()
+		if err != nil {
+			return err
+		}
+		log.Infof("Rotating logfile every %s", ri)
+		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, DefaultLogPerm, ri, time.Second*5); err != nil {
 			return err
 		}
 	}
-	f.logfile.Write(f.Pipe.Bytes())
-	return nil
+	_, err := f.logfile.Write(f.Pipe.Bytes())
+	return err
 }
 
 // HasQueuedEvents checks whether some events are waiting to be sent
 func (f *Forwarder) HasQueuedEvents() bool {
-	for wi := range fswalker.Walk(f.logsDir) {
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
 		if len(wi.Files) > 0 {
 			return true
 		}
@@ -152,18 +197,18 @@ func (f *Forwarder) CleanOlderQueued() error {
 	var older string
 	var olderTime time.Time
 	empty := time.Time{}
-	for wi := range fswalker.Walk(f.logsDir) {
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
 		for _, fi := range wi.Files {
 			// initialization
 			if olderTime == empty {
 				olderTime = fi.ModTime()
-				older = filepath.Join(f.logsDir, fi.Name())
+				older = filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
 				continue
 			}
 			// check if we have an older file
 			if fi.ModTime().Before(olderTime) {
 				olderTime = fi.ModTime()
-				older = filepath.Join(f.logsDir, fi.Name())
+				older = filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
 			}
 		}
 	}
@@ -180,7 +225,7 @@ func (f *Forwarder) CleanOlderQueued() error {
 // DiskSpaceQueue compute the disk space (in bytes) taken by queued events
 func (f *Forwarder) DiskSpaceQueue() int64 {
 	var dp int64
-	for wi := range fswalker.Walk(f.logsDir) {
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
 		for _, fi := range wi.Files {
 			dp += fi.Size()
 		}
@@ -199,6 +244,12 @@ func (f *Forwarder) ProcessQueue() {
 		return
 	}
 
+	// returns if Manager is not up, this prevents closing logfile
+	// for nothing
+	if !f.Client.IsServerUp() {
+		return
+	}
+
 	log.Info("Processing queued files")
 
 	if f.logfile != nil {
@@ -207,10 +258,10 @@ func (f *Forwarder) ProcessQueue() {
 
 	// Reset logfile for latter Save function use
 	f.logfile = nil
-	for wi := range fswalker.Walk(f.logsDir) {
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
 		for _, fi := range wi.Files {
 			// fullpath
-			fp := filepath.Join(f.logsDir, fi.Name())
+			fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
 			log.Debug("Processing queued file: %s", fp)
 			fd, err := os.Open(fp)
 			if err != nil {
@@ -218,20 +269,20 @@ func (f *Forwarder) ProcessQueue() {
 				continue
 			}
 
-			// the file is gzip so we have to pass a gzip reader to prepCollectReq
-			gzr, err := gzip.NewReader(fd)
-			if err != nil {
-				log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
-				// close file
+			if strings.HasSuffix(fp, ".gz") {
+				// the file is gzip so we have to pass a gzip reader to prepCollectReq
+				gzr, err := gzip.NewReader(fd)
+				if err != nil {
+					log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
+					// close file
+					fd.Close()
+					continue
+				}
+				err = f.Client.PostLogs(gzr)
+				// we can close the reader since we don't need those anymore
+				gzr.Close()
 				fd.Close()
-				continue
 			}
-
-			err = f.Client.PostLogs(gzr)
-
-			// we can close the reader since we don't need those anymore
-			gzr.Close()
-			fd.Close()
 
 			// We do not remove the logs if we failed to send
 			if err != nil {
@@ -296,11 +347,13 @@ func (f *Forwarder) Run() {
 			default:
 			}
 			// We have queued events so we try to send them before sending pending events
+			// We check if server is up not to close the current logfile if not needed
 			if f.HasQueuedEvents() {
 				f.ProcessQueue()
 			}
+
 			// Sending piped events
-			if f.EventsPiped >= f.EventTresh || time.Now().After(timer.Add(f.TimeTresh)) {
+			if f.EventsPiped >= f.EventTresh || time.Now().After(timer.Add(f.TimeTresh)) || f.Local {
 				// Send out events if there are pending events
 				if f.EventsPiped > 0 {
 					f.Collect()

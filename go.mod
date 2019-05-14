@@ -3,7 +3,7 @@ module github.com/0xrawsec/whids
 require (
 	github.com/0xrawsec/gene v1.4.8
 	github.com/0xrawsec/golang-evtx v1.2.0
-	github.com/0xrawsec/golang-utils v1.1.1
+	github.com/0xrawsec/golang-utils v1.1.2
 	github.com/0xrawsec/golang-win32 v1.0.0
 	github.com/0xrawsec/mux v1.6.2
 	golang.org/x/crypto v0.0.0-20190404164418-38d8ce5564a5 // indirect

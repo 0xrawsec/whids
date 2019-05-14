@@ -84,6 +84,7 @@ var (
 	emptyForwarderConfig = collector.ForwarderConfig{}
 	logDir               = filepath.Join(abs, "Logs")
 	// DefaultHIDSConfig is the default HIDS configuration
+
 	DefaultHIDSConfig = HIDSConfig{
 		RulesDB:      filepath.Join(abs, "Database", "Rules"),
 		ContainersDB: filepath.Join(abs, "Database", "Containers"),
@@ -92,13 +93,18 @@ var (
 			Client: collector.ClientConfig{
 				MaxUploadSize: collector.DefaultMaxUploadSize,
 			},
-			LogsDir: filepath.Join(logDir, "Alerts"),
+			Logging: collector.LoggingConfig{
+				Dir:              filepath.Join(logDir, "Alerts"),
+				RotationInterval: "24h",
+			},
 		},
-		Channels:       []string{"all"},
-		DumpMode:       "file",
-		DumpTresh:      8,
-		DumpDir:        filepath.Join(abs, "Dumps"),
-		DumpComp:       true,
+		Channels: []string{"all"},
+		Dump: DumpConfig{
+			Mode:        "file",
+			Treshold:    8,
+			Dir:         filepath.Join(abs, "Dumps"),
+			Compression: true,
+		},
 		CritTresh:      5,
 		UpdateInterval: 60,
 		EnableHooks:    true,
@@ -106,16 +112,20 @@ var (
 		Logfile:        filepath.Join(logDir, "whids.log")}
 )
 
+type DumpConfig struct {
+	Mode        string `json:"mode"`
+	Treshold    int    `json:"treshold"`
+	Dir         string `json:"dir"`
+	Compression bool   `json:"compression"`
+}
+
 // HIDSConfig structure
 type HIDSConfig struct {
 	RulesDB        string                    `json:"rules-db"`
 	ContainersDB   string                    `json:"containers-db"`
 	FwdConfig      collector.ForwarderConfig `json:"forwarder"`
 	Channels       []string                  `json:"channels"`
-	DumpMode       string                    `json:"dump-mode"`
-	DumpTresh      int                       `json:"dump-treshold"`
-	DumpDir        string                    `json:"dump-dir"`
-	DumpComp       bool                      `json:"dump-compression"`
+	Dump           DumpConfig                `json:"dump"`
 	CritTresh      int                       `json:"criticality-treshold"`
 	UpdateInterval time.Duration             `json:"update-interval"`
 	EnableHooks    bool                      `json:"en-hooks"`
@@ -137,19 +147,19 @@ func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
 
 // SetHooksGlobals sets the global variables used by hooks
 func (c *HIDSConfig) SetHooksGlobals() {
-	dumpDirectory = c.DumpDir
-	dumpTresh = c.DumpTresh
-	flagDumpCompress = c.DumpComp
+	dumpDirectory = c.Dump.Dir
+	dumpTresh = c.Dump.Treshold
+	flagDumpCompress = c.Dump.Compression
 }
 
 // IsDumpFileEn returns true if file dump is enabled
 func (c *HIDSConfig) IsDumpFileEn() bool {
-	return c.DumpMode == "all" || c.DumpMode == "file"
+	return c.Dump.Mode == "all" || c.Dump.Mode == "file"
 }
 
 // IsDumpMemEn returns true if memory dump is enabled
 func (c *HIDSConfig) IsDumpMemEn() bool {
-	return c.DumpMode == "all" || c.DumpMode == "memory"
+	return c.Dump.Mode == "all" || c.Dump.Mode == "memory"
 }
 
 // IsDumpEnabled returns true if any kind of dump is enabled
@@ -170,11 +180,11 @@ func (c *HIDSConfig) Prepare() {
 	if !fsutil.Exists(c.ContainersDB) {
 		os.MkdirAll(c.ContainersDB, 0600)
 	}
-	if !fsutil.Exists(c.DumpDir) {
-		os.MkdirAll(c.DumpDir, 0600)
+	if !fsutil.Exists(c.Dump.Dir) {
+		os.MkdirAll(c.Dump.Dir, 0600)
 	}
-	if !fsutil.Exists(filepath.Dir(c.FwdConfig.LogsDir)) {
-		os.MkdirAll(filepath.Dir(c.FwdConfig.LogsDir), 0600)
+	if !fsutil.Exists(filepath.Dir(c.FwdConfig.Logging.Dir)) {
+		os.MkdirAll(filepath.Dir(c.FwdConfig.Logging.Dir), 0600)
 	}
 	if !fsutil.Exists(filepath.Dir(c.Logfile)) {
 		os.MkdirAll(filepath.Dir(c.Logfile), 0600)
@@ -282,7 +292,7 @@ func (h *HIDS) initHooks(advanced bool) {
 		// needs DNS logs to be enabled as well
 		h.config.EnableDNS = true
 
-		switch h.config.DumpMode {
+		switch h.config.Dump.Mode {
 		case "memory":
 			h.postHooks.Hook(hookDumpProcess, anySysmonEvent)
 		case "file":
@@ -354,6 +364,7 @@ func (h *HIDS) updateEngine(force bool) error {
 			if err := h.engine.LoadDirectory(h.config.RulesDB); err != nil {
 				return fmt.Errorf("Failed to load rules: %s", err)
 			}
+			log.Infof("Number of rules loaded in engine: %d", h.engine.Count())
 		}
 	} else {
 		log.Info("Neither rules nor containers need to be updated")
@@ -531,10 +542,10 @@ func (h *HIDS) loadContainers() (lastErr error) {
 
 func (h *HIDS) cleanup() {
 	// Cleaning up empty dump directories if needed
-	fis, _ := ioutil.ReadDir(h.config.DumpDir)
+	fis, _ := ioutil.ReadDir(h.config.Dump.Dir)
 	for _, fi := range fis {
 		if fi.IsDir() {
-			fp := filepath.Join(h.config.DumpDir, fi.Name())
+			fp := filepath.Join(h.config.Dump.Dir, fi.Name())
 			if utils.CountFiles(fp) == 0 {
 				os.RemoveAll(fp)
 			}
@@ -551,7 +562,7 @@ func (h *HIDS) uploadRoutine() bool {
 		go func() {
 			for {
 				// Sending dump files over to the manager
-				for wi := range fswalker.Walk(h.config.DumpDir) {
+				for wi := range fswalker.Walk(h.config.Dump.Dir) {
 					for _, fi := range wi.Files {
 						sp := strings.Split(wi.Dirpath, string(os.PathSeparator))
 						// upload only file with some extensions

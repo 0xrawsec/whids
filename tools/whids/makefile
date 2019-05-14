@@ -1,7 +1,7 @@
 TEST=$(GOPATH)/test
 MAIN_BASEN_SRC=whids
 RELEASE=$(GOPATH)/release/$(MAIN_BASEN_SRC)
-VERSION=1.5.0
+VERSION=1.5.1beta
 COMMITID=$(shell git rev-parse HEAD)
 
 # Strips symbols and dwarf to make binary smaller

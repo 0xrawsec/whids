@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,6 +14,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/0xrawsec/gene/engine"
+
+	"github.com/0xrawsec/golang-utils/crypto/data"
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
@@ -45,6 +51,8 @@ var (
 	flagService     bool
 	flagZombie      bool
 	flagProfile     bool
+
+	importRules string
 
 	config = filepath.Join(abs, "config.json")
 
@@ -151,6 +159,7 @@ func main() {
 	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
 	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
 	flag.StringVar(&config, "c", config, "Configuration file")
+	flag.StringVar(&importRules, "import", importRules, "Import rules")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -202,6 +211,43 @@ func main() {
 		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
 	}
 
+	// has to be there so that we print logs to stdout
+	if importRules != "" {
+		// in order not to write logs into file
+		// TODO: add a add stream handler to log facility
+		hidsConf.Logfile = ""
+		hids, err := NewHIDS(&hidsConf)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
+		}
+		log.Infof("Importing rules from %s", importRules)
+		hids.engine = engine.NewEngine(false)
+		hids.engine.SetDumpRaw(true)
+
+		if err := hids.engine.LoadDirectory(importRules); err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+		}
+
+		prules, psha256 := hids.rulesPaths()
+		rules := new(bytes.Buffer)
+		for rule := range hids.engine.GetRawRule(".*") {
+			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
+				log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+			}
+		}
+
+		if err := ioutil.WriteFile(prules, rules.Bytes(), defaultPerms); err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+		}
+
+		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), defaultPerms); err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+		}
+
+		log.Infof("IMPORT SUCCESSFUL: %s", prules)
+		os.Exit(0)
+	}
+
 	hids, err := NewHIDS(&hidsConf)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
@@ -209,6 +255,11 @@ func main() {
 
 	hids.DryRun = flagDryRun
 	hids.PrintAll = flagPrintAll
+
+	// Go routine to archive old logfiles
+	go func() {
+		hids.forwarder.ArchiveLogs()
+	}()
 
 	// Register SIGINT handler to stop listening on channels
 	signal.Notify(osSignals, os.Interrupt)
