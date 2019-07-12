@@ -1,5 +1,3 @@
-# WHIDS
-
 ![Logo](https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png?s=200)
 
 Very flexible Host IDS designed for Windows. We are making
