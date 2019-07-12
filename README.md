@@ -1,6 +1,6 @@
 # WHIDS
 
-![Logo](https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png)
+![Logo](https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png?s=200)
 
 Very flexible Host IDS designed for Windows. We are making
 use of a previously developped rule engine [Gene](https://github.com/0xrawsec/gene)
