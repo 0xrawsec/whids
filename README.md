@@ -1,5 +1,7 @@
 # WHIDS
 
+![Logo](https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png)
+
 Very flexible Host IDS designed for Windows. We are making
 use of a previously developped rule engine [Gene](https://github.com/0xrawsec/gene)
 designed to match Windows events according to custom rules. The
@@ -211,11 +213,18 @@ Manager configuration example
 
 # Documentation
 
-Please visit: https://rawsec.lu/doc/gene/1.4/
+To know how to write rules for the engine please visit: https://rawsec.lu/doc/gene/1.4/
 
 # Known Issues
 
 * Does not work properly when ran from a network share **mapped as a network drive** (this case prevent whids to identify itself and thus generate some noise). Example: if `\\vbox\test` is mounted as `Z:` drive, running `Z:\whids.exe` **won't work** while running `\\vbox\test\whids.exe` actually would.
+
+# Recommandations
+
+In order to get the most of WHIDS you need to activate specific features
+
+* [Install Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon)
+* [Enable Powershell Module Logging](https://www.fireeye.com/blog/threat-research/2016/02/greater_visibilityt.html)
 
 # Changelog
 
