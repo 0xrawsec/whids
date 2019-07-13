@@ -1,4 +1,6 @@
-![Logo](https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png?s=200)
+<p align="center">
+<img src="https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png?s=200" alt="logo">
+</p>
 
 Very flexible Host IDS designed for Windows. We are making
 use of a previously developped rule engine [Gene](https://github.com/0xrawsec/gene)
