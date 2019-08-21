@@ -181,6 +181,7 @@ type Manager struct {
 	tls           TLSConfig
 	srv           *http.Server
 	stop          chan bool
+	done          bool
 	// Gene related members
 	geneEng          *engine.Engine
 	rules            string // to cache the rules concatenated
@@ -197,7 +198,9 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	}
 
 	m := Manager{Host: c.Host, Port: fmt.Sprintf("%d", c.Port)}
-	m.logfile, err = logfile.OpenTimeRotateLogFile(c.Logfile, DefaultLogPerm, time.Hour, time.Second*5)
+	if m.logfile, err = logfile.OpenTimeRotateLogFile(c.Logfile, DefaultLogPerm, time.Hour); err != nil {
+		return &m, err
+	}
 	m.key = c.Key
 	m.authorized = datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(c.Authorized)...)
 	m.stop = make(chan bool)
@@ -293,9 +296,17 @@ func (m *Manager) Wait() {
 	<-m.stop
 }
 
+func (m *Manager) IsDone() bool {
+	return m.done
+}
+
 // Shutdown the Manager
 func (m *Manager) Shutdown() error {
 	defer func() { go func() { m.stop <- true }() }()
+	if m.done {
+		return nil
+	}
+	m.done = true
 	if m.srv != nil {
 		m.srv.Shutdown(nil)
 	}

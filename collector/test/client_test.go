@@ -29,7 +29,6 @@ func TestClientGetRules(t *testing.T) {
 	}
 	r.AddAuthKey(key)
 	r.Run()
-	defer r.Shutdown()
 
 	cconf.Key = key
 	c, err := collector.NewManagerClient(&cconf)
@@ -45,12 +44,12 @@ func TestClientGetRules(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-
 	if sha256 != data.Sha256([]byte(rules)) {
 		t.Errorf("Rules integrity cannot be verified")
 	}
 
-	t.Log(rules)
+	r.Shutdown()
+
 }
 
 func TestClientPostDump(t *testing.T) {

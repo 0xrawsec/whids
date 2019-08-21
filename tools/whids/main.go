@@ -7,20 +7,17 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/0xrawsec/gene/engine"
+	"golang.org/x/sys/windows/svc"
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/golang-win32/win32/kernel32"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -39,18 +36,19 @@ const (
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
 	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
 
-	serviceCLFlag = "service"
+	svcName = "WHIDS"
 )
 
 var (
 	flagDumpDefault bool
 	flagDryRun      bool
 	flagPrintAll    bool
-	debug           bool
+	debugFlag       bool
 	versionFlag     bool
 	flagService     bool
-	flagZombie      bool
 	flagProfile     bool
+
+	hids *HIDS
 
 	importRules string
 
@@ -71,80 +69,40 @@ func fmtAliases() string {
 	return strings.Join(aliases, "\n")
 }
 
-func service() {
-	path := os.Args[0]
-	args := os.Args[1:]
-	for i, a := range args {
-		if a == fmt.Sprintf("-%s", serviceCLFlag) {
-			if i != len(args)-1 {
-				args = append(args[:i], args[i+1:]...)
-			} else {
-				args = args[:i]
-			}
-		}
-	}
+func runHids(service bool) {
+	var err error
 
-	osSignals := make(chan os.Signal)
-	signal.Notify(osSignals, os.Interrupt, os.Kill)
-	go func() {
-		<-osSignals
-		time.Sleep(500 * time.Millisecond)
-		os.Exit(0)
-	}()
+	log.Infof("Running HIDS as Windows service: %t", service)
 
-	for {
-		cmd := exec.Command(path, args...)
-		log.Infof("Running: %s %s", path, strings.Join(args, " "))
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stdout
-		err := cmd.Run()
-		log.Errorf("Process stopped running: %s", err)
-	}
-}
-
-func monitorParentProcess() {
-	var ppid int
-	tmpPpid := syscall.Getppid()
-	fn, err := kernel32.GetModuleFilenameFromPID(tmpPpid)
+	hidsConf, err := LoadsHIDSConfig(config)
 	if err != nil {
-		log.Errorf("Cannot get parent Image: %s", err)
+		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
 	}
-	sfn, err := kernel32.GetModuleFilenameSelf()
+
+	hids, err = NewHIDS(&hidsConf)
 	if err != nil {
-		log.Errorf("Cannot get self module filename: %s", err)
+		log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
 	}
-	log.Infof("Parent Process Image: %s", fn)
-	log.Infof("Process Image: %s", sfn)
-	upFn, upSfn := strings.ToUpper(fn), strings.ToUpper(sfn)
-	if upSfn == upFn {
-		// We are a child of whids so running as service
-		ppid = tmpPpid
+
+	hids.DryRun = flagDryRun
+	hids.PrintAll = flagPrintAll
+
+	// If not a service we need to be able to stop the HIDS
+	if !service {
+		// Register SIGINT handler to stop listening on channels
+		signal.Notify(osSignals, os.Interrupt)
 		go func() {
-			for {
-				fn, _ := kernel32.GetModuleFilenameFromPID(ppid)
-				sfn, err := kernel32.GetModuleFilenameSelf()
-				upFn, upSfn := strings.ToUpper(sfn), strings.ToUpper(fn)
-				if err != nil {
-					log.Errorf("Cannot get self module filename: %s", err)
-				}
-				if upSfn != upFn {
-					// If we want Whids to reborn
-					if flagZombie {
-						// service option
-						args := []string{fmt.Sprintf("-%s", serviceCLFlag)}
-						if len(os.Args) > 1 {
-							args = append(args, os.Args[1:]...)
-						}
-						cmd := exec.Command(os.Args[0], args...)
-						log.Infof("Manager has been terminated, restarting it")
-						cmd.Start()
-					}
-					osSignals <- os.Interrupt
-					return
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
+			<-osSignals
+			log.Infof("Received SIGINT")
+			// runs stop on sigint
+			hids.Stop()
 		}()
+	}
+
+	// Runs HIDS and wait for the output
+	hids.Run()
+	if !service {
+		hids.Wait()
 	}
 }
 
@@ -153,11 +111,9 @@ func main() {
 	flag.BoolVar(&flagDumpDefault, "dump-conf", flagDumpDefault, "Dumps default configuration")
 	flag.BoolVar(&flagDryRun, "dry", flagDryRun, "Dry run (do everything except listening on channels)")
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all events passing through HIDS")
-	flag.BoolVar(&flagService, serviceCLFlag, flagService, "Run in simple service mode (restart after child failure)")
-	flag.BoolVar(&flagZombie, "z", flagZombie, "Zombie mode (i.e. never dies)")
 	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
 	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
-	flag.BoolVar(&debug, "d", debug, "Enable debugging messages")
+	flag.BoolVar(&debugFlag, "d", debugFlag, "Enable debugging messages")
 	flag.StringVar(&config, "c", config, "Configuration file")
 	flag.StringVar(&importRules, "import", importRules, "Import rules")
 
@@ -170,6 +126,17 @@ func main() {
 	}
 
 	flag.Parse()
+
+	isIntSess, err := svc.IsAnInteractiveSession()
+	if err != nil {
+		log.LogErrorAndExit(fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
+	}
+
+	// If it is called by the Windows Service Manager (not interactive)
+	if !isIntSess {
+		runService(svcName, false)
+		return
+	}
 
 	// profile the program
 	if flagProfile {
@@ -193,17 +160,8 @@ func main() {
 	}
 
 	// Enabling debug if needed
-	if debug {
+	if debugFlag {
 		log.InitLogger(log.LDebug)
-	}
-
-	// If we want to run it as a service
-	if flagService {
-		service()
-		os.Exit(exitSuccess)
-	} else {
-		// We monitor parent process if needed
-		monitorParentProcess()
 	}
 
 	hidsConf, err := LoadsHIDSConfig(config)
@@ -216,7 +174,7 @@ func main() {
 		// in order not to write logs into file
 		// TODO: add a add stream handler to log facility
 		hidsConf.Logfile = ""
-		hids, err := NewHIDS(&hidsConf)
+		hids, err = NewHIDS(&hidsConf)
 		if err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
 		}
@@ -248,30 +206,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	hids, err := NewHIDS(&hidsConf)
-	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
-	}
-
-	hids.DryRun = flagDryRun
-	hids.PrintAll = flagPrintAll
-
-	// Go routine to archive old logfiles
-	go func() {
-		hids.forwarder.ArchiveLogs()
-	}()
-
-	// Register SIGINT handler to stop listening on channels
-	signal.Notify(osSignals, os.Interrupt)
-	go func() {
-		<-osSignals
-		log.Infof("Received SIGINT")
-		// runs stop on sigint
-		hids.Stop()
-	}()
-
-	// Runs HIDS and wait for the output
-	hids.Run()
-
+	runHids(false)
 	hids.LogStats()
 }

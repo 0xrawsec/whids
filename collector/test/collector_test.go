@@ -1,7 +1,6 @@
 package main
 
 import (
-	"compress/gzip"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -21,14 +20,17 @@ import (
 
 var (
 	fconf = collector.ForwarderConfig{
-		Client:   cconf,
-		QueueDir: "queued",
+		Client: cconf,
+		Logging: collector.LoggingConfig{
+			Dir:              "Queued",
+			RotationInterval: "2s",
+		},
 	}
 
 	mconf = collector.ManagerConfig{
 		Host:          "",
 		Port:          8000,
-		Logfile:       "",
+		Logfile:       "alerts",
 		RulesDir:      "./",
 		DumpDir:       "./uploads/",
 		ContainersDir: "./containers",
@@ -105,14 +107,15 @@ func countLinesInGzFile(filepath string) int {
 	}
 	defer fd.Close()
 
-	r, err := gzip.NewReader(fd)
+	/*r, err := gzip.NewReader(fd)
 	if err != nil {
 		log.Errorf("Error counting lines, cannot create gzip reader: %s", err)
 		return 0
 	}
-	defer r.Close()
+	defer r.Close()*/
 
-	s := scanner.New(r)
+	//s := scanner.New(r)
+	s := scanner.New(fd)
 	s.Error = func(err error) {
 		log.Errorf("Error in countLinesInGzFile: %s", err)
 	}
@@ -127,7 +130,7 @@ func countLinesInGzFile(filepath string) int {
 
 func clean(mc *collector.ManagerConfig, fc *collector.ForwarderConfig) {
 	rm(mc.Logfile)
-	os.RemoveAll(fc.QueueDir)
+	os.RemoveAll(fc.Logging.Dir)
 }
 
 func TestForwarderBasic(t *testing.T) {
@@ -144,7 +147,6 @@ func TestForwarderBasic(t *testing.T) {
 	}
 	r.AddAuthKey(key)
 	r.Run()
-	defer r.Shutdown()
 
 	fconf.Client.Key = key
 	f, err := collector.NewForwarder(&fconf)
@@ -168,6 +170,7 @@ func TestForwarderBasic(t *testing.T) {
 	if n := countLinesInGzFile(testfile); n != nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nevents)
 	}
+	log.Infof("Shutting down")
 
 	clean(&mconf, &fconf)
 }
@@ -309,6 +312,10 @@ func TestForwarderParallel(t *testing.T) {
 }
 
 func TestForwarderQueueBasic(t *testing.T) {
+	// cleanup
+	clean(&mconf, &fconf)
+	defer clean(&mconf, &fconf)
+
 	nevents := 1000
 	testfile := "TestCollectorQueue.log.gz"
 	rm(testfile)
@@ -370,14 +377,15 @@ func TestForwarderQueueBasic(t *testing.T) {
 	if n := countLinesInGzFile(testfile); n != nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nevents)
 	}
-	clean(&mconf, &fconf)
 }
 
 func TestForwarderCleanup(t *testing.T) {
 	// cleanup
-	os.RemoveAll(fconf.QueueDir)
-	defer os.RemoveAll(fconf.QueueDir)
+	clean(&mconf, &fconf)
+	defer clean(&mconf, &fconf)
 
+	// Change rotation interval not to create unexpected number of files
+	fconf.Logging.RotationInterval = "1h"
 	// Inititialize the forwarder
 	f, err := collector.NewForwarder(&fconf)
 	if err != nil {
@@ -391,7 +399,7 @@ func TestForwarderCleanup(t *testing.T) {
 	numberOfFiles := collector.DiskSpaceThreshold / collector.DefaultLogfileSize
 	additionalFiles := 10
 	for i := 0; i < numberOfFiles+additionalFiles; i++ {
-		fp := filepath.Join(fconf.QueueDir, fmt.Sprintf("queue.bogus.%d", i))
+		fp := filepath.Join(fconf.Logging.Dir, fmt.Sprintf("queue.bogus.%d", i))
 		fd, err := os.Create(fp)
 		if err != nil {
 			t.Errorf("Failed to create bogus file: %s", err)
@@ -415,7 +423,7 @@ func TestForwarderCleanup(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	}
 
-	files, _ := ioutil.ReadDir(fconf.QueueDir)
+	files, _ := ioutil.ReadDir(fconf.Logging.Dir)
 	if len(files) != numberOfFiles {
 		t.Errorf("Unexpected number of files remaining in the directory")
 		t.FailNow()

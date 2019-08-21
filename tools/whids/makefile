@@ -1,7 +1,7 @@
 TEST=$(GOPATH)/test
 MAIN_BASEN_SRC=whids
 RELEASE=$(GOPATH)/release/$(MAIN_BASEN_SRC)
-VERSION=1.5.1beta
+VERSION=1.6.0
 COMMITID=$(shell git rev-parse HEAD)
 
 # Strips symbols and dwarf to make binary smaller
@@ -14,12 +14,20 @@ all:
 	$(MAKE) clean
 	$(MAKE) init
 	$(MAKE) buildversion
-	$(MAKE) additional
 	$(MAKE) compile
+	$(MAKE) installer
+	$(MAKE) sysmon
+	$(MAKE) dlrules
 
-test: all
+test:
+	$(MAKE) clean
+	$(MAKE) init
+	$(MAKE) buildversion
+	$(MAKE) compile
+	$(MAKE) installer
+	$(MAKE) sysmon
+	$(MAKE) testrules
 	cp -r $(RELEASE) $(TEST)
-
 
 init:
 	mkdir -p $(RELEASE)
@@ -40,12 +48,21 @@ windows:
 buildversion:
 	printf "package main\n\nconst(\n    version=\"$(VERSION)\"\n    commitID=\"$(COMMITID)\"\n)\n" > version.go
 
-additional:
-	sed -E "s/set VERSION=.*?/set VERSION=$(VERSION)/" install.bat > $(RELEASE)/windows/install.bat
+installer:
+	sed -E "s/set VERSION=.*?/set VERSION=$(VERSION)/" manage.bat > $(RELEASE)/windows/manage.bat
+
+sysmon:
+	cp -r $(RELEASE)/../sysmon $(RELEASE)/windows/
+
+dlrules:
 	mkdir $(RELEASE)/windows/rules/
 	curl https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen > $(RELEASE)/windows/rules/compiled.gen
 	curl https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen.sha256 > $(RELEASE)/windows/rules/compiled.gen.sha256
-	
+
+testrules:
+	mkdir $(RELEASE)/windows/rules/
+	cp $(TEST_RULES)/compiled.gen $(RELEASE)/windows/rules/compiled.gen
+	cp $(TEST_RULES)/compiled.gen.sha256 $(RELEASE)/windows/rules/compiled.gen.sha256
 
 clean:
 	rm -rf $(RELEASE)/*

@@ -104,14 +104,16 @@ which matched the event.
 
 ## WHIDS
 1. Download and extract the latest WHIDS release https://github.com/0xrawsec/whids/releases
-2. Run `install.bat` as **administrator**
-3. Verify that files have been created at the **installation directory**
-4. With a text editor **opened as administrator** (to prevent changing rights of WHIDs installation directory) open `config.json` and modify it as you wish
-5. Skip this if running with a connection to a manager. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. You can get some compiled rules [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen)
-6. Start the HIDS with `Start.bat` script located in **installation directory**
-7. If you configured a **manager** do not forget to run it
+2. If you want WHIDS to run along with Sysmon (**strongly recommended**), install it first. An optimal **configuration file** is shipped with the release so that you can take the most out of WHIDS. At installation the **Sysmon service** will be made *dependant* of **WHIDS service** so that we are sure the IDS runs before **Sysmon** starts generating some events.
+3. Run `manage.bat` as **administrator**
+4. Launch installation by selecting the appropriate option
+5. Verify that files have been created at the **installation directory**
+6. With a text editor **opened as administrator** (to prevent changing the rights of the WHIDS installation directory) open `config.json` and modify it as you wish. This can also be done from `manage.bat`
+7. Skip this if running with a connection to a manager, because rules will be updated automatically. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. Some rules are packaged with WHIDS and you will be prompted if you want to install those or not. If you want the last up to date rules, you can get those [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen) (take the **compiled** ones)
+8. Start the **services** from appropriate option in `manage.bat` or just reboot (**preferred option** otherwise some enrichment fields will be incomplete leading to false alerts)
+9. If you configured a **manager** do not forget to run it in order to receive alerts and dumps
 
-**NB:** whenever you go to the installation directory with **File Explorer** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator**.
+**NB:** whenever you go to the installation directory with **Explorer.exe** and if you are **Administrator** the explorer will ask you if you want to change the permission of the directory. **DO NOT CLICK YES**, otherwise it will break the folder permissions put in place at installation time. Always access installation directory from **applications started as Administrator** (i.e. text editor).
 
 # Configuration
 
@@ -130,7 +132,7 @@ WHIDS configuration file example
     "containers-db": "C:\\Program Files\\Whids\\Database\\Containers",
     // Forwarder related configuration
     "forwarder": {
-        "client": {
+        "manager-client": {
             // Hostname or IP address of remote manager
             "host": "",
             // Port used by remote manager
@@ -146,8 +148,13 @@ WHIDS configuration file example
             // Maximum upload side for dump forwarding
             "max-upload-size": 104857600
         },
-        // Path where to store the alerts
-        "logs-dir": "C:\\Program Files\\Whids\\Logs\\Alerts",
+        // Alert logging settings
+        "logging": {
+            // Path where to store the alerts
+            "dir": "C:\\Program Files\\Whids\\Logs\\Alerts",
+            // Rotation interval
+            "rotation-interval": "24h"
+        },
         // If local=true the forwarder won't communicate with manager
         "local": true
     },
@@ -157,26 +164,33 @@ WHIDS configuration file example
     "channels": [
         "all"
     ],
-    // Dump mode: file, memory or all (can be empty)
-    // file: dumps anything identified as a file in the event
-    // memory: dumps (guilty) process memory in Windows minidump format
-    "dump-mode": "file",
-    // Dumps when criticality of the events is above or equal to treshold
-    "dump-treshold": 8,
-    // Where to store dumps
-    "dump-dir": "C:\\Program Files\\Whids\\Dumps",
-    // Whether or not to enable dump compression
-    "dump-compression": true,
+    // Dump related settings
+    "dump": {
+        // Dump mode: file, memory or all (can be empty)
+        // file: dumps anything identified as a file in the event
+        // memory: dumps (guilty) process memory in Windows minidump format
+        // registry: dumps registry in case alert concerns a registry
+        "mode": "file|registry",
+        // Dumps when criticality of the events is above or equal to treshold
+        "treshold": 8,
+        // Where to store dumps
+        "dir": "C:\\Program Files\\Whids\\Dumps",
+        // Whether or not to enable dump compression
+        "compression": true
+    },
     // Log events with criticality above or equal to treshold
     "criticality-treshold": 5,
     // Sleep time in seconds between two rules updates (negative number means no update)
     "update-interval": 60,
-    // Whether on not hooks should be enables 
+    // Whether on not hooks should be enabled
     "en-hooks": true,
-    // Whether or not DNS-Client logging should be enabled
-    "en-dns": true,
     // Logfile used to store WHIDS stderr
-    "logfile": "C:\\Program Files\\Whids\\Logs\\whids.log"
+    "logfile": "C:\\Program Files\\Whids\\Logs\\whids.log",
+    // Log all the events passing through the engine (usefull for event dumping or debugging)
+    "log-all": false,
+    // Tells WHIDS that it is running on an endpoint. If false any kind 
+    // of dump is disabled to avoid dump things if installed on a WEC
+    "endpoint": true
 }
 ```
 
@@ -191,8 +205,7 @@ Manager configuration example
     // Port used by the manager
     "port": 1519,
     // Logfile (automatically rotated) where to store alerts received
-    // the logs are GZIP compressed
-    "logfile": "alerts.gz",
+    "logfile": "alerts.log",
     // Server authentication key (see server-key in WHIDS config)
     "key": "someserverkey",
     // List of authorized client keys (see key in WHIDS config)
@@ -222,7 +235,7 @@ Manager configuration example
 
 # Documentation
 
-To know how to write rules for the engine please visit: https://rawsec.lu/doc/gene/1.4/
+To know how to write rules for the engine please visit: https://rawsec.lu/doc/gene/1.6/
 
 # Known Issues
 
@@ -236,6 +249,10 @@ In order to get the most of WHIDS you need to activate specific features
 * [Enable Powershell Module Logging](https://www.fireeye.com/blog/threat-research/2016/02/greater_visibilityt.html)
 
 # Changelog
+
+## v1.6
+
+TBD
 
 ## v1.5
   * Bunch of code rewritten to make things more consistent:

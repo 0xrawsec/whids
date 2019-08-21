@@ -47,9 +47,9 @@ type LoggingConfig struct {
 // from configuration structure.
 func (l *LoggingConfig) ParseRotationInterval() (d time.Duration, err error) {
 	d, err = time.ParseDuration(l.RotationInterval)
-	if d < MinRotationInterval {
+	/*if d < MinRotationInterval {
 		d = MinRotationInterval
-	}
+	}*/
 	return
 }
 
@@ -168,13 +168,13 @@ func (f *Forwarder) Save() error {
 	if f.logfile == nil {
 		// This will reopen the first available alerts.gz.X file if several
 		//lf := filepath.Join(f.fwdConfig.LogConf.Dir, "alerts.gz")
-		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts")
+		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts.log")
 		ri, err := f.fwdConfig.Logging.ParseRotationInterval()
 		if err != nil {
 			return err
 		}
 		log.Infof("Rotating logfile every %s", ri)
-		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, DefaultLogPerm, ri, time.Second*5); err != nil {
+		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, DefaultLogPerm, ri); err != nil {
 			return err
 		}
 	}
@@ -233,6 +233,20 @@ func (f *Forwarder) DiskSpaceQueue() int64 {
 	return dp
 }
 
+// Here we rely on the fact that the layout of the directory is known
+// and should be alert.log, alert.log.1, alert.log.2.gz, alert.log.3.gz ...
+// if we append in reverse order, older files appears first in the list
+func (f *Forwarder) listLogfiles() (files []string) {
+	files = make([]string, 0)
+	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
+		for _, fi := range wi.Files {
+			fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
+			files = append([]string{fp}, files...)
+		}
+	}
+	return
+}
+
 // ProcessQueue processes the events queued
 // Todo: needs update with client
 func (f *Forwarder) ProcessQueue() {
@@ -258,43 +272,47 @@ func (f *Forwarder) ProcessQueue() {
 
 	// Reset logfile for latter Save function use
 	f.logfile = nil
-	for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
-		for _, fi := range wi.Files {
-			// fullpath
-			fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
-			log.Debug("Processing queued file: %s", fp)
-			fd, err := os.Open(fp)
-			if err != nil {
-				log.Errorf("Failed to open queued file (%s): %s", fp, err)
-				continue
-			}
-
-			if strings.HasSuffix(fp, ".gz") {
-				// the file is gzip so we have to pass a gzip reader to prepCollectReq
-				gzr, err := gzip.NewReader(fd)
-				if err != nil {
-					log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
-					// close file
-					fd.Close()
-					continue
-				}
-				err = f.Client.PostLogs(gzr)
-				// we can close the reader since we don't need those anymore
-				gzr.Close()
-				fd.Close()
-			}
-
-			// We do not remove the logs if we failed to send
-			if err != nil {
-				log.Errorf("%s", err)
-				continue
-			}
-
-			// everything went fine, then we can delete the queued file
-			if err = os.Remove(fp); err != nil {
-				log.Errorf("Failed to delete queued file (%s): %s", fp, err)
-			}
+	//for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
+	//for _, fi := range wi.Files {
+	for _, fp := range f.listLogfiles() {
+		// fullpath
+		//fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
+		//log.Debug("Processing queued file: %s", fp)
+		log.Infof("Processing queued file: %s", fp)
+		fd, err := os.Open(fp)
+		if err != nil {
+			log.Errorf("Failed to open queued file (%s): %s", fp, err)
+			continue
 		}
+		switch {
+		case strings.HasSuffix(fp, ".gz"):
+			// the file is gzip so we have to pass a gzip reader to prepCollectReq
+			gzr, err := gzip.NewReader(fd)
+			if err != nil {
+				log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
+				// close file
+				fd.Close()
+				continue
+			}
+			err = f.Client.PostLogs(gzr)
+			// we can close the reader since we don't need those anymore
+			gzr.Close()
+			fd.Close()
+		case strings.HasSuffix(fp, ".log.1"), strings.HasSuffix(fp, ".log"):
+			err = f.Client.PostLogs(fd)
+		}
+
+		// We do not remove the logs if we failed to send
+		if err != nil {
+			log.Errorf("%s", err)
+			continue
+		}
+
+		// everything went fine, then we can delete the queued file
+		if err = os.Remove(fp); err != nil {
+			log.Errorf("Failed to delete queued file (%s): %s", fp, err)
+		}
+		//}
 	}
 }
 

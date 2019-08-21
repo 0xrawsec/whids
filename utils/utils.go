@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -255,6 +256,42 @@ func ArgvFromCommandLine(cl string) (argv []string, err error) {
 		argv[i] = syscall.UTF16ToString((*utf16Ptr)[:])
 	}
 	return
+}
+
+// SvcFromPid returns the list of services hosted by a given PID
+// interesting to know what service is hosted by svchost
+func SvcFromPid(pid int32) string {
+	c := exec.Command("tasklist", "/SVC", "/FO", "CSV", "/NH", "/FI", fmt.Sprintf("PID eq %d", pid))
+
+	out, err := c.Output()
+	if err != nil {
+		log.Errorf("Failed to run tasklist: %s", err)
+		return "ERROR"
+	}
+
+	r := csv.NewReader(bytes.NewBuffer(out))
+	rec, err := r.Read()
+	if err != nil {
+		log.Errorf("Failed to read tasklist output: %s", err)
+		return "ERROR"
+	}
+
+	// Expect three fields
+	if len(rec) == 3 {
+		return rec[2]
+	}
+	log.Errorf("Unexpected tasklist output: %s", out)
+	return "ERROR"
+}
+
+// RegQuery issues a reg query command to dump registry
+func RegQuery(key, value string) (string, error) {
+	c := exec.Command("reg", "query", key, "/v", value)
+	out, err := c.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // IsPipePath checks whether the argument path is a pipe
