@@ -1,4 +1,4 @@
-# WHIDS Event Enrichment Table
+# WHIDS Events Enrichment Table
 
 <table>
  <tr>
