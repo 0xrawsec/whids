@@ -251,8 +251,30 @@ In order to get the most of WHIDS you need to activate specific features
 # Changelog
 
 ## v1.6
-
-TBD
+- **WHIDS** is installed as a true **Windows service**
+- Reworked the installation script to allow several options
+- Created an **optimized Sysmon configuration** to run with WHIDS
+- **Process Integrity** check not done before boot is finished
+- Removed DNS logging features by default (since Sysmon v10 has DNSQuery events)
+- Log message if process termination is not enabled
+- **Sysmon service** depends on WHIDS (solution found not to miss events at boot)
+- Updated to the latest version of **Gene (v1.6)**
+- New **registry** dump mode to dump suspicious registries
+- Some random code refactoring
+- Sysmon events enrichment:
+    - *Ancestors* in **CreateProcess**
+    - Name of the **windows services** is resolved and put in *Services* field for **any event**
+    - *CommandLine* in **NetworkConnect**
+    - *User* and *IntegrityLevel* propagated to all applicable events (all except DriverLoad)
+    - **CreateRemoteThread** and **ProcessAccess** enrichment with:
+        * *SourceIntegrityLevel*
+        * *TargetIntegrityLevel*
+        * *SourceUser*
+        * *TargetUser*
+        * *TargetParentProcessGuid*
+        * *SourceServices*
+        * *TargetServices*
+    - ...
 
 ## v1.5
   * Bunch of code rewritten to make things more consistent:
