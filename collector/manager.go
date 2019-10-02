@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	guidRe      = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`
+	guidRe      = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`)
 	eventHashRe = regexp.MustCompile(`[a-f0-9]{32,}`) // at least md5
 	filenameRe  = regexp.MustCompile(`[\w\s\.-]+`)
 )
