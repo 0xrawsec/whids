@@ -52,7 +52,7 @@ installer:
 	sed -E "s/set VERSION=.*?/set VERSION=$(VERSION)/" manage.bat > $(RELEASE)/windows/manage.bat
 
 sysmon:
-	cp -r $(RELEASE)/../sysmon $(RELEASE)/windows/
+	mv $(RELEASE)/../sysmon $(RELEASE)/windows/
 
 dlrules:
 	mkdir $(RELEASE)/windows/rules/

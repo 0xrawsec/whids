@@ -18,8 +18,9 @@ pushd tools/manager && make -j 8 $@ || check_err && popd
 
 pushd ${RELEASE}
 # Remove previous bundles
-rm *.tar.gz
-tar -cvzf whids-${VERSION}-release-bundle.tar.gz *
+rm *.zip
+7z a -tzip whids-${VERSION}-release-bundle.zip *
+
 popd
 
 
