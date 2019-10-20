@@ -43,7 +43,7 @@ windows:
 	GOARCH=amd64 GOOS=windows go build $(OPTS) -o $(RELEASE)/windows/$(MAIN_BASEN_SRC)-v$(VERSION)-amd64.exe ./
 	#cp -r conf $(RELEASE)/windows
 	cd $(RELEASE)/windows; find -type f | xargs -I "{}" shasum -a 256 {} >> sha256.txt
-	cd $(RELEASE)/windows; tar -cvzf ../$(MAIN_BASEN_SRC)-windows-$(VERSION).tar.gz *
+	#cd $(RELEASE)/windows; tar -cvzf ../$(MAIN_BASEN_SRC)-windows-$(VERSION).tar.gz *
 
 buildversion:
 	printf "package main\n\nconst(\n    version=\"$(VERSION)\"\n    commitID=\"$(COMMITID)\"\n)\n" > version.go
