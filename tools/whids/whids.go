@@ -298,7 +298,8 @@ func (h *HIDS) initHooks(advanced bool) {
 		h.preHooks.Hook(hookEnrichServices, fltAnySysmon)
 		// Not needed anymore enrich sysmon embeds necessary information
 		//h.preHooks.Hook(hookProcessAccess, fltProcessAccess)
-		h.preHooks.Hook(hookNetwork, fltNetworkConnect)
+		// should be treated by hookEnrichAnySysmon
+		//h.preHooks.Hook(hookNetwork, fltNetworkConnect)
 		h.preHooks.Hook(hookEnrichAnySysmon, fltAnySysmon)
 		//h.preHooks.Hook(hookSetValueSize, fltRegSetValue)
 

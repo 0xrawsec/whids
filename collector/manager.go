@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/gene/engine"
+	"github.com/0xrawsec/golang-misp/misp"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
@@ -39,8 +40,11 @@ const (
 
 var (
 	guidRe      = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`)
-	eventHashRe = regexp.MustCompile(`[a-f0-9]{32,}`) // at least md5
+	eventHashRe = regexp.MustCompile(`(?i:[a-f0-9]{32,})`) // at least md5
 	filenameRe  = regexp.MustCompile(`[\w\s\.-]+`)
+	// MISP container related
+	mispContName    = "misp"
+	mispTextExports = []string{"md5", "sha1", "sha256", "domain", "hostname"}
 )
 
 //////////////////////// FileUpload
@@ -157,15 +161,16 @@ func KeyGen(size int) string {
 
 // ManagerConfig defines manager's configuration structure
 type ManagerConfig struct {
-	Host          string    `json:"host"`
-	Port          int       `json:"port"`
-	Logfile       string    `json:"logfile"`
-	Key           string    `json:"key"`
-	Authorized    []string  `json:"authorized"`
-	TLS           TLSConfig `json:"tls"`
-	RulesDir      string    `json:"rules-dir"`
-	DumpDir       string    `json:"dump-dir"`
-	ContainersDir string    `json:"containers-dir"`
+	Host          string          `json:"host"`
+	Port          int             `json:"port"`
+	Logfile       string          `json:"logfile"`
+	Key           string          `json:"key"`
+	Authorized    []string        `json:"authorized"`
+	TLS           TLSConfig       `json:"tls"`
+	MISP          misp.MispConfig `json:"misp"`
+	RulesDir      string          `json:"rules-dir"`
+	DumpDir       string          `json:"dump-dir"`
+	ContainersDir string          `json:"containers-dir"`
 }
 
 // Manager structure definition
@@ -179,6 +184,7 @@ type Manager struct {
 	authorized    datastructs.SyncedSet
 	logfile       logfile.LogFile
 	tls           TLSConfig
+	misp          misp.MispConfig
 	srv           *http.Server
 	stop          chan bool
 	done          bool
@@ -208,7 +214,9 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	if err = c.TLS.Verify(); err != nil && !c.TLS.Empty() {
 		return nil, err
 	}
+
 	m.tls = c.TLS
+	m.misp = c.MISP
 
 	// Containers initialization
 	m.containersDir = c.ContainersDir
@@ -286,6 +294,24 @@ func (m *Manager) updateRules() {
 	m.rulesSha256 = hex.EncodeToString(sha256.Sum(nil))
 }
 
+func (m *Manager) updateMispContainer() {
+	c := misp.NewCon(m.misp.Proto, m.misp.Host, m.misp.APIKey)
+	mispContainer := make([]string, 0)
+	for _, expType := range mispTextExports {
+		log.Infof("Downloading %s attributes from MISP", expType)
+		exps, err := c.TextExport(expType)
+		if err != nil {
+			log.Errorf("MISP failed to export %s IDS attributes: %s", expType, err)
+			log.Errorf("Aborting MISP container update")
+			return
+		}
+		mispContainer = append(mispContainer, exps...)
+	}
+	// Update the MISP container
+	m.containers[mispContName] = mispContainer
+	m.containersSha256[mispContName] = Sha256StringArray(mispContainer)
+}
+
 // AddAuthKey adds an authorized key to access the manager
 func (m *Manager) AddAuthKey(key string) {
 	m.authorized.Add(key)
@@ -340,6 +366,16 @@ func (m *Manager) authorizationMiddleware(next http.Handler) http.Handler {
 
 // Run starts a new thread spinning the receiver
 func (m *Manager) Run() {
+	go func() {
+		for !m.done {
+			if m.misp.Host != "" {
+				log.Infof("Starting MISP container update routine")
+				m.updateMispContainer()
+				log.Infof("MISP container update routine finished")
+			}
+			time.Sleep(time.Hour)
+		}
+	}()
 	go func() {
 		// If we fail due to server crash we properly shutdown
 		// the receiver to avoid log corruption

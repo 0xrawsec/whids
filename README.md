@@ -221,6 +221,14 @@ Manager configuration example
         // Server key to use
         "key": "key.pem"
     },
+    "misp": {
+        // Protocol to use for MISP connection
+        "protocol" :"https",
+        // MISP host
+        "host" : "misp.host",
+        // API key to use
+        "api-key" :"your misp api key"
+    },
     // Rules directory used to serve rules to the clients
     "rules-dir": "",
     // Rules of containers used in rules (served to the clients)

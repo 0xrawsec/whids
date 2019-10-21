@@ -1,7 +1,7 @@
 TEST=$(GOPATH)/test
 MAIN_BASEN_SRC=whids
 RELEASE=$(GOPATH)/release/$(MAIN_BASEN_SRC)
-VERSION=1.6.1
+VERSION=1.6.2
 COMMITID=$(shell git rev-parse HEAD)
 
 # Strips symbols and dwarf to make binary smaller
@@ -52,7 +52,7 @@ installer:
 	sed -E "s/set VERSION=.*?/set VERSION=$(VERSION)/" manage.bat > $(RELEASE)/windows/manage.bat
 
 sysmon:
-	mv $(RELEASE)/../sysmon $(RELEASE)/windows/
+	#mv $(RELEASE)/../sysmon $(RELEASE)/windows/
 
 dlrules:
 	mkdir $(RELEASE)/windows/rules/

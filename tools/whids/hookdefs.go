@@ -714,7 +714,7 @@ func hookSetValueSize(e *evtx.GoEvtxMap) {
 	}
 }
 
-func hookNetwork(e *evtx.GoEvtxMap) {
+/*func hookNetwork(e *evtx.GoEvtxMap) {
 	// Default value
 	e.Set(&pathSysmonCommandLine, "?")
 	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
@@ -723,7 +723,7 @@ func hookNetwork(e *evtx.GoEvtxMap) {
 			e.Set(&pathSysmonCommandLine, pt.CommandLine)
 		}
 	}
-}
+}*/
 
 func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 	eventID := e.EventID()
@@ -762,14 +762,25 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 				}
 			}
 		}
+		break
 
 	default:
+		hasComLine := true
 		// Default Values for the fields
 		e.Set(&pathSysmonUser, "?")
 		e.Set(&pathSysmonIntegrityLevel, "?")
 
+		if _, err := e.GetString(&pathSysmonCommandLine); err != nil {
+			e.Set(&pathSysmonCommandLine, "?")
+			hasComLine = false
+		}
+
 		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
 			if track := processTracker.GetByGuid(guid); track != nil {
+				// if event does not have command line
+				if !hasComLine {
+					e.Set(&pathSysmonCommandLine, track.CommandLine)
+				}
 				e.Set(&pathSysmonUser, track.User)
 				e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
 			}
@@ -980,7 +991,48 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 		dumpEventAndCompress(e, guid)
 
 		switch e.EventID() {
-		case 1:
+
+		case 2, 11, 15:
+			if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
+				if err = dumpFileAndCompress(target, dumpPath); err != nil {
+					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), target, err)
+				}
+			}
+
+		case 6:
+			if im, err := e.GetString(&pathSysmonImageLoaded); err == nil {
+				if err = dumpFileAndCompress(im, dumpPath); err != nil {
+					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)
+				}
+			}
+
+		case 10:
+			if sim, err := e.GetString(&pathSysmonSourceImage); err == nil {
+				if err = dumpFileAndCompress(sim, dumpPath); err != nil {
+					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), sim, err)
+				}
+			}
+
+		case 13, 20:
+			// for event ID 13
+			path := &pathSysmonDetails
+			if e.EventID() == 20 {
+				path = &pathSysmonDestination
+			}
+			if cl, err := e.GetString(path); err == nil {
+				// try to parse details as a command line
+				if argv, err := utils.ArgvFromCommandLine(cl); err == nil {
+					for _, arg := range argv {
+						if fsutil.IsFile(arg) && !utils.IsPipePath(arg) {
+							if err = dumpFileAndCompress(arg, dumpPath); err != nil {
+								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
+							}
+						}
+					}
+				}
+			}
+
+		default:
 			if cl, err := e.GetString(&pathSysmonCommandLine); err == nil {
 				if cwd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
 					if argv, err := utils.ArgvFromCommandLine(cl); err == nil {
@@ -1011,42 +1063,6 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 			if pim, err := e.GetString(&pathSysmonParentImage); err == nil {
 				if err = dumpFileAndCompress(pim, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), pim, err)
-				}
-			}
-		case 2, 11, 15:
-			if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
-				if err = dumpFileAndCompress(target, dumpPath); err != nil {
-					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), target, err)
-				}
-			}
-		case 6:
-			if im, err := e.GetString(&pathSysmonImageLoaded); err == nil {
-				if err = dumpFileAndCompress(im, dumpPath); err != nil {
-					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)
-				}
-			}
-		case 10:
-			if sim, err := e.GetString(&pathSysmonSourceImage); err == nil {
-				if err = dumpFileAndCompress(sim, dumpPath); err != nil {
-					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), sim, err)
-				}
-			}
-		case 13, 20:
-			// for event ID 13
-			path := &pathSysmonDetails
-			if e.EventID() == 20 {
-				path = &pathSysmonDestination
-			}
-			if cl, err := e.GetString(path); err == nil {
-				// try to parse details as a command line
-				if argv, err := utils.ArgvFromCommandLine(cl); err == nil {
-					for _, arg := range argv {
-						if fsutil.IsFile(arg) && !utils.IsPipePath(arg) {
-							if err = dumpFileAndCompress(arg, dumpPath); err != nil {
-								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
-							}
-						}
-					}
 				}
 			}
 		}
