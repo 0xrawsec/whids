@@ -300,6 +300,7 @@ func (f *Forwarder) ProcessQueue() {
 			fd.Close()
 		case strings.HasSuffix(fp, ".log.1"), strings.HasSuffix(fp, ".log"):
 			err = f.Client.PostLogs(fd)
+			fd.Close()
 		}
 
 		// We do not remove the logs if we failed to send

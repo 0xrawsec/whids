@@ -42,6 +42,7 @@ type processTrack struct {
 	PID                  int64
 	CommandLine          string
 	ParentCommandLine    string
+	CurrentDirectory     string
 	ProcessGUID          string
 	User                 string
 	ParentUser           string
@@ -359,36 +360,39 @@ func hookTrack(e *evtx.GoEvtxMap) {
 								if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
 									if user, err := e.GetString(&pathSysmonUser); err == nil {
 										if il, err := e.GetString(&pathSysmonIntegrityLevel); err == nil {
-											track := &processTrack{
-												Image:             image,
-												ParentImage:       pImage,
-												CommandLine:       commandLine,
-												ParentCommandLine: pCommandLine,
-												PID:               pid,
-												User:              user,
-												IntegrityLevel:    il,
-												ProcessGUID:       guid,
-												ParentProcessGUID: pguid,
-												History:           make([]string, 0),
-												Stats:             stats{0, 0, 0, make(map[string]*int64)},
-											}
-											if parent := processTracker.GetByGuid(pguid); parent != nil {
-												track.History = append(parent.History, parent.Image)
-												track.ParentUser = parent.User
-												track.ParentIntegrityLevel = parent.IntegrityLevel
-											} else {
-												// For processes created by System
-												if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
-													track.History = append(track.History, pimage)
+											if cd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
+												track := &processTrack{
+													Image:             image,
+													ParentImage:       pImage,
+													CommandLine:       commandLine,
+													ParentCommandLine: pCommandLine,
+													CurrentDirectory:  cd,
+													PID:               pid,
+													User:              user,
+													IntegrityLevel:    il,
+													ProcessGUID:       guid,
+													ParentProcessGUID: pguid,
+													History:           make([]string, 0),
+													Stats:             stats{0, 0, 0, make(map[string]*int64)},
 												}
-											}
-											processTracker.Add(track)
-											e.Set(&pathAncestors, strings.Join(track.History, "|"))
-											if track.ParentUser != "" {
-												e.Set(&pathParentUser, track.ParentUser)
-											}
-											if track.ParentIntegrityLevel != "" {
-												e.Set(&pathParentIntegrityLevel, track.ParentIntegrityLevel)
+												if parent := processTracker.GetByGuid(pguid); parent != nil {
+													track.History = append(parent.History, parent.Image)
+													track.ParentUser = parent.User
+													track.ParentIntegrityLevel = parent.IntegrityLevel
+												} else {
+													// For processes created by System
+													if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
+														track.History = append(track.History, pimage)
+													}
+												}
+												processTracker.Add(track)
+												e.Set(&pathAncestors, strings.Join(track.History, "|"))
+												if track.ParentUser != "" {
+													e.Set(&pathParentUser, track.ParentUser)
+												}
+												if track.ParentIntegrityLevel != "" {
+													e.Set(&pathParentIntegrityLevel, track.ParentIntegrityLevel)
+												}
 											}
 										}
 									}
@@ -766,9 +770,11 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 
 	default:
 		hasComLine := true
+
 		// Default Values for the fields
 		e.Set(&pathSysmonUser, "?")
 		e.Set(&pathSysmonIntegrityLevel, "?")
+		e.Set(&pathSysmonCurrentDirectory, "?")
 
 		if _, err := e.GetString(&pathSysmonCommandLine); err != nil {
 			e.Set(&pathSysmonCommandLine, "?")
@@ -783,6 +789,7 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 				}
 				e.Set(&pathSysmonUser, track.User)
 				e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
+				e.Set(&pathSysmonCurrentDirectory, track.CurrentDirectory)
 			}
 		}
 	}
