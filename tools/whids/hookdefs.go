@@ -50,6 +50,8 @@ type processTrack struct {
 	ParentIntegrityLevel string
 	ParentProcessGUID    string
 	Services             string
+	ParentServices       string
+	Hashes               string
 	History              []string
 	Stats                stats
 	MemDumped            bool
@@ -191,6 +193,7 @@ var (
 	pathSysmonDestIP            = evtx.Path("/Event/EventData/DestinationIp")
 	pathSysmonDestHostname      = evtx.Path("/Event/EventData/DestinationHostname")
 	pathSysmonImage             = evtx.Path("/Event/EventData/Image")
+	pathSysmonHashes            = evtx.Path("/Event/EventData/Hashes")
 	pathSysmonCommandLine       = evtx.Path("/Event/EventData/CommandLine")
 	pathSysmonParentCommandLine = evtx.Path("/Event/EventData/ParentCommandLine")
 	pathSysmonParentImage       = evtx.Path("/Event/EventData/ParentImage")
@@ -240,6 +243,7 @@ var (
 
 	// Use to store pathServices information by hook
 	pathServices       = evtx.Path("/Event/EventData/Services")
+	pathParentServices = evtx.Path("/Event/EventData/ParentServices")
 	pathSourceServices = evtx.Path("/Event/EventData/SourceServices")
 	pathTargetServices = evtx.Path("/Event/EventData/TargetServices")
 
@@ -259,6 +263,11 @@ var (
 	pathTargetUser              = evtx.Path("/Event/EventData/TargetUser")
 	pathTargetIntegrityLevel    = evtx.Path("/Event/EventData/TargetIntegrityLevel")
 	pathTargetParentProcessGuid = evtx.Path("/Event/EventData/TargetParentProcessGuid")
+
+	// Used to store Image Hashes information into any Sysmon Event
+	pathImageHashes  = evtx.Path("/Event/EventData/ImageHashes")
+	pathSourceHashes = evtx.Path("/Event/EventData/SourceHashes")
+	pathTargetHashes = evtx.Path("/Event/EventData/TargetHashes")
 )
 
 var (
@@ -342,6 +351,7 @@ func hookTrack(e *evtx.GoEvtxMap) {
 	e.Set(&pathAncestors, "?")
 	e.Set(&pathParentUser, "?")
 	e.Set(&pathParentIntegrityLevel, "?")
+	e.Set(&pathParentServices, "?")
 	// We need to be sure that process termination is enabled
 	// before initiating process tracking not to fill up memory
 	// with structures that will never be freed
@@ -361,37 +371,44 @@ func hookTrack(e *evtx.GoEvtxMap) {
 									if user, err := e.GetString(&pathSysmonUser); err == nil {
 										if il, err := e.GetString(&pathSysmonIntegrityLevel); err == nil {
 											if cd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
-												track := &processTrack{
-													Image:             image,
-													ParentImage:       pImage,
-													CommandLine:       commandLine,
-													ParentCommandLine: pCommandLine,
-													CurrentDirectory:  cd,
-													PID:               pid,
-													User:              user,
-													IntegrityLevel:    il,
-													ProcessGUID:       guid,
-													ParentProcessGUID: pguid,
-													History:           make([]string, 0),
-													Stats:             stats{0, 0, 0, make(map[string]*int64)},
-												}
-												if parent := processTracker.GetByGuid(pguid); parent != nil {
-													track.History = append(parent.History, parent.Image)
-													track.ParentUser = parent.User
-													track.ParentIntegrityLevel = parent.IntegrityLevel
-												} else {
-													// For processes created by System
-													if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
-														track.History = append(track.History, pimage)
+												if hashes, err := e.GetString(&pathSysmonHashes); err == nil {
+													track := &processTrack{
+														Image:             image,
+														ParentImage:       pImage,
+														CommandLine:       commandLine,
+														ParentCommandLine: pCommandLine,
+														CurrentDirectory:  cd,
+														PID:               pid,
+														User:              user,
+														IntegrityLevel:    il,
+														ProcessGUID:       guid,
+														ParentProcessGUID: pguid,
+														Hashes:            hashes,
+														History:           make([]string, 0),
+														Stats:             stats{0, 0, 0, make(map[string]*int64)},
 													}
-												}
-												processTracker.Add(track)
-												e.Set(&pathAncestors, strings.Join(track.History, "|"))
-												if track.ParentUser != "" {
-													e.Set(&pathParentUser, track.ParentUser)
-												}
-												if track.ParentIntegrityLevel != "" {
-													e.Set(&pathParentIntegrityLevel, track.ParentIntegrityLevel)
+													if parent := processTracker.GetByGuid(pguid); parent != nil {
+														track.History = append(parent.History, parent.Image)
+														track.ParentUser = parent.User
+														track.ParentIntegrityLevel = parent.IntegrityLevel
+														track.ParentServices = parent.Services
+													} else {
+														// For processes created by System
+														if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
+															track.History = append(track.History, pimage)
+														}
+													}
+													processTracker.Add(track)
+													e.Set(&pathAncestors, strings.Join(track.History, "|"))
+													if track.ParentUser != "" {
+														e.Set(&pathParentUser, track.ParentUser)
+													}
+													if track.ParentIntegrityLevel != "" {
+														e.Set(&pathParentIntegrityLevel, track.ParentIntegrityLevel)
+													}
+													if track.ParentServices != "" {
+														e.Set(&pathParentServices, track.ParentServices)
+													}
 												}
 											}
 										}
@@ -738,12 +755,15 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		break
 
 	case 8, 10:
+		// Handling CreateRemoteThread and ProcessAccess events
 		// Default Values for the fields
 		e.Set(&pathSourceUser, "?")
 		e.Set(&pathSourceIntegrityLevel, "?")
 		e.Set(&pathTargetUser, "?")
 		e.Set(&pathTargetIntegrityLevel, "?")
 		e.Set(&pathTargetParentProcessGuid, "?")
+		e.Set(&pathSourceHashes, "?")
+		e.Set(&pathTargetHashes, "?")
 
 		sguidPath := &pathSysmonSourceProcessGUID
 		tguidPath := &pathSysmonTargetProcessGUID
@@ -758,11 +778,13 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 				if strack := processTracker.GetByGuid(sguid); strack != nil {
 					e.Set(&pathSourceUser, strack.User)
 					e.Set(&pathSourceIntegrityLevel, strack.IntegrityLevel)
+					e.Set(&pathSourceHashes, strack.Hashes)
 				}
 				if ttrack := processTracker.GetByGuid(tguid); ttrack != nil {
 					e.Set(&pathTargetUser, ttrack.User)
 					e.Set(&pathTargetIntegrityLevel, ttrack.IntegrityLevel)
 					e.Set(&pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
+					e.Set(&pathTargetHashes, ttrack.Hashes)
 				}
 			}
 		}
@@ -775,6 +797,7 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		e.Set(&pathSysmonUser, "?")
 		e.Set(&pathSysmonIntegrityLevel, "?")
 		e.Set(&pathSysmonCurrentDirectory, "?")
+		e.Set(&pathImageHashes, "?")
 
 		if _, err := e.GetString(&pathSysmonCommandLine); err != nil {
 			e.Set(&pathSysmonCommandLine, "?")
@@ -785,11 +808,23 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 			if track := processTracker.GetByGuid(guid); track != nil {
 				// if event does not have command line
 				if !hasComLine {
-					e.Set(&pathSysmonCommandLine, track.CommandLine)
+					e.Set(&pathSysmonCommandLine, "?")
+					if track.CommandLine != "" {
+						e.Set(&pathSysmonCommandLine, track.CommandLine)
+					}
 				}
-				e.Set(&pathSysmonUser, track.User)
-				e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
-				e.Set(&pathSysmonCurrentDirectory, track.CurrentDirectory)
+				if track.User != "" {
+					e.Set(&pathSysmonUser, track.User)
+				}
+				if track.IntegrityLevel != "" {
+					e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
+				}
+				if track.CurrentDirectory != "" {
+					e.Set(&pathSysmonCurrentDirectory, track.CurrentDirectory)
+				}
+				if track.Hashes != "" {
+					e.Set(&pathImageHashes, track.Hashes)
+				}
 			}
 		}
 	}
@@ -932,7 +967,6 @@ func hookDumpProcess(e *evtx.GoEvtxMap) {
 				dumpPidAndCompress(int(pid), guid, idFromEvent(e))
 			}
 		}
-
 	}()
 }
 

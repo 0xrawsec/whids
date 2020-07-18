@@ -1,0 +1,88 @@
+<Sysmon schemaversion="4.32">
+  <!-- Capture All Hashes -->
+  <HashAlgorithms>*</HashAlgorithms>
+  <DnsLookup>False</DnsLookup>
+  <!-- <ArchiveDirectory></ArchiveDirectory> -->
+
+  <EventFiltering>
+
+      <!-- EventID: 1 -->
+      <!-- Log all process creation -->
+      <ProcessCreate onmatch="exclude"/>
+
+      <!-- EventID: 2 -->
+      <!-- Log all file creation time stamps -->
+      <FileCreateTime onmatch="exclude"/>
+
+      <!-- EventID: 3 -->
+      <!-- Log all network connections -->
+      <NetworkConnect onmatch="exclude"/>
+
+      <!-- EventID: 5 -->
+      <!-- Log all process termination -->
+      <ProcessTerminate onmatch="exclude" />
+
+      <!-- EventID: 6 -->
+      <!-- Log all Drivers Loaded -->
+      <DriverLoad onmatch="exclude" />
+
+      <!-- EventID: 7 -->
+      <!-- Log all image loaded-->
+      <!-- There is way too much image loaded by Sysmon.exe in this version -->
+      <!-- Mostly due to the new feature of File Information -->
+      <!-- This Schema needs to be adapted with the name of the service -->
+      <RuleGroup groupRelation="or">
+        <ImageLoad onmatch="exclude">
+          <Image condition="is">C:\Windows\Sysmon.exe</Image>
+          <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+        </ImageLoad>
+      </RuleGroup>
+
+
+      <!-- EventID: 8 -->
+      <!-- Log all RemoteThread created -->
+      <CreateRemoteThread onmatch="exclude" />
+
+      <!-- EventID: 9 -->
+      <!-- Log all -->
+      <RawAccessRead onmatch="exclude" />
+
+      <!-- EventID: 10 -->
+      <!-- Log all -->
+      <ProcessAccess onmatch="exclude" />
+
+      <!-- EventID: 11 -->
+      <!-- Log all -->
+      <FileCreate onmatch="exclude" />
+
+      <!-- EventID: 12/13/14 -->
+      <!-- Log all registry operations -->
+      <RuleGroup groupRelation="or">
+          <RegistryEvent onmatch="exclude">
+            <Image condition="is">C:\Windows\Sysmon.exe</Image>
+            <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+          </RegistryEvent>
+      </RuleGroup>
+
+      <!-- EventID: 15 -->
+      <!-- Log all -->
+      <FileCreateStreamHash onmatch="exclude" />
+
+      <!-- EventID: 17/18 -->
+      <!-- Log all -->
+      <PipeEvent onmatch="exclude" />
+
+      <!-- EventID: 19/20/21 -->
+      <!-- Log all -->
+      <WmiEvent onmatch="exclude" />
+
+      <!-- EventID: 22 -->
+      <!-- Log all -->
+      <DnsQuery onmatch="exclude" />
+
+      <!-- EventID: 23 -->
+      <!-- Log all -->
+      <FileDelete onmatch="exclude" />
+      
+  </EventFiltering>
+</Sysmon>

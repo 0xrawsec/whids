@@ -15,9 +15,9 @@ download:
 	
 #test: clean
 test:
-	echo "We do nothing"
+	#echo "We do nothing"
 	#mkdir -p $(RELEASE)
-	#$(MAKE) cpconfig
+	$(MAKE) cpconfig
 	#$(MAKE) finish
 	#cp -r $(RELEASE) $(TEST)
 
@@ -26,8 +26,12 @@ cpconfig:
 	
 cpsysmon: 
 	$(eval major := $(shell $(STRINGS) -e l Sysmon64.exe | grep -A 1 ProductVersion | tail -n 1 | cut -d '.' -f 1))
-	$(STRINGS) -e l Sysmon64.exe | grep -A 1 ProductVersion | tail -n 1 > $(RELEASE)/v$(major)/version.txt
-	mv Sysmon64.exe $(RELEASE)/v$(major)
+	#mkdir -p $(RELEASE)/v$(major)
+	mkdir -p v$(major)/
+	$(STRINGS) -e l Sysmon64.exe | grep -A 1 ProductVersion | tail -n 1 > v$(major)/version.txt
+	mv Sysmon64.exe v$(major)/
+	mkdir -p $(RELEASE)/
+	cp -r v* $(RELEASE)/
 
 finish:
 	cd $(RELEASE); find -type f -not -name 'sha256.txt' | xargs shasum -a 256 > sha256.txt
