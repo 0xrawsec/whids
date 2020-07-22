@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -150,11 +152,12 @@ func (pt *ProcessTracker) Del(guid string) {
 
 var (
 	// Globals needed by Hooks
-	dumpDirectory    string
-	selfGUID         string
-	bootCompleted    bool
-	flagProcTermEn   bool // set the flag to true if process termination is enabled
-	flagDumpCompress bool
+	dumpDirectory          string
+	selfGUID               string
+	sysmonArchiveDirectory string
+	bootCompleted          bool
+	flagProcTermEn         bool // set the flag to true if process termination is enabled
+	flagDumpCompress       bool
 
 	selfPath, _ = filepath.Abs(os.Args[0])
 	selfPid     = os.Getpid()
@@ -165,9 +168,6 @@ var (
 
 var (
 	// Filters definitions
-	// DNSFilter filters any Windows-DNS-Client log
-	fltDNS = hooks.NewFilter([]int64{}, "Microsoft-Windows-DNS-Client/Operational")
-	// SysmonNetConnFilter filters any Sysmon network connection
 	fltAnySysmon       = hooks.NewFilter([]int64{}, "Microsoft-Windows-Sysmon/Operational")
 	fltProcessCreate   = hooks.NewFilter([]int64{1}, "Microsoft-Windows-Sysmon/Operational")
 	fltNetworkConnect  = hooks.NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
@@ -178,7 +178,7 @@ var (
 	fltNetwork         = hooks.NewFilter([]int64{3, 22}, "Microsoft-Windows-Sysmon/Operational")
 	fltImageSize       = hooks.NewFilter([]int64{1, 6, 7}, "Microsoft-Windows-Sysmon/Operational")
 	fltStats           = hooks.NewFilter([]int64{1, 3, 11}, "Microsoft-Windows-Sysmon/Operational")
-	fltDumpFile        = hooks.NewFilter([]int64{1, 2, 6, 11, 13, 15, 20}, "Microsoft-Windows-Sysmon/Operational")
+	fltDNS             = hooks.NewFilter([]int64{22}, "Microsoft-Windows-Sysmon/Operational")
 )
 
 var (
@@ -223,6 +223,13 @@ var (
 	pathSysmonTargetImage       = evtx.Path("/Event/EventData/TargetImage")
 	pathSysmonUser              = evtx.Path("/Event/EventData/User")
 	pathSysmonIntegrityLevel    = evtx.Path("/Event/EventData/IntegrityLevel")
+
+	// EventID 22: DNSQuery
+	pathQueryName    = evtx.Path("/Event/EventData/QueryName")
+	pathQueryResults = evtx.Path("/Event/EventData/QueryResults")
+
+	// EventID 23:
+	pathSysmonArchived = evtx.Path("/Event/EventData/Archived")
 
 	// Gene criticality path
 	pathGeneCriticality = evtx.Path("/Event/GeneInfo/Criticality")
@@ -272,6 +279,8 @@ var (
 
 var (
 	processTracker = NewProcessTracker()
+
+	dnsResolution = make(map[string]string)
 
 	blacklistedImages = datastructs.NewSyncedSet()
 
@@ -341,6 +350,23 @@ func hookImageLoad(e *evtx.GoEvtxMap) {
 		if track := processTracker.GetByGuid(guid); track != nil {
 			e.Set(&pathImageLoadParentImage, track.ParentImage)
 			e.Set(&pathImageLoadParentCommandLine, track.ParentCommandLine)
+		}
+	}
+}
+
+// hooks Windows DNS client logs and maintain a domain name resolution table
+func hookDNS(e *evtx.GoEvtxMap) {
+	if qresults, err := e.GetString(&pathQueryResults); err == nil {
+		if qresults != "" && qresults != "-" {
+			records := strings.Split(qresults, ";")
+			for _, r := range records {
+				// check if it is a valid IP
+				if net.ParseIP(r) != nil {
+					if qvalue, err := e.GetString(&pathQueryName); err == nil {
+						dnsResolution[r] = qvalue
+					}
+				}
+			}
 		}
 	}
 }
@@ -696,34 +722,6 @@ func hookEnrichServices(e *evtx.GoEvtxMap) {
 	}
 }
 
-func hookProcessAccess(e *evtx.GoEvtxMap) {
-	// Only ProcessAccess events
-	if e.EventID() == 10 {
-		e.Set(&pathSourceIsParent, "?")
-		if sguid, err := e.GetString(&pathSysmonSourceProcessGUID); err == nil {
-			if tguid, err := e.GetString(&pathSysmonTargetProcessGUID); err == nil {
-				switch {
-				case processTracker.ContainsGuid(tguid):
-					if t := processTracker.GetByGuid(tguid); t != nil {
-						// check if sguid is the same as the parent process
-						if t.ParentProcessGUID == sguid {
-							e.Set(&pathSourceIsParent, toString(true))
-						} else {
-							e.Set(&pathSourceIsParent, toString(false))
-						}
-					}
-				case processTracker.ContainsGuid(sguid):
-					// if we tracked the source process, we are supposed
-					// to have tracked the target, if the target is a child
-					// so it means that if we did not track the target and
-					// we tracked the source the target is not a child of the source
-					e.Set(&pathSourceIsParent, toString(false))
-				}
-			}
-		}
-	}
-}
-
 func hookSetValueSize(e *evtx.GoEvtxMap) {
 	e.Set(&pathValueSize, toString(-1))
 	if targetObject, err := e.GetString(&pathSysmonTargetObject); err == nil {
@@ -735,16 +733,20 @@ func hookSetValueSize(e *evtx.GoEvtxMap) {
 	}
 }
 
-/*func hookNetwork(e *evtx.GoEvtxMap) {
-	// Default value
-	e.Set(&pathSysmonCommandLine, "?")
-	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
-		if pt := processTracker.GetByGuid(guid); pt != nil {
-			// We add the parent command line to the network connection
-			e.Set(&pathSysmonCommandLine, pt.CommandLine)
+// hook that replaces the destination hostname of Sysmon Network connection
+// event with the one previously found in the DNS logs
+func hookEnrichDNSSysmon(e *evtx.GoEvtxMap) {
+	if ip, err := e.GetString(&pathSysmonDestIP); err == nil {
+		if dom, ok := dnsResolution[ip]; ok {
+			e.Set(&pathSysmonDestHostname, dom)
 		}
 	}
-}*/
+}
+
+func eventHas(e *evtx.GoEvtxMap, p *evtx.GoEvtxPath) bool {
+	_, err := e.GetString(p)
+	return err == nil
+}
 
 func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 	eventID := e.EventID()
@@ -791,37 +793,42 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		break
 
 	default:
-		hasComLine := true
-
-		// Default Values for the fields
-		e.Set(&pathSysmonUser, "?")
-		e.Set(&pathSysmonIntegrityLevel, "?")
-		e.Set(&pathSysmonCurrentDirectory, "?")
-		e.Set(&pathImageHashes, "?")
-
-		if _, err := e.GetString(&pathSysmonCommandLine); err != nil {
-			e.Set(&pathSysmonCommandLine, "?")
-			hasComLine = false
-		}
 
 		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
 			if track := processTracker.GetByGuid(guid); track != nil {
-				// if event does not have command line
-				if !hasComLine {
+				// if event does not have CommandLine field
+				if !eventHas(e, &pathSysmonCommandLine) {
 					e.Set(&pathSysmonCommandLine, "?")
 					if track.CommandLine != "" {
 						e.Set(&pathSysmonCommandLine, track.CommandLine)
 					}
 				}
-				if track.User != "" {
-					e.Set(&pathSysmonUser, track.User)
+				// if event does not have User field
+				if !eventHas(e, &pathSysmonUser) {
+					e.Set(&pathSysmonUser, "?")
+					if track.User != "" {
+						e.Set(&pathSysmonUser, track.User)
+					}
 				}
-				if track.IntegrityLevel != "" {
-					e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
+
+				// if event does not have IntegrityLevel field
+				if !eventHas(e, &pathSysmonIntegrityLevel) {
+					e.Set(&pathSysmonIntegrityLevel, "?")
+					if track.IntegrityLevel != "" {
+						e.Set(&pathSysmonIntegrityLevel, track.IntegrityLevel)
+					}
 				}
-				if track.CurrentDirectory != "" {
-					e.Set(&pathSysmonCurrentDirectory, track.CurrentDirectory)
+
+				// if event does not have CurrentDirectory field
+				if !eventHas(e, &pathSysmonCurrentDirectory) {
+					e.Set(&pathSysmonCurrentDirectory, "?")
+					if track.CurrentDirectory != "" {
+						e.Set(&pathSysmonCurrentDirectory, track.CurrentDirectory)
+					}
 				}
+
+				// event never has ImageHashes field since it is not Sysmon standard
+				e.Set(&pathImageHashes, "?")
 				if track.Hashes != "" {
 					e.Set(&pathImageHashes, track.Hashes)
 				}
@@ -937,6 +944,11 @@ func dumpEventAndCompress(e *evtx.GoEvtxMap, guid string) (err error) {
 }
 
 //////////////////// Post Detection Hooks /////////////////////
+
+// variables specific to post-detection hooks
+var (
+	sysmonArcFileRe = regexp.MustCompile("(((SHA1|MD5|SHA256|IMPHASH)=)|,)")
+)
 
 // this hook can run async
 func hookDumpProcess(e *evtx.GoEvtxMap) {
@@ -1068,6 +1080,31 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 							if err = dumpFileAndCompress(arg, dumpPath); err != nil {
 								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
 							}
+						}
+					}
+				}
+			}
+
+		case 23:
+			if im, err := e.GetString(&pathSysmonImage); err == nil {
+				if err = dumpFileAndCompress(im, dumpPath); err != nil {
+					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)
+				}
+			}
+
+			archived, err := e.GetBool(&pathSysmonArchived)
+			if err == nil && archived {
+				if !fsutil.IsDir(sysmonArchiveDirectory) {
+					log.Errorf("Aborting deleted file dump: %s archive directory does not exist", sysmonArchiveDirectory)
+					return
+				}
+				log.Info("Will try to dump deleted file")
+				if hashes, err := e.GetString(&pathSysmonHashes); err == nil {
+					if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
+						fname := fmt.Sprintf("%s%s", sysmonArcFileRe.ReplaceAllString(hashes, ""), filepath.Ext(target))
+						path := filepath.Join(sysmonArchiveDirectory, fname)
+						if err = dumpFileAndCompress(path, dumpPath); err != nil {
+							log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), path, err)
 						}
 					}
 				}

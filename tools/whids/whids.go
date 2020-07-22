@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0xrawsec/golang-utils/readers"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -99,6 +102,10 @@ var (
 			},
 		},
 		Channels: []string{"all"},
+		Sysmon: SysmonConfig{
+			Bin:           "C:\\Windows\\Sysmon64.exe",
+			CleanArchived: true,
+		},
 		Dump: DumpConfig{
 			Mode:        "file|registry",
 			Treshold:    8,
@@ -129,12 +136,18 @@ func (d *DumpConfig) IsModeEnabled(mode string) bool {
 	return strings.Index(d.Mode, mode) != -1
 }
 
+type SysmonConfig struct {
+	Bin           string `json:"bin"`
+	CleanArchived bool   `json:"clean-archived"`
+}
+
 // HIDSConfig structure
 type HIDSConfig struct {
 	RulesDB        string                    `json:"rules-db"`
 	ContainersDB   string                    `json:"containers-db"`
 	FwdConfig      collector.ForwarderConfig `json:"forwarder"`
 	Channels       []string                  `json:"channels"`
+	Sysmon         SysmonConfig              `json:"sysmon"`
 	Dump           DumpConfig                `json:"dump"`
 	CritTresh      int                       `json:"criticality-treshold"`
 	UpdateInterval time.Duration             `json:"update-interval"`
@@ -142,6 +155,8 @@ type HIDSConfig struct {
 	Logfile        string                    `json:"logfile"` // for WHIDS log messages (not alerts)
 	LogAll         bool                      `json:"log-all"` // log all events to logfile (used for debugging)
 	Endpoint       bool                      `json:"endpoint"`
+	// private members
+	sysmonArchiveDirectory string
 }
 
 // LoadsHIDSConfig loads a HIDS configuration from a file
@@ -156,11 +171,33 @@ func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
 	return
 }
 
+func (c *HIDSConfig) SysmonArchiveDirectory() (dir string) {
+	if c.sysmonArchiveDirectory != "" {
+		return sysmonArchiveDirectory
+	}
+
+	out, err := exec.Command(c.Sysmon.Bin, "-c").Output()
+	if err != nil {
+		log.Errorf("Failed to query sysmon config: %s", err)
+		return
+	}
+
+	for line := range readers.ReadlinesUTF16(bytes.NewBuffer(out)) {
+		if strings.Index(string(line), "Filter archive directory:") >= 0 {
+			if sp := strings.SplitN(string(line), ":", 2); len(sp) == 2 {
+				return strings.TrimSpace(sp[1])
+			}
+		}
+	}
+	return
+}
+
 // SetHooksGlobals sets the global variables used by hooks
 func (c *HIDSConfig) SetHooksGlobals() {
 	dumpDirectory = c.Dump.Dir
 	dumpTresh = c.Dump.Treshold
 	flagDumpCompress = c.Dump.Compression
+	sysmonArchiveDirectory = c.SysmonArchiveDirectory()
 }
 
 // IsDumpEnabled returns true if any kind of dump is enabled
@@ -296,11 +333,11 @@ func (h *HIDS) initHooks(advanced bool) {
 		h.preHooks.Hook(hookSetImageSize, fltImageSize)
 		h.preHooks.Hook(hookProcessIntegrity, fltImageSize)
 		h.preHooks.Hook(hookEnrichServices, fltAnySysmon)
-		// Not needed anymore enrich sysmon embeds necessary information
-		//h.preHooks.Hook(hookProcessAccess, fltProcessAccess)
-		// should be treated by hookEnrichAnySysmon
-		//h.preHooks.Hook(hookNetwork, fltNetworkConnect)
 		h.preHooks.Hook(hookEnrichAnySysmon, fltAnySysmon)
+		// Not sastifying results with Sysmon 11.11 we should try enabling this on newer versions
+		// h.preHooks.Hook(hookDNS, fltDNS)
+		// h.preHooks.Hook(hookEnrichDNSSysmon, fltNetworkConnect)
+		// Experimental
 		//h.preHooks.Hook(hookSetValueSize, fltRegSetValue)
 
 		// Registering post detection hooks
@@ -316,6 +353,39 @@ func (h *HIDS) initHooks(advanced bool) {
 				h.postHooks.Hook(hookDumpProcess, fltAnySysmon)
 			}
 		}
+	}
+}
+
+func (h *HIDS) cleanArchivedRoutine() {
+	if h.config.Sysmon.CleanArchived {
+		go func() {
+			log.Info("Starting routine to cleanup Sysmon archived files")
+			archivePath := h.config.SysmonArchiveDirectory()
+
+			if archivePath == "" {
+				log.Error("Sysmon archive directory not found")
+				return
+			}
+
+			if fsutil.IsDir(archivePath) {
+				log.Infof("Starting archive cleanup loop for directory: %s", archivePath)
+				for {
+					// expiration fixed to five minutes
+					expired := time.Now().Add(time.Minute * -5)
+					for wi := range fswalker.Walk(archivePath) {
+						for _, fi := range wi.Files {
+							path := filepath.Join(wi.Dirpath, fi.Name())
+							if fi.ModTime().Before(expired) {
+								if err := os.Remove(path); err != nil {
+									log.Errorf("Failed to remove archived file: %s", err)
+								}
+							}
+						}
+					}
+					time.Sleep(time.Minute * 1)
+				}
+			}
+		}()
 	}
 }
 
@@ -632,6 +702,9 @@ func (h *HIDS) Run() {
 		return
 	}
 
+	// start the archive cleanup routine (might create a new thread)
+	h.cleanArchivedRoutine()
+
 	h.startTime = time.Now()
 	h.waitGroup.Add(1)
 	go func() {
@@ -645,7 +718,7 @@ func (h *HIDS) Run() {
 			}
 
 			// Warning message in certain circumstances
-			if h.config.EnableHooks && !flagProcTermEn && h.eventScanned%1000 == 0 {
+			if h.config.EnableHooks && !flagProcTermEn && h.eventScanned > 0 && h.eventScanned%1000 == 0 {
 				log.Warn("Sysmon process termination events seem to be missing. WHIDS won't work as expected.")
 			}
 
