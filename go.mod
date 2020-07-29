@@ -5,7 +5,7 @@ require (
 	github.com/0xrawsec/golang-evtx v1.2.4
 	github.com/0xrawsec/golang-misp v1.0.3
 	github.com/0xrawsec/golang-utils v1.1.8
-	github.com/0xrawsec/golang-win32 v1.0.3
+	github.com/0xrawsec/golang-win32 v1.0.6
 	github.com/0xrawsec/mux v1.6.2
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/gorilla/context v1.1.1 // indirect

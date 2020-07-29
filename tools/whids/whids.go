@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/0xrawsec/golang-win32/win32"
@@ -688,26 +687,6 @@ func (h *HIDS) uploadRoutine() bool {
 	return false
 }
 
-var (
-	k32               = syscall.NewLazyDLL("kernel32.dll")
-	setThreadPriority = k32.NewProc("SetThreadPriority")
-	getCurrentThread  = k32.NewProc("GetCurrentThread")
-)
-
-const (
-	THREAD_PRIORITY_ABOVE_NORMAL = 1
-	THREAD_PRIORITY_HIGHEST      = 2
-)
-
-func SetCurrentThreadPriority(nPriority int) error {
-	hThread, _, _ := getCurrentThread.Call()
-	defer kernel32.CloseHandle(win32.HANDLE(hThread))
-	if r1, _, err := setThreadPriority.Call(hThread, uintptr(nPriority)); r1 != 0 {
-		return err
-	}
-	return nil
-}
-
 // Run starts the WHIDS engine and waits channel listening is stopped
 func (h *HIDS) Run() {
 	// Runs the forwarder in a separate thread
@@ -741,7 +720,7 @@ func (h *HIDS) Run() {
 		defer h.waitGroup.Done()
 
 		// Trying to raise thread priority
-		if err := SetCurrentThreadPriority(THREAD_PRIORITY_ABOVE_NORMAL); err != nil {
+		if err := kernel32.SetCurrentThreadPriority(win32.THREAD_PRIORITY_ABOVE_NORMAL); err != nil {
 			log.Errorf("Failed to raise IDS thread priority: %s", err)
 		}
 

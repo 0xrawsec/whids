@@ -52,6 +52,10 @@ github.com/0xrawsec/golang-win32 v1.0.2 h1:GbNJM22TQGZ6CEIgffWEPcr7K1tqrB9ruvuN+
 github.com/0xrawsec/golang-win32 v1.0.2/go.mod h1:MAxVU7dr8lujwknuhf4TwjYm8tVEELi2zwx1zDTu/RM=
 github.com/0xrawsec/golang-win32 v1.0.3 h1:bi9caxjozr/2svI5Z4ngs016YQg6JkUC9SpGWfCNO+0=
 github.com/0xrawsec/golang-win32 v1.0.3/go.mod h1:MAxVU7dr8lujwknuhf4TwjYm8tVEELi2zwx1zDTu/RM=
+github.com/0xrawsec/golang-win32 v1.0.5 h1:E7EWq7CNX3XASVYRFUEGhqzCYd33JWyKm7UcdzIG1aE=
+github.com/0xrawsec/golang-win32 v1.0.5/go.mod h1:MAxVU7dr8lujwknuhf4TwjYm8tVEELi2zwx1zDTu/RM=
+github.com/0xrawsec/golang-win32 v1.0.6 h1:wVvfd+trSeUkG6m5TFzeBtWHSHetfhPO3b5MVjTgsWk=
+github.com/0xrawsec/golang-win32 v1.0.6/go.mod h1:MAxVU7dr8lujwknuhf4TwjYm8tVEELi2zwx1zDTu/RM=
 github.com/0xrawsec/mux v1.6.2 h1:cc2OyJTxRmXxsmQe2ulp0VndXV8vZIRrc1JqQzJ4BMI=
 github.com/0xrawsec/mux v1.6.2/go.mod h1:CiOvEAd+RMn8YOtCs1b5QfWe7P8G4olvTmzzNbERonY=
 github.com/DataDog/zstd v1.4.0/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
