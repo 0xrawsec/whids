@@ -11,7 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/0xrawsec/golang-win32/win32"
+	"github.com/0xrawsec/golang-win32/win32/kernel32"
 
 	"github.com/0xrawsec/golang-utils/readers"
 
@@ -107,10 +111,12 @@ var (
 			CleanArchived: true,
 		},
 		Dump: DumpConfig{
-			Mode:        "file|registry",
-			Treshold:    8,
-			Dir:         filepath.Join(abs, "Dumps"),
-			Compression: true,
+			Mode:          "file|registry",
+			Treshold:      8,
+			Dir:           filepath.Join(abs, "Dumps"),
+			Compression:   true,
+			MaxDumps:      4,
+			DumpUntracked: false,
 		},
 		CritTresh:      5,
 		UpdateInterval: 60,
@@ -122,10 +128,12 @@ var (
 
 // DumpConfig structure definition
 type DumpConfig struct {
-	Mode        string `json:"mode"`
-	Treshold    int    `json:"treshold"`
-	Dir         string `json:"dir"`
-	Compression bool   `json:"compression"`
+	Mode          string `json:"mode"`
+	Treshold      int    `json:"treshold"`
+	Dir           string `json:"dir"`
+	Compression   bool   `json:"compression"`
+	MaxDumps      int    `json:"max-dumps"`      // maximum number of dump per GUID
+	DumpUntracked bool   `json:"dump-untracked"` // whether or not we should dump untracked processes, if true it would create many FPs
 }
 
 // IsModeEnabled checks if dump mode is enabled
@@ -197,6 +205,8 @@ func (c *HIDSConfig) SetHooksGlobals() {
 	dumpDirectory = c.Dump.Dir
 	dumpTresh = c.Dump.Treshold
 	flagDumpCompress = c.Dump.Compression
+	flagDumpUntracked = c.Dump.DumpUntracked
+	maxDumps = c.Dump.MaxDumps
 	sysmonArchiveDirectory = c.SysmonArchiveDirectory()
 }
 
@@ -278,7 +288,7 @@ func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
 
 	// Create logfile asap if needed
 	if c.Logfile != "" {
-		log.SetLogfile(c.Logfile, 600)
+		log.SetLogfile(c.Logfile, 0600)
 	}
 
 	// Set the globals used by the Hooks
@@ -678,6 +688,26 @@ func (h *HIDS) uploadRoutine() bool {
 	return false
 }
 
+var (
+	k32               = syscall.NewLazyDLL("kernel32.dll")
+	setThreadPriority = k32.NewProc("SetThreadPriority")
+	getCurrentThread  = k32.NewProc("GetCurrentThread")
+)
+
+const (
+	THREAD_PRIORITY_ABOVE_NORMAL = 1
+	THREAD_PRIORITY_HIGHEST      = 2
+)
+
+func SetCurrentThreadPriority(nPriority int) error {
+	hThread, _, _ := getCurrentThread.Call()
+	defer kernel32.CloseHandle(win32.HANDLE(hThread))
+	if r1, _, err := setThreadPriority.Call(hThread, uintptr(nPriority)); r1 != 0 {
+		return err
+	}
+	return nil
+}
+
 // Run starts the WHIDS engine and waits channel listening is stopped
 func (h *HIDS) Run() {
 	// Runs the forwarder in a separate thread
@@ -709,6 +739,12 @@ func (h *HIDS) Run() {
 	h.waitGroup.Add(1)
 	go func() {
 		defer h.waitGroup.Done()
+
+		// Trying to raise thread priority
+		if err := SetCurrentThreadPriority(THREAD_PRIORITY_ABOVE_NORMAL); err != nil {
+			log.Errorf("Failed to raise IDS thread priority: %s", err)
+		}
+
 		xmlEvents := h.eventProvider.FetchEvents(channels, wevtapi.EvtSubscribeToFutureEvents)
 		for xe := range xmlEvents {
 			event, err := XMLEventToGoEvtxMap(xe)

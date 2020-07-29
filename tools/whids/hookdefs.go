@@ -39,25 +39,27 @@ type stats struct {
 }
 
 type processTrack struct {
-	Image                string
-	ParentImage          string
-	PID                  int64
-	CommandLine          string
-	ParentCommandLine    string
-	CurrentDirectory     string
-	ProcessGUID          string
-	User                 string
-	ParentUser           string
-	IntegrityLevel       string
-	ParentIntegrityLevel string
-	ParentProcessGUID    string
-	Services             string
-	ParentServices       string
-	Hashes               string
-	History              []string
-	Stats                stats
-	MemDumped            bool
-	TimeTerminated       time.Time
+	Image                  string
+	ParentImage            string
+	PID                    int64
+	CommandLine            string
+	ParentCommandLine      string
+	CurrentDirectory       string
+	ParentCurrentDirectory string
+	ProcessGUID            string
+	User                   string
+	ParentUser             string
+	IntegrityLevel         string
+	ParentIntegrityLevel   string
+	ParentProcessGUID      string
+	Services               string
+	ParentServices         string
+	Hashes                 string
+	History                []string
+	Stats                  stats
+	MemDumped              bool
+	DumpsCount             int
+	TimeTerminated         time.Time
 }
 
 type ProcessTracker struct {
@@ -98,11 +100,37 @@ func (pt *ProcessTracker) freeRtn() {
 	}()
 }
 
+// returns true if DumpCount member of processTrack is below max argument
+// and increments if necessary. This function is used to check whether we
+// should still dump information given a guid
+func (pt *ProcessTracker) CheckDumpCountOrInc(guid string, max int, deflt bool) bool {
+	pt.Lock()
+	defer pt.Unlock()
+	if track, ok := pt.guids[guid]; ok {
+		if track.DumpsCount < max {
+			track.DumpsCount++
+			return true
+		}
+		return false
+	}
+	// we return a parametrized default value (cleaner than returning global)
+	return deflt
+}
+
 func (pt *ProcessTracker) Add(t *processTrack) {
 	pt.Lock()
 	defer pt.Unlock()
 	pt.guids[t.ProcessGUID] = t
 	pt.pids[t.PID] = t
+}
+
+func (pt *ProcessTracker) GetParentByGuid(guid string) *processTrack {
+	pt.RLock()
+	defer pt.RUnlock()
+	if c, ok := pt.guids[guid]; ok {
+		return pt.guids[c.ParentProcessGUID]
+	}
+	return nil
 }
 
 func (pt *ProcessTracker) GetByGuid(guid string) *processTrack {
@@ -158,6 +186,8 @@ var (
 	bootCompleted          bool
 	flagProcTermEn         bool // set the flag to true if process termination is enabled
 	flagDumpCompress       bool
+	flagDumpUntracked      bool
+	maxDumps               int
 
 	selfPath, _ = filepath.Abs(os.Args[0])
 	selfPid     = os.Getpid()
@@ -418,6 +448,7 @@ func hookTrack(e *evtx.GoEvtxMap) {
 														track.ParentUser = parent.User
 														track.ParentIntegrityLevel = parent.IntegrityLevel
 														track.ParentServices = parent.Services
+														track.ParentCurrentDirectory = parent.CurrentDirectory
 													} else {
 														// For processes created by System
 														if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
@@ -743,6 +774,7 @@ func hookEnrichDNSSysmon(e *evtx.GoEvtxMap) {
 	}
 }
 
+// Todo: move this function into evtx package
 func eventHas(e *evtx.GoEvtxMap, p *evtx.GoEvtxPath) bool {
 	_, err := e.GetString(p)
 	return err == nil
@@ -778,15 +810,29 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		if sguid, err := e.GetString(sguidPath); err == nil {
 			if tguid, err := e.GetString(tguidPath); err == nil {
 				if strack := processTracker.GetByGuid(sguid); strack != nil {
-					e.Set(&pathSourceUser, strack.User)
-					e.Set(&pathSourceIntegrityLevel, strack.IntegrityLevel)
-					e.Set(&pathSourceHashes, strack.Hashes)
+					if strack.User != "" {
+						e.Set(&pathSourceUser, strack.User)
+					}
+					if strack.IntegrityLevel != "" {
+						e.Set(&pathSourceIntegrityLevel, strack.IntegrityLevel)
+					}
+					if strack.Hashes != "" {
+						e.Set(&pathSourceHashes, strack.Hashes)
+					}
 				}
 				if ttrack := processTracker.GetByGuid(tguid); ttrack != nil {
-					e.Set(&pathTargetUser, ttrack.User)
-					e.Set(&pathTargetIntegrityLevel, ttrack.IntegrityLevel)
-					e.Set(&pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
-					e.Set(&pathTargetHashes, ttrack.Hashes)
+					if ttrack.User != "" {
+						e.Set(&pathTargetUser, ttrack.User)
+					}
+					if ttrack.IntegrityLevel != "" {
+						e.Set(&pathTargetIntegrityLevel, ttrack.IntegrityLevel)
+					}
+					if ttrack.ParentProcessGUID != "" {
+						e.Set(&pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
+					}
+					if ttrack.Hashes != "" {
+						e.Set(&pathTargetHashes, ttrack.Hashes)
+					}
 				}
 			}
 		}
@@ -882,7 +928,7 @@ func dumpPidAndCompress(pid int, guid, id string) {
 		if err != nil {
 			log.Errorf("Cannot get module filename for memory dump PID=%d: %s", pid, err)
 		}
-		dumpFilename := fmt.Sprintf("%s_%d_%d.dmp", filepath.Base(module), pid, time.Now().Unix())
+		dumpFilename := fmt.Sprintf("%s_%d_%d.dmp", filepath.Base(module), pid, time.Now().UnixNano())
 		dumpPath := filepath.Join(tmpDumpDir, dumpFilename)
 		log.Infof("Trying to dump memory of process PID=%d Image=\"%s\"", pid, module)
 		//log.Infof("Mock dump: %s", dumpFilename)
@@ -909,7 +955,7 @@ func dumpFileAndCompress(src, path string) error {
 	}
 	// replace : in case we are dumping an ADS
 	base := strings.Replace(filepath.Base(src), ":", "_ADS_", -1)
-	dst := filepath.Join(path, fmt.Sprintf("%d_%s.bin", time.Now().Unix(), base))
+	dst := filepath.Join(path, fmt.Sprintf("%d_%s.bin", time.Now().UnixNano(), base))
 	// dump sha256 of file anyway
 	ioutil.WriteFile(fmt.Sprintf("%s.sha256", dst), []byte(sha256), 600)
 	if !fileDumped.Contains(sha256) {
@@ -974,6 +1020,13 @@ func hookDumpProcess(e *evtx.GoEvtxMap) {
 		}
 
 		if guid, err := e.GetString(procGUIDPath); err == nil {
+
+			// check if we should go on
+			if !processTracker.CheckDumpCountOrInc(guid, maxDumps, flagDumpUntracked) {
+				log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
+				return
+			}
+
 			if pid, err := e.GetInt(pidPath); err == nil {
 				dumpEventAndCompress(e, guid)
 				dumpPidAndCompress(int(pid), guid, idFromEvent(e))
@@ -993,6 +1046,13 @@ func hookDumpRegistry(e *evtx.GoEvtxMap) {
 	go func() {
 		defer parallelHooks.Release()
 		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
+
+			// check if we should go on
+			if !processTracker.CheckDumpCountOrInc(guid, maxDumps, flagDumpUntracked) {
+				log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
+				return
+			}
+
 			if targetObject, err := e.GetString(&pathSysmonTargetObject); err == nil {
 				if details, err := e.GetString(&pathSysmonDetails); err == nil {
 					// We dump only if Details is "Binary Data" since the other kinds can be seen in the raw event
@@ -1021,6 +1081,59 @@ func hookDumpRegistry(e *evtx.GoEvtxMap) {
 	}()
 }
 
+func dumpCommandLine(e *evtx.GoEvtxMap, dumpPath string) {
+	if cl, err := e.GetString(&pathSysmonCommandLine); err == nil {
+		if cwd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
+			if argv, err := utils.ArgvFromCommandLine(cl); err == nil {
+				if len(argv) > 1 {
+					for _, arg := range argv[1:] {
+						if fsutil.IsFile(arg) && !utils.IsPipePath(arg) {
+							if err = dumpFileAndCompress(arg, dumpPath); err != nil {
+								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
+							}
+						}
+						// try to dump a path relative to CWD
+						relarg := filepath.Join(cwd, arg)
+						if fsutil.IsFile(relarg) && !utils.IsPipePath(relarg) {
+							if err = dumpFileAndCompress(relarg, dumpPath); err != nil {
+								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), relarg, err)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func dumpParentCommandLine(e *evtx.GoEvtxMap, dumpPath string) {
+	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
+		//if cwd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
+		if track := processTracker.GetByGuid(guid); track != nil {
+			if argv, err := utils.ArgvFromCommandLine(track.ParentCommandLine); err == nil {
+				if len(argv) > 1 {
+					for _, arg := range argv[1:] {
+						if fsutil.IsFile(arg) && !utils.IsPipePath(arg) {
+							if err = dumpFileAndCompress(arg, dumpPath); err != nil {
+								log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
+							}
+						}
+						// try to dump a path relative to parent CWD
+						if track.ParentCurrentDirectory != "" {
+							relarg := filepath.Join(track.ParentCurrentDirectory, arg)
+							if fsutil.IsFile(relarg) && !utils.IsPipePath(relarg) {
+								if err = dumpFileAndCompress(relarg, dumpPath); err != nil {
+									log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), relarg, err)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func hookDumpFile(e *evtx.GoEvtxMap) {
 	// we dump only if alert is relevant
 	if getCriticality(e) < dumpTresh {
@@ -1040,9 +1153,24 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 			guid = tmpGUID
 		}
 
+		// check if we should go on
+		if !processTracker.CheckDumpCountOrInc(guid, maxDumps, flagDumpUntracked) {
+			log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
+			return
+		}
+
+		// build up dump path
 		dumpPath := filepath.Join(dumpDirectory, guid, idFromEvent(e))
+		// dump event who triggered the dump
 		dumpEventAndCompress(e, guid)
 
+		// dump CommandLine fields regardless of the event
+		// this would actually work best when hooks are enabled and enrichment occurs
+		// in the worst case it would only work for Sysmon CreateProcess events
+		dumpCommandLine(e, dumpPath)
+		dumpParentCommandLine(e, dumpPath)
+
+		// Handling different kinds of event IDs
 		switch e.EventID() {
 
 		case 2, 11, 15:
@@ -1111,28 +1239,6 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 			}
 
 		default:
-			if cl, err := e.GetString(&pathSysmonCommandLine); err == nil {
-				if cwd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
-					if argv, err := utils.ArgvFromCommandLine(cl); err == nil {
-						if len(argv) > 1 {
-							for _, arg := range argv[1:] {
-								if fsutil.IsFile(arg) && !utils.IsPipePath(arg) {
-									if err = dumpFileAndCompress(arg, dumpPath); err != nil {
-										log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), arg, err)
-									}
-								}
-								// try to dump a path relative to CWD
-								relarg := filepath.Join(cwd, arg)
-								if fsutil.IsFile(relarg) && !utils.IsPipePath(relarg) {
-									if err = dumpFileAndCompress(relarg, dumpPath); err != nil {
-										log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), relarg, err)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
 			if im, err := e.GetString(&pathSysmonImage); err == nil {
 				if err = dumpFileAndCompress(im, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)

@@ -71,17 +71,18 @@ func fmtAliases() string {
 
 func runHids(service bool) {
 	var err error
+	var hidsConf HIDSConfig
 
 	log.Infof("Running HIDS as Windows service: %t", service)
 
-	hidsConf, err := LoadsHIDSConfig(config)
+	hidsConf, err = LoadsHIDSConfig(config)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
 	}
 
 	hids, err = NewHIDS(&hidsConf)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
+		log.LogErrorAndExit(fmt.Errorf("Failed to create HIDS: %s", err))
 	}
 
 	hids.DryRun = flagDryRun

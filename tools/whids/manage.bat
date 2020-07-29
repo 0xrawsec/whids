@@ -22,57 +22,64 @@ echo [st] Start services
 echo [sp] Stop services
 echo [r]  Restart services
 echo [g]  Remove alerts logs and dumps
-echo [gr] Remove alerts logs and dumps and restart
 echo [e]  Edit WHIDS configuration
 echo [c]  Clear screen
 echo [q]  Quit
 echo.
-SET /P _ch= "Please select option:"
-IF "%_ch%"=="i" (
-    call :StopSvcs
-    call :Uninstall
-    call :Install
-    call :CreateWhidsSvc
-    call :ImportRules
-    call :GenUninstall
-    call :PromptStartSvcs
+
+SET /P _in= "Please select option (can be combined with +):"
+SET _in_ch="%_in%"
+
+
+:FORLOOP
+FOR /F "tokens=1* delims=+" %%A IN (%_in_ch%) DO (
+    
+    IF "%%A"=="i" (
+        call :StopSvcs
+        call :Uninstall
+        call :Install
+        call :CreateWhidsSvc
+        call :ImportRules
+        call :GenUninstall
+        call :PromptStartSvcs
+    )
+    IF "%%A"=="un" (
+        call :Uninstall
+    )
+    IF "%%A"=="up" (
+        call :StopSvcs
+        call :CopyBin
+        call :PromptStartSvcs
+    )
+    IF "%%A"=="st" (
+        call :StartSvcs
+    )
+    IF "%%A"=="sp" (
+        call :StopSvcs
+    )
+    IF "%%A"=="r" (
+        call :StopSvcs
+        call :StartSvcs
+    )
+    IF "%%A"=="g" (
+        call :Groom
+    )
+    IF "%%A"=="e" (
+        notepad "%CONFIG%"
+        cls
+    )
+    IF "%%A"=="c" (
+        cls
+    )
+    IF "%%A"=="q" (
+        EXIT 0
+    )
+
+    set _in_ch="%%B"
+    if NOT %_in_ch%=="" goto FORLOOP
+
 )
-IF "%_ch%"=="un" (
-    call :Uninstall
-)
-IF "%_ch%"=="up" (
-    call :StopSvcs
-    call :CopyBin
-    call :PromptStartSvcs
-)
-IF "%_ch%"=="st" (
-    call :StartSvcs
-)
-IF "%_ch%"=="sp" (
-    call :StopSvcs
-)
-IF "%_ch%"=="r" (
-    call :StopSvcs
-    call :StartSvcs
-)
-IF "%_ch%"=="g" (
-    call :Groom
-)
-IF "%_ch%"=="gr" (
-    call :StopSvcs
-    call :Groom
-    call :StartSvcs
-)
-IF "%_ch%"=="e" (
-    notepad "%CONFIG%"
-    cls
-)
-IF "%_ch%"=="c" (
-    cls
-)
-IF "%_ch%"=="q" (
-    EXIT 0
-)
+
 echo.
 GOTO :choice
 
