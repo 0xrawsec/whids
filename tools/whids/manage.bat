@@ -9,6 +9,7 @@ REM default during installation used to clean
 set ALERTS=%INSTALL_DIR%\Logs\Alerts
 set DUMPS=%INSTALL_DIR%\Dumps
 set VERSION="REPLACED BY MAKEFILE"
+set COMMITID="REPLACED BY MAKEFILE"
 set SVC=Whids
 set SYSMON=Sysmon64
 
@@ -27,6 +28,7 @@ echo [c]  Clear screen
 echo [q]  Quit
 echo.
 
+echo Whids version: %VERSION% (commit: %COMMITID%)
 SET /P _in= "Please select option (can be combined with +):"
 SET _in_ch="%_in%"
 

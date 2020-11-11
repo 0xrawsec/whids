@@ -62,7 +62,7 @@ const (
 var (
 	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 
-	dumpOptions = []string{"memory", "file", "all"}
+	dumpOptions = []string{"registry", "memory", "file", "all"}
 
 	channelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
@@ -749,7 +749,12 @@ func (h *HIDS) Run() {
 			}
 
 			h.RLock()
-			if n, crit := h.engine.Match(event); len(n) > 0 {
+			if n, crit, filtered := h.engine.MatchOrFilter(event); len(n) > 0 || filtered {
+				// we pipe filtered event
+				if filtered && !h.PrintAll && !h.config.LogAll {
+					h.forwarder.PipeEvent(event)
+				}
+
 				if crit >= h.config.CritTresh {
 					if !h.PrintAll && !h.config.LogAll {
 						h.forwarder.PipeEvent(event)

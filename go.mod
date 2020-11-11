@@ -1,7 +1,7 @@
 module github.com/0xrawsec/whids
 
 require (
-	github.com/0xrawsec/gene v1.6.3
+	github.com/0xrawsec/gene v1.6.4
 	github.com/0xrawsec/golang-evtx v1.2.4
 	github.com/0xrawsec/golang-misp v1.0.3
 	github.com/0xrawsec/golang-utils v1.1.8

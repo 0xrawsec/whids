@@ -1,7 +1,7 @@
 TEST=$(GOPATH)/test
 MAIN_BASEN_SRC=whids
 RELEASE=$(GOPATH)/release/$(MAIN_BASEN_SRC)
-VERSION=1.6.2
+VERSION=$(shell git tag | tail -1 | sed 's/^v//')
 COMMITID=$(shell git rev-parse HEAD)
 
 # Strips symbols and dwarf to make binary smaller
@@ -49,7 +49,7 @@ buildversion:
 	printf "package main\n\nconst(\n    version=\"$(VERSION)\"\n    commitID=\"$(COMMITID)\"\n)\n" > version.go
 
 installer:
-	sed -E "s/set VERSION=.*?/set VERSION=$(VERSION)/" manage.bat > $(RELEASE)/windows/manage.bat
+	sed -E -e "s/set VERSION=.*?/set VERSION=$(VERSION)/" -e "s/set COMMITID=.*?/set COMMITID=$(COMMITID)/" manage.bat > $(RELEASE)/windows/manage.bat
 
 sysmon:
 	#mv $(RELEASE)/../sysmon $(RELEASE)/windows/
