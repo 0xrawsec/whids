@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
+	"github.com/0xrawsec/golang-utils/fsutil"
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils"
@@ -107,6 +109,29 @@ func runHids(service bool) {
 	}
 }
 
+func proctectDir(dir string) {
+	var out []byte
+	var err error
+
+	// we first need to reset the ACLs otherwise next command does not work
+	cmd := []string{"icacls", dir, "/reset"}
+	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
+		log.Errorf("Failed to reset installation directory ACLs: %s", err)
+		log.Errorf("icacls output: %s", string(out))
+		return
+	}
+
+	// we grant Administrators and SYSTEM full access rights
+	cmd = []string{"icacls", dir, "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F"}
+	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
+		log.Errorf("Failed to protect installation directory with ACLs: %s", err)
+		log.Errorf("icacls output: %s", string(out))
+		return
+	}
+
+	log.Infof("Successfully protected installation directory with ACLs")
+}
+
 func main() {
 
 	flag.BoolVar(&flagDumpDefault, "dump-conf", flagDumpDefault, "Dumps default configuration")
@@ -128,6 +153,9 @@ func main() {
 
 	flag.Parse()
 
+	// set logfile the time the service starts
+	log.SetLogfile(filepath.Join(abs, "bootstrap.log"))
+
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
@@ -135,6 +163,10 @@ func main() {
 
 	// If it is called by the Windows Service Manager (not interactive)
 	if !isIntSess {
+		// if running as service we protect installation directory with appropriate ACLs
+		if fsutil.IsDir(abs) {
+			proctectDir(abs)
+		}
 		runService(svcName, false)
 		return
 	}
@@ -173,7 +205,7 @@ func main() {
 	// has to be there so that we print logs to stdout
 	if importRules != "" {
 		// in order not to write logs into file
-		// TODO: add a add stream handler to log facility
+		// TODO: add a stream handler to log facility
 		hidsConf.Logfile = ""
 		hids, err = NewHIDS(&hidsConf)
 		if err != nil {

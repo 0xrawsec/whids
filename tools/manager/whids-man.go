@@ -19,8 +19,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/whids/collector"
+	"github.com/0xrawsec/whids/api"
 )
 
 const (
@@ -29,12 +30,13 @@ const (
 )
 
 var (
-	keygen     bool
-	certgen    bool
-	dumpConfig bool
+	keygen      bool
+	certgen     bool
+	dumpConfig  bool
+	fingerprint string
 
-	managerConf collector.ManagerConfig
-	manager     *collector.Manager
+	managerConf api.ManagerConfig
+	manager     *api.Manager
 	osSignals   = make(chan os.Signal)
 
 	// Used for certificate generation
@@ -146,6 +148,27 @@ func generateCert(hosts []string) error {
 	return nil
 }
 
+func computeFingerprint(certPath string) (fingerprint string, err error) {
+	pemBytes, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		return
+	}
+
+	block, _ := pem.Decode(pemBytes)
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return
+	}
+
+	der, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+	if err != nil {
+		return
+	}
+	fingerprint = data.Sha256(der)
+	return
+}
+
 func printInfo(writer io.Writer) {
 	fmt.Fprintf(writer, "Version: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", version, commitID, copyright, license)
 }
@@ -156,6 +179,7 @@ func main() {
 	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
 		"The certificate gets generated for the IP address specified in the configuration file.")
 	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
+	flag.StringVar(&fingerprint, "fingerprint", fingerprint, "Retrieve fingerprint of certificate to set in client configuration")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -168,14 +192,23 @@ func main() {
 	config := flag.Arg(0)
 
 	if keygen {
-		key := collector.KeyGen(collector.DefaultKeySize)
+		key := api.KeyGen(api.DefaultKeySize)
 		fmt.Printf("New API key: %s\n", key)
 		fmt.Printf("Please manually update client and manager configuration file to make it effective\n")
 		os.Exit(0)
 	}
 
+	if fingerprint != "" {
+		fing, err := computeFingerprint(fingerprint)
+		if err != nil {
+			log.LogErrorAndExit(fmt.Errorf("Failed at computing fingerprint: %s", err))
+		}
+		fmt.Printf("Certificate fingerprint to set in client configuration to enable certificate pinning\n%s\n", fing)
+		os.Exit(0)
+	}
+
 	if dumpConfig {
-		b, err := json.MarshalIndent(collector.ManagerConfig{}, "", "    ")
+		b, err := json.MarshalIndent(api.ManagerConfig{}, "", "    ")
 		if err != nil {
 			panic(err)
 		}
@@ -200,7 +233,7 @@ func main() {
 	fd.Close()
 
 	if certgen {
-		err = generateCert([]string{managerConf.Host})
+		err = generateCert([]string{managerConf.EndpointAPI.Host, managerConf.AdminAPI.Host})
 		if err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed to generate key/cert pair: %s", err))
 		}
@@ -208,7 +241,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	manager, err = collector.NewManager(&managerConf)
+	manager, err = api.NewManager(&managerConf)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to create manager: %s", err))
 	}

@@ -253,8 +253,9 @@ To know how to write rules for the engine please visit: https://rawsec.lu/doc/ge
 
 In order to get the most of WHIDS you need to activate specific features
 
-* [Install Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon)
-* [Enable Powershell Module Logging](https://www.fireeye.com/blog/threat-research/2016/02/greater_visibilityt.html)
+- [Install Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon)
+- [Enable Powershell Module Logging](https://www.fireeye.com/blog/threat-research/2016/02/greater_visibilityt.html)
+- Audit Service Creation: gpedit.msc -> Security Settings\Advanced Audit Policy Configuration\System Audit Policies\Audit Security System Extension -> Enable
 
 # Changelog
 

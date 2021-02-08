@@ -2,23 +2,22 @@ package main
 
 import (
 	"encoding/json"
-	"hooks"
 	"net"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
-
+	"github.com/0xrawsec/whids/hooks"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/readers"
 )
 
 var (
 	// DNSFilter filters any Windows-DNS-Client log
-	DNSFilter = hooks.NewFilter([]int64{}, []string{"Microsoft-Windows-DNS-Client/Operational"})
+	DNSFilter = hooks.NewFilter([]int64{}, "Microsoft-Windows-DNS-Client/Operational")
 	// SysmonNetConnFilter filters any Sysmon network connection
-	SysmonNetConnFilter = hooks.NewFilter([]int64{3}, []string{"Microsoft-Windows-Sysmon/Operational"})
+	SysmonNetConnFilter = hooks.NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
 	eventSource         = "new-events.json"
 	queryValue          = evtx.Path("/Event/EventData/QueryName")
 	queryType           = evtx.Path("/Event/EventData/QueryType")

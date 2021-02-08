@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
@@ -297,6 +299,39 @@ func RegQuery(key, value string) (string, error) {
 // IsPipePath checks whether the argument path is a pipe
 func IsPipePath(path string) bool {
 	return strings.HasPrefix(path, `\\.\`)
+}
+
+// Utf16ToUtf8 converts a utf16 encoded byte slice to utf8 byte slice
+// it returns error if there is any decoding / encoding issue
+// Inspired by: https://gist.github.com/bradleypeabody/185b1d7ed6c0c2ab6cec#file-gistfile1-go
+func Utf16ToUtf8(b []byte) ([]byte, error) {
+
+	u16s := make([]uint16, 1)
+	ret := &bytes.Buffer{}
+	b8buf := make([]byte, 4)
+
+	if len(b)%2 != 0 {
+		return nil, fmt.Errorf("Expecting even data length")
+	}
+
+	for i := 0; i < len(b); i += 2 {
+		u16s[0] = uint16(b[i]) + (uint16(b[i+1]) << 8)
+		r := utf16.Decode(u16s)[0]
+		// skip BOM
+		if i == 0 && r == '\ufeff' {
+			continue
+		}
+		if r == utf8.RuneError {
+			return nil, fmt.Errorf("Invalid UTF-16 code point")
+		}
+		if !utf8.ValidRune(r) {
+			return nil, fmt.Errorf("Cannot UTF-16 code point to UTF-8")
+		}
+		n := utf8.EncodeRune(b8buf, r)
+		ret.Write(b8buf[:n])
+	}
+
+	return ret.Bytes(), nil
 }
 
 type ByteSlice []byte

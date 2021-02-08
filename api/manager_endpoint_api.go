@@ -1,0 +1,355 @@
+package api
+
+import (
+	"bufio"
+	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/0xrawsec/golang-evtx/evtx"
+
+	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/mux"
+)
+
+var (
+	ErrUnkEndpoint = fmt.Errorf("Unknown endpoint")
+)
+
+/////////////////// Utils
+
+func (m *Manager) endpointFromRequest(rq *http.Request) *Endpoint {
+	uuid := rq.Header.Get("UUID")
+	if endpt, ok := m.endpoints.GetByUUID(uuid); ok {
+		return endpt
+	}
+	return nil
+}
+
+func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
+		var endpt *Endpoint
+		var ok bool
+
+		uuid := rq.Header.Get("UUID")
+		key := rq.Header.Get("Api-Key")
+		hostname := rq.Header.Get("Hostname")
+
+		if endpt, ok = m.endpoints.GetMutByUUID(uuid); !ok {
+			http.Error(wt, "Not Authorized", http.StatusForbidden)
+			// we have to return not to reach ServeHTTP
+			return
+		}
+
+		if endpt.UUID != uuid || endpt.Key != key {
+			http.Error(wt, "Not Authorized", http.StatusForbidden)
+			// we have to return not to reach ServeHTTP
+			return
+		}
+
+		ip, err := IPFromRequest(rq)
+		if err != nil {
+			log.Errorf("Failed to parse client IP address: %s", err)
+		} else {
+			// update endpoint IP at every request if possible
+			endpt.IP = ip.String()
+		}
+
+		switch {
+		case endpt.Hostname == "":
+			endpt.Hostname = hostname
+		case endpt.Hostname != hostname:
+			log.Errorf("Two hosts are using the same credentials %s (%s) and %s (%s)", endpt.Hostname, endpt.IP, hostname, ip)
+			http.Error(wt, "Not Authorized", http.StatusForbidden)
+			// we have to return not to reach ServeHTTP
+			return
+		}
+
+		// update last connection timestamp
+		endpt.LastConnection = time.Now()
+		next.ServeHTTP(wt, rq)
+	})
+}
+
+func (m *Manager) runEndpointAPI() {
+
+	go func() {
+		// If we fail due to server crash we properly shutdown
+		// the receiver to avoid log corruption
+		defer func() {
+			if err := recover(); err != nil {
+				m.Shutdown()
+			}
+		}()
+
+		rt := mux.NewRouter()
+		// Middleware initialization
+		// Manages Request Logging
+		rt.Use(logHTTPMiddleware)
+		// Manages Authorization
+		rt.Use(m.endpointAuthorizationMiddleware)
+		// Manages Compression
+		rt.Use(gunzipMiddleware)
+
+		// Routes initialization
+		// POST based
+		rt.HandleFunc(PostLogsURL, m.Collect).Methods("POST")
+		rt.HandleFunc(PostDumpURL, m.UploadDump).Methods("POST")
+
+		// GET based
+		rt.HandleFunc(GetServerKeyURL, m.ServerKey).Methods("GET")
+		rt.HandleFunc(GetRulesURL, m.Rules).Methods("GET")
+		rt.HandleFunc(GetRulesSha256URL, m.RulesSha256).Methods("GET")
+		rt.HandleFunc(GetContainerURL, m.Container).Methods("GET")
+		rt.HandleFunc(GetContainerListURL, m.ContainerList).Methods("GET")
+		rt.HandleFunc(GetContainerSha256URL, m.ContainerSha256).Methods("GET")
+
+		// GET and POST
+		rt.HandleFunc(CommandURL, m.Command).Methods("GET", "POST")
+
+		uri := fmt.Sprintf("%s:%d", m.Config.EndpointAPI.Host, m.Config.EndpointAPI.Port)
+		m.endpointAPI = &http.Server{
+			Handler:      rt,
+			Addr:         uri,
+			WriteTimeout: 15 * time.Second,
+			ReadTimeout:  15 * time.Second,
+		}
+
+		if m.Config.TLS.Empty() {
+			// Bind to a port and pass our router in
+			log.Infof("Running HTTP server on: %s", uri)
+			if err := m.endpointAPI.ListenAndServe(); err != http.ErrServerClosed {
+				log.Panic(err)
+			}
+		} else {
+			// Bind to a port and pass our router in
+			log.Infof("Running HTTPS server on: %s", uri)
+			if err := m.endpointAPI.ListenAndServeTLS(m.Config.TLS.Cert, m.Config.TLS.Key); err != http.ErrServerClosed {
+				log.Panic(err)
+			}
+		}
+	}()
+}
+
+// ServerKey HTTP handler used to authenticate server on client side
+func (m *Manager) ServerKey(wt http.ResponseWriter, rq *http.Request) {
+	wt.Write([]byte(m.Config.EndpointAPI.ServerKey))
+}
+
+// Rules HTTP handler used to serve the rules
+func (m *Manager) Rules(wt http.ResponseWriter, rq *http.Request) {
+	wt.Write([]byte(m.rules))
+}
+
+// RulesSha256 returns the sha256 of the latest set of rules loaded into the manager
+func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
+	wt.Write([]byte(m.rulesSha256))
+}
+
+// UploadDump HTTP handler used to upload dump files from client to manager
+func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
+	defer rq.Body.Close()
+
+	if m.Config.DumpDir == "" {
+		log.Errorf("Upload handler won't dump because no dump directory set")
+		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
+		return
+	}
+
+	fu := FileUpload{}
+	dec := json.NewDecoder(rq.Body)
+
+	if err := dec.Decode(&fu); err != nil {
+		log.Errorf("Upload handler failed to decode JSON")
+		http.Error(wt, "Failed to decode JSON", http.StatusInternalServerError)
+		return
+	}
+
+	if err := fu.Dump(m.Config.DumpDir); err != nil {
+		log.Errorf("Upload handler failed to dump file (%s): %s", fu.Implode(), err)
+		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
+		return
+	}
+}
+
+// Container HTTP handler serves Gene containers to clients
+func (m *Manager) Container(wt http.ResponseWriter, rq *http.Request) {
+	vars := mux.Vars(rq)
+	if name, ok := vars["name"]; ok {
+		if cont, ok := m.containers[name]; ok {
+			b, err := json.Marshal(cont)
+			if err != nil {
+				log.Errorf("Container handler failed to JSON encode container")
+				http.Error(wt, "Failed to JSON encode container", http.StatusInternalServerError)
+			} else {
+				wt.Write(b)
+			}
+		} else {
+			http.Error(wt, "Unavailable container", http.StatusNotFound)
+		}
+	}
+}
+
+// ContainerList HTTP handler to server the list of available containers
+func (m *Manager) ContainerList(wt http.ResponseWriter, rq *http.Request) {
+	list := make([]string, 0, len(m.containers))
+	for cn := range m.containers {
+		list = append(list, cn)
+	}
+	b, err := json.Marshal(list)
+	if err == nil {
+		wt.Write(b)
+	} else {
+		log.Errorf("ContainerList handler failed to JSON encode list")
+		http.Error(wt, "Failed to JSON encode list", http.StatusInternalServerError)
+	}
+}
+
+// ContainerSha256 HTTP handler to server the Sha256 of a given container
+func (m *Manager) ContainerSha256(wt http.ResponseWriter, rq *http.Request) {
+	vars := mux.Vars(rq)
+	if name, ok := vars["name"]; ok {
+		if sha256, ok := m.containersSha256[name]; ok {
+			wt.Write([]byte(sha256))
+		} else {
+			http.Error(wt, "Unavailable container", http.StatusNotFound)
+		}
+	}
+}
+
+// Collect HTTP handler
+func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
+	cnt := 0
+	uuid := rq.Header.Get("UUID")
+	paths := make(map[string]*gzip.Writer)
+
+	defer rq.Body.Close()
+
+	s := bufio.NewScanner(rq.Body)
+	for s.Scan() {
+		tok := s.Text()
+		log.Debugf("Received Event: %s", tok)
+		e := evtx.GoEvtxMap{}
+		if err := json.Unmarshal([]byte(tok), &e); err != nil {
+			log.Errorf("Failed to unmarshal: %s", tok)
+		} else {
+			if endpt := m.endpointFromRequest(rq); endpt != nil {
+				m.UpdateReducer(endpt.UUID, &e)
+			} else {
+				log.Error("Failed to retrieve endpoint from request")
+			}
+
+			// endpoint specific logging
+			// this part is part to race because there is no sync
+			// mechanisms on endpoints log files. However we are not supposed
+			// to receive logs in parallel from the same endpoint because it
+			// would break the order of the events received.
+			if m.Config.Logging.EnEnptLogs {
+				tc := e.TimeCreated()
+				logPaths := []string{m.Config.Logging.LogPath(uuid, tc)}
+				// we test if the event is an alert
+				if _, err := e.Get(&sigPath); err == nil {
+					logPaths = append(logPaths, m.Config.Logging.AlertPath(uuid, tc))
+				}
+				for _, path := range logPaths {
+					if _, ok := paths[path]; !ok {
+						if err := os.MkdirAll(filepath.Dir(path), DefaultDirPerm); err != nil {
+							log.Errorf("Failed to create endpoint log directory %s: %s", path, err)
+						} else {
+							fd, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, DefaultLogPerm)
+							if err == nil {
+								w := gzip.NewWriter(fd)
+								defer fd.Close()
+								defer w.Close()
+								paths[path] = w
+							} else {
+								log.Errorf("Failed to write enpoint logs to %s: %s", path, err)
+							}
+						}
+					}
+					if w, ok := paths[path]; ok {
+						w.Write([]byte(fmt.Sprintln(tok)))
+						w.Flush()
+					}
+				}
+			}
+
+			// logging to main log stream
+			m.logfile.Write([]byte(fmt.Sprintln(tok)))
+		}
+		cnt++
+	}
+	log.Debugf("Count Event Received: %d", cnt)
+}
+
+func (m *Manager) AddCommand(uuid string, c *Command) error {
+	if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
+		endpt.Command = c
+		return nil
+	}
+	return ErrUnkEndpoint
+}
+
+func (m *Manager) GetCommand(uuid string) (*Command, error) {
+	if endpt, ok := m.endpoints.GetByUUID(uuid); ok {
+		// We return the command of an unmutable endpoint struct
+		// so if Command is modified this will not affect Endpoint
+		return endpt.Command, nil
+	}
+	return nil, ErrUnkEndpoint
+}
+
+// Command HTTP handler
+func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
+	id := rq.Header.Get("UUID")
+	switch rq.Method {
+	case "GET":
+		if endpt, ok := m.endpoints.GetMutByUUID(id); ok {
+			// we send back the command to execute only if was not already sent
+			if endpt.Command != nil {
+				if !endpt.Command.Sent {
+					jsonCmd, err := json.Marshal(endpt.Command)
+					if err != nil {
+						log.Errorf("Failed at serializing command to JSON: %s", err)
+					} else {
+						wt.Write(jsonCmd)
+					}
+					endpt.Command.Sent = true
+					endpt.Command.SentTime = time.Now()
+					return
+				}
+			}
+			// if the command is nil or already sent
+			http.Error(wt, "", http.StatusNoContent)
+		}
+	case "POST":
+		if endpt, ok := m.endpoints.GetMutByUUID(id); ok {
+			// if command is nil we actually don't expect any result
+			if endpt.Command != nil {
+				if !endpt.Command.Completed {
+					defer rq.Body.Close()
+					body, err := ioutil.ReadAll(rq.Body)
+					if err != nil {
+						log.Errorf("Failed to read response body: %s", err)
+					} else {
+						rcmd := Command{}
+						err := json.Unmarshal(body, &rcmd)
+						if err != nil {
+							log.Errorf("Failed to unmarshal received command: %s", err)
+						} else {
+							// we complete the command executed on the endpoint
+							endpt.Command.Complete(&rcmd)
+						}
+					}
+				} else {
+					log.Errorf("Command is already completed")
+				}
+			}
+		}
+	}
+}

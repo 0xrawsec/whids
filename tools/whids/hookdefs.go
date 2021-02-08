@@ -56,6 +56,9 @@ type processTrack struct {
 	ParentServices         string
 	Hashes                 string
 	History                []string
+	Integrity              float64
+	IntegrityTimeout       bool
+	IntegrityComputed      bool
 	Stats                  stats
 	MemDumped              bool
 	DumpsCount             int
@@ -178,6 +181,42 @@ func (pt *ProcessTracker) Del(guid string) {
 
 ////////////////////////////////// Hooks //////////////////////////////////
 
+const (
+	_ = 1 << (iota * 10)
+	Kilo
+	Mega
+)
+
+const (
+	// Sysmon Event IDs
+	_ = iota
+	IDProcessCreate
+	IDFileTime
+	IDNetworkConnect
+	IDServiceStateChange
+	IDProcessTerminate
+	IDDriverLoad
+	IDImageLoad
+	IDCreateRemoteThread
+	IDRawAccessRead
+	IDAccessProcess
+	IDFileCreate
+	IDRegKey
+	IDRegSetValue
+	IDRegName
+	IDCreateStreamHash
+	IDServiceConfigurationChange
+	IDCreateNamedPipe
+	IDConnectNamedPipe
+	IDWMIFilter
+	IDWMIConsumer
+	IDWMIBinding
+	IDDNSQuery
+	IDFileDelete
+	IDClipboardChange
+	IDProcessTampering
+)
+
 var (
 	// Globals needed by Hooks
 	dumpDirectory          string
@@ -209,6 +248,10 @@ var (
 	fltImageSize       = hooks.NewFilter([]int64{1, 6, 7}, "Microsoft-Windows-Sysmon/Operational")
 	fltStats           = hooks.NewFilter([]int64{1, 3, 11}, "Microsoft-Windows-Sysmon/Operational")
 	fltDNS             = hooks.NewFilter([]int64{22}, "Microsoft-Windows-Sysmon/Operational")
+	fltClipboard       = hooks.NewFilter([]int64{24}, "Microsoft-Windows-Sysmon/Operational")
+	fltImageTampering  = hooks.NewFilter([]int64{25}, "Microsoft-Windows-Sysmon/Operational")
+
+	fltFSObjectAccess = hooks.NewFilter([]int64{4663}, "Security")
 )
 
 var (
@@ -218,6 +261,9 @@ var (
 	pathDNSQueryValue   = evtx.Path("/Event/EventData/QueryName")
 	pathDNSQueryType    = evtx.Path("/Event/EventData/QueryType")
 	pathDNSQueryResults = evtx.Path("/Event/EventData/QueryResults")
+
+	// FileSystemAudit logs
+	pathFSAuditProcessId = pathSysmonProcessId
 
 	// Sysmon related paths
 	pathSysmonDestIP            = evtx.Path("/Event/EventData/DestinationIp")
@@ -245,6 +291,7 @@ var (
 	pathSysmonParentProcessId   = evtx.Path("/Event/EventData/ParentProcessId")
 	pathSysmonProcessId         = evtx.Path("/Event/EventData/ProcessId")
 	pathSysmonSourceProcessId   = evtx.Path("/Event/EventData/SourceProcessId")
+	pathSysmonTargetProcessId   = evtx.Path("/Event/EventData/TargetProcessId")
 	pathSysmonTargetFilename    = evtx.Path("/Event/EventData/TargetFilename")
 	pathSysmonCurrentDirectory  = evtx.Path("/Event/EventData/CurrentDirectory")
 	pathSysmonDetails           = evtx.Path("/Event/EventData/Details")
@@ -276,7 +323,7 @@ var (
 	// Use to store process information by hook
 	pathParentIntegrity  = evtx.Path("/Event/EventData/ParentProcessIntegrity")
 	pathProcessIntegrity = evtx.Path("/Event/EventData/ProcessIntegrity")
-	pathIntegrityTimeout = evtx.Path("/Event/EventData/IntegrityTimeout")
+	pathIntegrityTimeout = evtx.Path("/Event/EventData/ProcessIntegrityTimeout")
 
 	// Use to store pathServices information by hook
 	pathServices       = evtx.Path("/Event/EventData/Services")
@@ -305,6 +352,9 @@ var (
 	pathImageHashes  = evtx.Path("/Event/EventData/ImageHashes")
 	pathSourceHashes = evtx.Path("/Event/EventData/SourceHashes")
 	pathTargetHashes = evtx.Path("/Event/EventData/TargetHashes")
+
+	// Use to enrich Clipboard events
+	pathSysmonClipboardData = evtx.Path("/Event/EventData/ClipboardData")
 )
 
 var (
@@ -441,6 +491,7 @@ func hookTrack(e *evtx.GoEvtxMap) {
 														ParentProcessGUID: pguid,
 														Hashes:            hashes,
 														History:           make([]string, 0),
+														Integrity:         -1.0,
 														Stats:             stats{0, 0, 0, make(map[string]*int64)},
 													}
 													if parent := processTracker.GetByGuid(pguid); parent != nil {
@@ -612,36 +663,38 @@ func hookSelfGUID(e *evtx.GoEvtxMap) {
 	}
 }
 
-func hookProcessIntegrity(e *evtx.GoEvtxMap) {
-	// Sysmon Create Process
-	if bootCompleted && e.EventID() == 1 {
-		// Default values
-		e.Set(&pathParentIntegrity, toString(-1.0))
-		e.Set(&pathProcessIntegrity, toString(-1.0))
-		e.Set(&pathIntegrityTimeout, toString(false))
+func isIntegrityComputed(pt *processTrack) bool {
+	if pt == nil {
+		return false
+	}
+	return pt.IntegrityComputed
+}
 
-		if ppid, err := e.GetInt(&pathSysmonParentProcessId); err == nil {
-			if kernel32.IsPIDRunning(int(ppid)) {
-				da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
-				hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(ppid))
-				if err != nil {
-					log.Errorf("Cannot open parent process to check integrity PPID=%d: %s", ppid, err)
-				} else {
-					defer kernel32.CloseHandle(hProcess)
-					bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
-					if err != nil {
-						log.Errorf("Cannot check integrity of parent PPID=%d: %s", ppid, err)
-					} else {
-						if slen != 0 {
-							e.Set(&pathParentIntegrity, toString(utils.Round(float64(bdiff)*100/float64(slen), 2)))
-						}
-					}
-				}
-			} else {
-				log.Debugf("Cannot check integrity of parent PPID=%d: process terminated", ppid)
+func hookFileSystemAudit(e *evtx.GoEvtxMap) {
+	e.Set(&pathSysmonCommandLine, "?")
+	e.Set(&pathSysmonProcessGUID, "?")
+	e.Set(&pathImageHashes, "?")
+	if pid, err := e.GetInt(&pathFSAuditProcessId); err == nil {
+		if pt := processTracker.GetByPID(pid); pt != nil {
+			if pt.CommandLine != "" {
+				e.Set(&pathSysmonCommandLine, pt.CommandLine)
+			}
+			if pt.Hashes != "" {
+				e.Set(&pathImageHashes, pt.Hashes)
+			}
+			if pt.ProcessGUID != "" {
+				e.Set(&pathSysmonProcessGUID, pt.ProcessGUID)
 			}
 		}
+	}
+}
 
+func hookProcessIntegrityProcTamp(e *evtx.GoEvtxMap) {
+	// Default values
+	e.Set(&pathProcessIntegrity, toString(-1.0))
+
+	// Sysmon Create Process
+	if e.EventID() == IDProcessTampering {
 		if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
 			if kernel32.IsPIDRunning(int(pid)) {
 				// we first need to wait main process thread
@@ -658,7 +711,6 @@ func hookProcessIntegrity(e *evtx.GoEvtxMap) {
 							checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
 							if err == nil {
 								log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
-								e.Set(&pathIntegrityTimeout, toString(true))
 							}
 							kernel32.CloseHandle(checkThread)
 						} else {
@@ -674,7 +726,8 @@ func hookProcessIntegrity(e *evtx.GoEvtxMap) {
 									log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
 								} else {
 									if slen != 0 {
-										e.Set(&pathProcessIntegrity, toString(utils.Round(float64(bdiff)*100/float64(slen), 2)))
+										integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
+										e.Set(&pathProcessIntegrity, toString(integrity))
 									}
 								}
 							}
@@ -683,6 +736,116 @@ func hookProcessIntegrity(e *evtx.GoEvtxMap) {
 				}
 			} else {
 				log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
+			}
+		}
+	}
+
+}
+
+func hookProcessIntegrityProcCreate(e *evtx.GoEvtxMap) {
+	// Default values
+	e.Set(&pathParentIntegrity, toString(-1.0))
+	e.Set(&pathProcessIntegrity, toString(-1.0))
+	e.Set(&pathIntegrityTimeout, toString(false))
+
+	// Sysmon Create Process
+	if bootCompleted && e.EventID() == 1 {
+		if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
+			// parent processTrack
+			ppt := processTracker.GetByGuid(pguid)
+			// we first check if we already computed process integrity
+			if isIntegrityComputed(ppt) {
+				e.Set(&pathParentIntegrity, toString(ppt.Integrity))
+			} else {
+				// if integrity is not yet computed, we do it
+				if ppid, err := e.GetInt(&pathSysmonParentProcessId); err == nil {
+					if kernel32.IsPIDRunning(int(ppid)) {
+						da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
+						hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(ppid))
+						if err != nil {
+							log.Errorf("Cannot open parent process to check integrity PPID=%d: %s", ppid, err)
+						} else {
+							defer kernel32.CloseHandle(hProcess)
+							bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
+							if err != nil {
+								log.Errorf("Cannot check integrity of parent PPID=%d: %s", ppid, err)
+							} else {
+								if slen != 0 {
+									integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
+									if ppt != nil {
+										ppt.Integrity = integrity
+										ppt.IntegrityComputed = true
+									}
+									e.Set(&pathParentIntegrity, toString(integrity))
+								}
+							}
+						}
+					} else {
+						log.Debugf("Cannot check integrity of parent PPID=%d: process terminated", ppid)
+					}
+				}
+			}
+		}
+
+		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
+			pt := processTracker.GetByGuid(guid)
+			if isIntegrityComputed(pt) {
+				if pt.IntegrityComputed {
+					e.Set(&pathProcessIntegrity, toString(pt.Integrity))
+					e.Set(&pathIntegrityTimeout, toString(pt.IntegrityTimeout))
+				}
+			} else {
+				if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
+					if kernel32.IsPIDRunning(int(pid)) {
+						// we first need to wait main process thread
+						mainTid := kernel32.GetFirstTidOfPid(int(pid))
+						// if we found the main thread of pid
+						if mainTid > 0 {
+							hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+							if err != nil {
+								log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
+							} else {
+								defer kernel32.CloseHandle(hThread)
+								if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
+									// We check whether the thread still exists
+									checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+									if err == nil {
+										log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
+										if pt != nil {
+											pt.IntegrityTimeout = true
+										}
+										e.Set(&pathIntegrityTimeout, toString(true))
+									}
+									kernel32.CloseHandle(checkThread)
+								} else {
+									da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
+									hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
+
+									if err != nil {
+										log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
+									} else {
+										defer kernel32.CloseHandle(hProcess)
+										bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
+										if err != nil {
+											log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
+										} else {
+											if slen != 0 {
+												integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
+												if pt != nil {
+													pt.Integrity = integrity
+													pt.IntegrityComputed = true
+												}
+												e.Set(&pathProcessIntegrity, toString(integrity))
+											}
+										}
+									}
+								}
+							}
+						}
+					} else {
+						log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
+					}
+				}
 			}
 		}
 	}
@@ -710,14 +873,34 @@ func hookEnrichServices(e *evtx.GoEvtxMap) {
 			}
 
 			if sguid, err := e.GetString(sguidPath); err == nil {
+				// First try to resolve it by tracked process
 				if t := processTracker.GetByGuid(sguid); t != nil {
 					e.Set(&pathSourceServices, t.Services)
+				} else {
+					// If it fails we resolve the services by PID
+					if spid, err := e.GetInt(&pathSysmonSourceProcessId); err == nil {
+						if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(spid)); err == nil {
+							e.Set(&pathSourceServices, svcs)
+						} else {
+							log.Errorf("Failed to resolve service from PID=%d: %s", spid, err)
+						}
+					}
 				}
 			}
 
+			// First try to resolve it by tracked process
 			if tguid, err := e.GetString(tguidPath); err == nil {
 				if t := processTracker.GetByGuid(tguid); t != nil {
 					e.Set(&pathTargetServices, t.Services)
+				} else {
+					// If it fails we resolve the services by PID
+					if tpid, err := e.GetInt(&pathSysmonTargetProcessId); err == nil {
+						if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(tpid)); err == nil {
+							e.Set(&pathTargetServices, svcs)
+						} else {
+							log.Errorf("Failed to resolve service from PID=%d: %s", tpid, err)
+						}
+					}
 				}
 			}
 		default:
@@ -877,6 +1060,28 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 				e.Set(&pathImageHashes, "?")
 				if track.Hashes != "" {
 					e.Set(&pathImageHashes, track.Hashes)
+				}
+			}
+		}
+	}
+}
+
+func hookClipboardEvents(e *evtx.GoEvtxMap) {
+	e.Set(&pathSysmonClipboardData, "?")
+	if hashes, err := e.GetString(&pathSysmonHashes); err == nil {
+		fname := fmt.Sprintf("CLIP-%s", sysmonArcFileRe.ReplaceAllString(hashes, ""))
+		path := filepath.Join(sysmonArchiveDirectory, fname)
+		if fi, err := os.Stat(path); err == nil {
+			// limit size of ClipboardData to 1 Mega
+			if fi.Mode().IsRegular() && fi.Size() < Mega {
+				if data, err := ioutil.ReadFile(path); err == nil {
+					// We try to decode utf16 content because regexp can only match utf8
+					// Thus doing this is needed to apply detection rule on clipboard content
+					if enc, err := utils.Utf16ToUtf8(data); err == nil {
+						e.Set(&pathSysmonClipboardData, string(enc))
+					} else {
+						e.Set(&pathSysmonClipboardData, fmt.Sprintf("%q", data))
+					}
 				}
 			}
 		}

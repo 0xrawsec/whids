@@ -27,7 +27,7 @@ test:
 	$(MAKE) installer
 	$(MAKE) sysmon
 	$(MAKE) testrules
-	cp -r $(RELEASE) $(TEST)
+	cp -r $(RELEASE)/.. $(TEST)
 
 init:
 	mkdir -p $(RELEASE)

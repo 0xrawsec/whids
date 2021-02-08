@@ -1,10 +1,12 @@
-package collector
+package api
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,30 +18,83 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
 )
 
 // ClientConfig structure definition
 type ClientConfig struct {
-	Host          string `json:"host"`
-	Port          int    `json:"port"`
-	Proto         string `json:"proto"`
-	Key           string `json:"key"`
-	ServerKey     string `json:"server-key"`
-	Unsafe        bool   `json:"unsafe"`
-	MaxUploadSize int64  `json:"max-upload-size"`
+	Host              string `json:"host"`
+	Port              int    `json:"port"`
+	Proto             string `json:"proto"`
+	UUID              string `json:"endpoint-uuid"`
+	Key               string `json:"endpoint-key"`
+	ServerKey         string `json:"server-key"`
+	ServerFingerprint string `json:"server-fingerprint"`
+	Unsafe            bool   `json:"unsafe"`
+	MaxUploadSize     int64  `json:"max-upload-size"`
+}
+
+// ManagerIP returns the IP address of the manager if any, returns nil otherwise
+func (cc *ClientConfig) ManagerIP() net.IP {
+	if ip := net.ParseIP(cc.Host); ip != nil {
+		return ip
+	}
+
+	if ips, err := net.LookupIP(cc.Host); err == nil {
+		return ips[0]
+	}
+
+	return nil
+}
+
+// Transport creates an approriate HTTP transport from a configuration
+// Cert pinning inspired by: https://medium.com/@zmanian/server-public-key-pinning-in-go-7a57bbe39438
+func (cc *ClientConfig) Transport() http.RoundTripper {
+	return &http.Transport{
+		Proxy: nil,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			c, err := tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: cc.Unsafe})
+
+			if err != nil {
+				return c, err
+			}
+
+			if cc.ServerFingerprint == "" {
+				return c, err
+			}
+			connstate := c.ConnectionState()
+			for _, peercert := range connstate.PeerCertificates {
+				der, err := x509.MarshalPKIXPublicKey(peercert.PublicKey)
+				hash := data.Sha256(der)
+				if err != nil {
+					return c, err
+				}
+
+				if hash == cc.ServerFingerprint {
+					return c, err
+				}
+			}
+			return c, fmt.Errorf("Server fingerprint not verified")
+		},
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }
 
 // ManagerClient structure definition
 type ManagerClient struct {
-	httpClient    http.Client
-	proto         string
-	host          string
-	port          string
-	key           string
-	serverKey     string
-	maxUploadSize int64
+	httpClient http.Client
+	config     ClientConfig
+	managerIP  net.IP
 }
 
 const (
@@ -52,35 +107,18 @@ const (
 )
 
 var (
-	// NoProxyTransport http transport bypassing proxy
-	NoProxyTransport http.RoundTripper = &http.Transport{
-		Proxy: nil,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	// NoProxyUnsafeTransport http transport bypassing proxy and SSL verification
-	NoProxyUnsafeTransport http.RoundTripper = &http.Transport{
-		Proxy: nil,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-	}
+	// Hostname the client is running on (initialized in init() function)
+	Hostname string
 )
+
+func init() {
+	var err error
+	Hostname, err = os.Hostname()
+	if err != nil {
+		id := data.Md5([]byte(fmt.Sprintf("%s", time.Now().Format(time.RFC3339Nano))))
+		Hostname = fmt.Sprintf("HOST-%s", id)
+	}
+}
 
 // Sha256StringArray utility
 func Sha256StringArray(array []string) string {
@@ -93,52 +131,33 @@ func Sha256StringArray(array []string) string {
 
 // NewManagerClient creates a new Client to interface with the manager
 func NewManagerClient(c *ClientConfig) (*ManagerClient, error) {
-	// Type of HTTP transport to use
-	tpt := NoProxyTransport
-	if c.Unsafe {
-		tpt = NoProxyUnsafeTransport
-	}
+
+	tpt := c.Transport()
 
 	mc := &ManagerClient{
-		httpClient:    http.Client{Transport: tpt},
-		host:          c.Host,
-		proto:         c.Proto,
-		port:          DefaultPort,
-		key:           c.Key,
-		serverKey:     c.ServerKey,
-		maxUploadSize: DefaultMaxUploadSize,
+		httpClient: http.Client{Transport: tpt},
+		config:     *c,
+		managerIP:  c.ManagerIP(),
 	}
 
 	// host
-	if mc.host == "" {
+	if mc.config.Host == "" {
 		return nil, fmt.Errorf("Field \"host\" is missing from configuration")
 	}
 	// protocol
-	if mc.proto == "" {
-		mc.proto = "https"
+	if mc.config.Proto == "" {
+		mc.config.Proto = "https"
 	}
-	switch mc.proto {
+
+	switch mc.config.Proto {
 	case "http", "https":
 	default:
 		return nil, fmt.Errorf("Protocol not supported (only http(s))")
 	}
 
-	// port
-	if c.Port > 0 {
-		mc.port = fmt.Sprintf("%d", c.Port)
-	}
-
 	// key
-	if mc.key == "" {
+	if mc.config.Key == "" {
 		return nil, fmt.Errorf("Field \"key\" is missing from configuration")
-	}
-
-	// server-key
-	mc.serverKey = c.ServerKey
-
-	// max-upload-size
-	if c.MaxUploadSize > 0 {
-		mc.maxUploadSize = c.MaxUploadSize
 	}
 
 	return mc, nil
@@ -150,14 +169,36 @@ func (m *ManagerClient) Prepare(method, url string, body io.Reader) (*http.Reque
 
 	if err == nil {
 		r.Header.Add("User-Agent", UserAgent)
-		r.Header.Add("Api-Key", m.key)
+		r.Header.Add("Hostname", Hostname)
+		r.Header.Add("UUID", m.config.UUID)
+		r.Header.Add("Api-Key", m.config.Key)
 	}
+	return r, err
+}
+
+// PrepareGzip prepares a http.Request gzip encoded to be sent to the manager
+func (m *ManagerClient) PrepareGzip(method, url string, body io.Reader) (*http.Request, error) {
+	// Prepare gzip content
+	compBody := new(bytes.Buffer)
+	w := gzip.NewWriter(compBody)
+	b, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("PostLogs failed to prepare body")
+	}
+	w.Write(b)
+	w.Close()
+
+	r, err := m.Prepare(method, url, bytes.NewBuffer(compBody.Bytes()))
+
+	// setting header
+	r.Header.Add("Content-Encoding", "gzip")
+
 	return r, err
 }
 
 // IsServerAuthEnforced returns true if server authentication is requested by the client
 func (m *ManagerClient) IsServerAuthEnforced() bool {
-	return m.serverKey != ""
+	return m.config.ServerKey != ""
 }
 
 // IsServerUp returns true if manager server is up
@@ -197,7 +238,7 @@ func (m *ManagerClient) IsServerAuthenticated() (auth bool, up bool) {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
 				key, _ := ioutil.ReadAll(resp.Body)
-				if m.serverKey == string(key) {
+				if m.config.ServerKey == string(key) {
 					// if the server can be authenticated
 					return true, true
 				}
@@ -214,7 +255,7 @@ func (m *ManagerClient) IsServerAuthenticated() (auth bool, up bool) {
 
 func (m *ManagerClient) buildURI(url string) string {
 	url = strings.Trim(url, "/")
-	return fmt.Sprintf("%s://%s:%s/%s", m.proto, m.host, m.port, url)
+	return fmt.Sprintf("%s://%s:%d/%s", m.config.Proto, m.config.Host, m.config.Port, url)
 }
 
 // GetRulesSha256 returns the sha256 string of the latest batch of rules available on the server
@@ -384,7 +425,7 @@ func (m *ManagerClient) isFileAboveUploadLimit(path string) bool {
 	if fsutil.IsFile(path) {
 		stats, err := os.Stat(path)
 		if err == nil {
-			return stats.Size() > m.maxUploadSize
+			return stats.Size() > m.config.MaxUploadSize
 		}
 	}
 	return true
@@ -428,19 +469,7 @@ func (m *ManagerClient) PostDump(f *FileUpload) error {
 func (m *ManagerClient) PostLogs(r io.Reader) error {
 	if auth, up := m.IsServerAuthenticated(); auth {
 		if up {
-			// Prepare gzip content
-			body := new(bytes.Buffer)
-			w := gzip.NewWriter(body)
-			b, err := ioutil.ReadAll(r)
-			if err != nil {
-				return fmt.Errorf("PostLogs failed to prepare body")
-			}
-			w.Write(b)
-			w.Close()
-
-			req, err := m.Prepare("POST", PostLogsURL, bytes.NewBuffer(body.Bytes()))
-			// Sending gzip data
-			req.Header.Add("Accept-Encoding", "gzip")
+			req, err := m.PrepareGzip("POST", PostLogsURL, r)
 
 			if err != nil {
 				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
@@ -463,6 +492,78 @@ func (m *ManagerClient) PostLogs(r io.Reader) error {
 		return fmt.Errorf("PostLogs failed because manager is down, logs not sent")
 	}
 	return fmt.Errorf("PostLogs failed, server cannot be authenticated")
+}
+
+// ExecuteCommand executes a Command on the endpoint and return the result
+// to the manager. NB: this method is blocking due to Command.Run function call
+func (m *ManagerClient) ExecuteCommand() error {
+	if auth, _ := m.IsServerAuthenticated(); auth {
+		env := AliasEnv{m.managerIP}
+		command := NewCommandWithEnv(&env)
+
+		// getting command to be executed
+		req, err := m.Prepare("GET", CommandURL, nil)
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to prepare request: %s", err)
+		}
+
+		resp, err := m.httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to issue HTTP request: %s", err)
+		}
+
+		// if there is no command to execute, the server replies with this status code
+		if resp.StatusCode == http.StatusNoContent {
+			// nothing else to do
+			return nil
+		}
+
+		jsonCommand, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to read HTTP response body: %s", err)
+		}
+
+		// unmarshal command to be executed
+		if err := json.Unmarshal(jsonCommand, &command); err != nil {
+			return fmt.Errorf("ExecuteCommand failed to unmarshal command: %s", err)
+		}
+
+		// running the command, this is a blocking function, it waits the command to finish
+		if err := command.Run(); err != nil {
+			log.Errorf("ExecuteCommand failed to run command \"%s\": %s", command, err)
+		}
+
+		// stripping unecessary content to send back the command
+		command.Strip()
+		for fn, ff := range command.Fetch {
+			log.Infof("file: %s len: %d error: %s", fn, len(ff.Data), ff.Error)
+		}
+		// command should now contain stdout and stderr
+		jsonCommand, err = json.Marshal(command)
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to marshal command")
+		}
+
+		// send back the response
+		req, err = m.PrepareGzip("POST", CommandURL, bytes.NewBuffer(jsonCommand))
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to prepare POST request")
+		}
+
+		resp, err = m.httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("ExecuteCommand failed to issue HTTP request: %s", err)
+		}
+
+		if resp != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("ExecuteCommand failed to send command results, unexpected HTTP status code %d", resp.StatusCode)
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("ExecuteCommand failed, server cannot be authenticated")
 }
 
 // Close closes idle connections from underlying transport

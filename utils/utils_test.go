@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -14,7 +13,7 @@ func TestSvcFromPid(t *testing.T) {
 }
 
 func TestRegQuery(t *testing.T) {
-	path := `HKLM\System\CurrentControlSet\Services\SysmonDrv\Parameters\HashingAlgorithm`
+	/*path := `HKLM\System\CurrentControlSet\Services\SysmonDrv\Parameters\HashingAlgorithm`
 	key, value := filepath.Split(path)
-	t.Logf("Sysmon hashing algorithm: %s", RegQuery(key, value))
+	t.Logf("Sysmon hashing algorithm: %s", RegQuery(key, value))*/
 }

@@ -1,4 +1,4 @@
-package collector
+package api
 
 import (
 	"bytes"
@@ -154,7 +154,7 @@ func (f *Forwarder) PipeEvent(e *evtx.GoEvtxMap) {
 
 // Save save the piped events to the disks
 func (f *Forwarder) Save() error {
-	log.Infof("Collector saved logs to be sent later on")
+	log.Debugf("Collector saved logs to be sent later on")
 
 	// Clean queued files if needed
 	if f.DiskSpaceQueue() > DiskSpaceThreshold {
@@ -310,10 +310,10 @@ func (f *Forwarder) ProcessQueue() {
 		}
 
 		// everything went fine, then we can delete the queued file
+		log.Info("Deleting queue file : %s", fp)
 		if err = os.Remove(fp); err != nil {
 			log.Errorf("Failed to delete queued file (%s): %s", fp, err)
 		}
-		//}
 	}
 }
 

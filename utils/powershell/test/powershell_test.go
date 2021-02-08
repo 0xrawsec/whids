@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"utils/powershell"
+	"github.com/0xrawsec/whids/utils/powershell"
 )
 
 const (

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -9,14 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
-
-	"github.com/0xrawsec/golang-utils/readers"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -26,7 +24,7 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
-	"github.com/0xrawsec/whids/collector"
+	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/hooks"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -74,6 +72,8 @@ var (
 
 	// extensions of files to upload to manager
 	uploadExts = datastructs.NewInitSyncedSet(".gz", ".sha256")
+
+	archivedRe = regexp.MustCompile(`(CLIP-)??[0-9A-F]{32,}(\..*)?`)
 )
 
 func allChannels() []string {
@@ -87,27 +87,28 @@ func allChannels() []string {
 }
 
 var (
-	emptyForwarderConfig = collector.ForwarderConfig{}
+	emptyForwarderConfig = api.ForwarderConfig{}
 	logDir               = filepath.Join(abs, "Logs")
 
 	// DefaultHIDSConfig is the default HIDS configuration
 	DefaultHIDSConfig = HIDSConfig{
 		RulesDB:      filepath.Join(abs, "Database", "Rules"),
 		ContainersDB: filepath.Join(abs, "Database", "Containers"),
-		FwdConfig: collector.ForwarderConfig{
+		FwdConfig: api.ForwarderConfig{
 			Local: true,
-			Client: collector.ClientConfig{
-				MaxUploadSize: collector.DefaultMaxUploadSize,
+			Client: api.ClientConfig{
+				MaxUploadSize: api.DefaultMaxUploadSize,
 			},
-			Logging: collector.LoggingConfig{
+			Logging: api.LoggingConfig{
 				Dir:              filepath.Join(logDir, "Alerts"),
 				RotationInterval: "24h",
 			},
 		},
 		Channels: []string{"all"},
 		Sysmon: SysmonConfig{
-			Bin:           "C:\\Windows\\Sysmon64.exe",
-			CleanArchived: true,
+			Bin:              "C:\\Windows\\Sysmon64.exe",
+			ArchiveDirectory: "C:\\Sysmon\\",
+			CleanArchived:    true,
 		},
 		Dump: DumpConfig{
 			Mode:          "file|registry",
@@ -144,26 +145,27 @@ func (d *DumpConfig) IsModeEnabled(mode string) bool {
 }
 
 type SysmonConfig struct {
-	Bin           string `json:"bin"`
-	CleanArchived bool   `json:"clean-archived"`
+	Bin              string `json:"bin"`
+	ArchiveDirectory string `json:"archive-directory"`
+	CleanArchived    bool   `json:"clean-archived"`
 }
 
 // HIDSConfig structure
 type HIDSConfig struct {
-	RulesDB        string                    `json:"rules-db"`
-	ContainersDB   string                    `json:"containers-db"`
-	FwdConfig      collector.ForwarderConfig `json:"forwarder"`
-	Channels       []string                  `json:"channels"`
-	Sysmon         SysmonConfig              `json:"sysmon"`
-	Dump           DumpConfig                `json:"dump"`
-	CritTresh      int                       `json:"criticality-treshold"`
-	UpdateInterval time.Duration             `json:"update-interval"`
-	EnableHooks    bool                      `json:"en-hooks"`
-	Logfile        string                    `json:"logfile"` // for WHIDS log messages (not alerts)
-	LogAll         bool                      `json:"log-all"` // log all events to logfile (used for debugging)
-	Endpoint       bool                      `json:"endpoint"`
+	RulesDB        string              `json:"rules-db"`
+	ContainersDB   string              `json:"containers-db"`
+	FwdConfig      api.ForwarderConfig `json:"forwarder"`
+	Channels       []string            `json:"channels"`
+	Sysmon         SysmonConfig        `json:"sysmon"`
+	Dump           DumpConfig          `json:"dump"`
+	CritTresh      int                 `json:"criticality-treshold"`
+	UpdateInterval time.Duration       `json:"update-interval"`
+	EnableHooks    bool                `json:"en-hooks"`
+	Logfile        string              `json:"logfile"` // for WHIDS log messages (not alerts)
+	LogAll         bool                `json:"log-all"` // log all events to logfile (used for debugging)
+	Endpoint       bool                `json:"endpoint"`
 	// private members
-	sysmonArchiveDirectory string
+	//sysmonArchiveDirectory string
 }
 
 // LoadsHIDSConfig loads a HIDS configuration from a file
@@ -178,27 +180,6 @@ func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
 	return
 }
 
-func (c *HIDSConfig) SysmonArchiveDirectory() (dir string) {
-	if c.sysmonArchiveDirectory != "" {
-		return sysmonArchiveDirectory
-	}
-
-	out, err := exec.Command(c.Sysmon.Bin, "-c").Output()
-	if err != nil {
-		log.Errorf("Failed to query sysmon config: %s", err)
-		return
-	}
-
-	for line := range readers.ReadlinesUTF16(bytes.NewBuffer(out)) {
-		if strings.Index(string(line), "Filter archive directory:") >= 0 {
-			if sp := strings.SplitN(string(line), ":", 2); len(sp) == 2 {
-				return strings.TrimSpace(sp[1])
-			}
-		}
-	}
-	return
-}
-
 // SetHooksGlobals sets the global variables used by hooks
 func (c *HIDSConfig) SetHooksGlobals() {
 	dumpDirectory = c.Dump.Dir
@@ -206,7 +187,7 @@ func (c *HIDSConfig) SetHooksGlobals() {
 	flagDumpCompress = c.Dump.Compression
 	flagDumpUntracked = c.Dump.DumpUntracked
 	maxDumps = c.Dump.MaxDumps
-	sysmonArchiveDirectory = c.SysmonArchiveDirectory()
+	sysmonArchiveDirectory = c.Sysmon.ArchiveDirectory
 }
 
 // IsDumpEnabled returns true if any kind of dump is enabled
@@ -257,7 +238,7 @@ type HIDS struct {
 	engine          engine.Engine
 	preHooks        *hooks.HookManager
 	postHooks       *hooks.HookManager
-	forwarder       *collector.Forwarder
+	forwarder       *api.Forwarder
 	channels        datastructs.SyncedSet // Windows log channels to listen to
 	channelsSignals chan bool
 	config          *HIDSConfig
@@ -299,7 +280,7 @@ func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
 	}
 
 	// loading forwarder config
-	if h.forwarder, err = collector.NewForwarder(&c.FwdConfig); err != nil {
+	if h.forwarder, err = api.NewForwarder(&c.FwdConfig); err != nil {
 		return nil, err
 	}
 
@@ -340,9 +321,12 @@ func (h *HIDS) initHooks(advanced bool) {
 	if advanced {
 		h.preHooks.Hook(hookImageLoad, fltImageLoad)
 		h.preHooks.Hook(hookSetImageSize, fltImageSize)
-		h.preHooks.Hook(hookProcessIntegrity, fltImageSize)
+		//h.preHooks.Hook(hookProcessIntegrity, fltImageSize)
+		h.preHooks.Hook(hookProcessIntegrityProcTamp, fltImageTampering)
 		h.preHooks.Hook(hookEnrichServices, fltAnySysmon)
 		h.preHooks.Hook(hookEnrichAnySysmon, fltAnySysmon)
+		h.preHooks.Hook(hookClipboardEvents, fltClipboard)
+		h.preHooks.Hook(hookFileSystemAudit, fltFSObjectAccess)
 		// Not sastifying results with Sysmon 11.11 we should try enabling this on newer versions
 		// h.preHooks.Hook(hookDNS, fltDNS)
 		// h.preHooks.Hook(hookEnrichDNSSysmon, fltNetworkConnect)
@@ -365,11 +349,11 @@ func (h *HIDS) initHooks(advanced bool) {
 	}
 }
 
-func (h *HIDS) cleanArchivedRoutine() {
+func (h *HIDS) cleanArchivedRoutine() bool {
 	if h.config.Sysmon.CleanArchived {
 		go func() {
 			log.Info("Starting routine to cleanup Sysmon archived files")
-			archivePath := h.config.SysmonArchiveDirectory()
+			archivePath := h.config.Sysmon.ArchiveDirectory
 
 			if archivePath == "" {
 				log.Error("Sysmon archive directory not found")
@@ -383,19 +367,25 @@ func (h *HIDS) cleanArchivedRoutine() {
 					expired := time.Now().Add(time.Minute * -5)
 					for wi := range fswalker.Walk(archivePath) {
 						for _, fi := range wi.Files {
-							path := filepath.Join(wi.Dirpath, fi.Name())
-							if fi.ModTime().Before(expired) {
-								if err := os.Remove(path); err != nil {
-									log.Errorf("Failed to remove archived file: %s", err)
+							if archivedRe.MatchString(fi.Name()) {
+								path := filepath.Join(wi.Dirpath, fi.Name())
+								if fi.ModTime().Before(expired) {
+									if err := os.Remove(path); err != nil {
+										log.Errorf("Failed to remove archived file: %s", err)
+									}
 								}
 							}
 						}
 					}
 					time.Sleep(time.Minute * 1)
 				}
+			} else {
+				log.Errorf(fmt.Sprintf("No such Sysmon archive directory: %s", archivePath))
 			}
 		}()
+		return true
 	}
+	return false
 }
 
 // returns true if the update routine is started
@@ -579,7 +569,7 @@ func (h *HIDS) updateContainers() (err error) {
 			}
 
 			// we compare the integrity of the container received
-			compSha256 := collector.Sha256StringArray(cont)
+			compSha256 := api.Sha256StringArray(cont)
 			sha256, _ := cl.GetContainerSha256(contName)
 			if compSha256 != sha256 {
 				return fmt.Errorf("Failed to verify container \"%s\" integrity", contName)
@@ -687,14 +677,35 @@ func (h *HIDS) uploadRoutine() bool {
 	return false
 }
 
+func (h *HIDS) commandRunnerRoutine() bool {
+	if h.config.IsForwardingEnabled() {
+		go func() {
+			for {
+				if err := h.forwarder.Client.ExecuteCommand(); err != nil {
+					log.Error(err)
+				}
+				time.Sleep(5 * time.Second)
+			}
+		}()
+		return true
+	}
+	return false
+}
+
 // Run starts the WHIDS engine and waits channel listening is stopped
 func (h *HIDS) Run() {
-	// Runs the forwarder in a separate thread
+	// Running all the threads
+	// Runs the forwarder
 	h.forwarder.Run()
 
 	// Start the update routine
 	log.Infof("Update routine running: %t", h.updateRoutine())
+	// starting dump forwarding routine
 	log.Infof("Dump forwarding routine running: %t", h.uploadRoutine())
+	// running the command runner routine
+	log.Infof("Command runner routine running: %t", h.commandRunnerRoutine())
+	// start the archive cleanup routine (might create a new thread)
+	log.Infof("Sysmon archived files cleanup routine running: %t", h.cleanArchivedRoutine())
 
 	channels := make([]string, 0)
 	// We prepare the list of channels
@@ -711,9 +722,6 @@ func (h *HIDS) Run() {
 		return
 	}
 
-	// start the archive cleanup routine (might create a new thread)
-	h.cleanArchivedRoutine()
-
 	h.startTime = time.Now()
 	h.waitGroup.Add(1)
 	go func() {
@@ -726,6 +734,7 @@ func (h *HIDS) Run() {
 
 		xmlEvents := h.eventProvider.FetchEvents(channels, wevtapi.EvtSubscribeToFutureEvents)
 		for xe := range xmlEvents {
+			//log.Warn("Received event")
 			event, err := XMLEventToGoEvtxMap(xe)
 			if err != nil {
 				log.Errorf("Failed to convert event: %s", err)
@@ -749,13 +758,12 @@ func (h *HIDS) Run() {
 			}
 
 			h.RLock()
-			if n, crit, filtered := h.engine.MatchOrFilter(event); len(n) > 0 || filtered {
-				// we pipe filtered event
-				if filtered && !h.PrintAll && !h.config.LogAll {
-					h.forwarder.PipeEvent(event)
-				}
 
-				if crit >= h.config.CritTresh {
+			//log.Warn("before matching event")
+			// if the event has matched at least one signature or is filtered
+			if n, crit, filtered := h.engine.MatchOrFilter(event); len(n) > 0 || filtered {
+				switch {
+				case crit >= h.config.CritTresh:
 					if !h.PrintAll && !h.config.LogAll {
 						h.forwarder.PipeEvent(event)
 					}
@@ -763,8 +771,14 @@ func (h *HIDS) Run() {
 					// Run hooks post detection
 					h.postHooks.RunHooksOn(event)
 					h.alertReported++
+				case filtered && !h.PrintAll && !h.config.LogAll:
+					event.Del(&engine.GeneInfoPath)
+					// we pipe filtered event
+					h.forwarder.PipeEvent(event)
 				}
 			}
+			//log.Warn("after matching event")
+
 			// Print everything
 			if h.PrintAll {
 				fmt.Println(utils.JSON(event))
