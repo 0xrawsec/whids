@@ -7,7 +7,6 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/pelletier/go-toml"
 
 	"github.com/0xrawsec/gene/reducer"
 
@@ -176,8 +176,8 @@ func (f *FileUpload) Dump(dir string) (err error) {
 
 // TLSConfig structure definition
 type TLSConfig struct {
-	Cert string `json:"cert"`
-	Key  string `json:"key"`
+	Cert string `toml:"cert" comment:"Path to the certificate file to use for TLS connections"`
+	Key  string `toml:"key" comment:"Path to the key to use for TLS connection"`
 }
 
 // Empty returns true if current TLSConfig is empty else false
@@ -229,20 +229,20 @@ func KeyGen(size int) string {
 
 // AdminUser structure definition
 type AdminUser struct {
-	Identifier string `json:"identifier"`
-	Key        string `json:"key"`
+	Identifier string `toml:"identifier"`
+	Key        string `toml:"key"`
 }
 
 type EndpointConfig struct {
-	UUID string `json:"uuid"`
-	Key  string `json:"key"`
+	UUID string `toml:"uuid" comment:"Unique client identifier"`
+	Key  string `toml:"key" comment:"API key used to authenticate the client"`
 }
 
 type EndpointAPIConfig struct {
-	Host      string           `json:"host"`
-	Port      int              `json:"port"`
-	ServerKey string           `json:"server-key"`
-	Endpoints []EndpointConfig `json:"endpoints"`
+	Host      string           `toml:"host" comment:"Hostname or IP where the API should listen to"`
+	Port      int              `toml:"port" comment:"Port used by the API"`
+	ServerKey string           `toml:"server-key" comment:"Server key used to do basic authentication of the server on clients.\n Configure certificate pinning on client offers better security."`
+	Endpoints []EndpointConfig `toml:"endpoints" comment:"Endpoints configurations"`
 }
 
 func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
@@ -256,9 +256,9 @@ func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
 }
 
 type ManagerLogConfig struct {
-	Root        string `json:"root"`
-	LogBasename string `json:"logfile"`
-	EnEnptLogs  bool   `json:"enable-endpoint-logging"`
+	Root        string `toml:"root" comment:"Root directory where logfiles are stored"`
+	LogBasename string `toml:"logfile" comment:"Logfile name (relative to root) used to store logs."`
+	EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints."`
 }
 
 func (c *ManagerLogConfig) AlertPath(uuid string, date time.Time) string {
@@ -269,16 +269,22 @@ func (c *ManagerLogConfig) LogPath(uuid string, date time.Time) string {
 	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), "logs.gz")
 }
 
+type MispConfig struct {
+	Proto  string `toml:"protocol" comment:"HTTP protocol to use (http or https)"`
+	Host   string `toml:"host" comment:"Hostname or IP address of MISP server"`
+	APIKey string `toml:"api-key" comment:"MISP API key"`
+}
+
 // ManagerConfig defines manager's configuration structure
 type ManagerConfig struct {
-	AdminAPI      AdminAPIConfig    `json:"admin-api"`
-	EndpointAPI   EndpointAPIConfig `json:"endpoint-api"`
-	Logging       ManagerLogConfig  `json:"logging"`
-	TLS           TLSConfig         `json:"tls"`
-	MISP          misp.MispConfig   `json:"misp"`
-	RulesDir      string            `json:"rules-dir"`
-	DumpDir       string            `json:"dump-dir"`
-	ContainersDir string            `json:"containers-dir"`
+	AdminAPI      AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
+	EndpointAPI   EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
+	Logging       ManagerLogConfig  `toml:"logging" comment:"Logging settings"`
+	TLS           TLSConfig         `toml:"tls" comment:"TLS settings. Leave empty, not to use TLS"`
+	MISP          MispConfig        `toml:"misp" comment:"MISP settings. Use this setting to push IOCs as containers on endpoints."`
+	RulesDir      string            `toml:"rules-dir" comment:"Gene rule directory.\n See: https://github.com/0xrawsec/gene-rules"`
+	DumpDir       string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
+	ContainersDir string            `toml:"containers-dir" comment:"Gene rules' containers directory\n (c.f. Gene documentation https://github.com/0xrawsec/gene)"`
 	path          string
 }
 
@@ -288,7 +294,7 @@ func LoadManagerConfig(path string) (*ManagerConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(b, &mc)
+	err = toml.Unmarshal(b, &mc)
 	mc.path = path
 	return &mc, err
 }
@@ -303,7 +309,7 @@ func (mc *ManagerConfig) SetPath(path string) {
 }
 
 func (mc *ManagerConfig) Save() error {
-	b, err := json.MarshalIndent(mc, "", "  ")
+	b, err := toml.Marshal(mc)
 	if err != nil {
 		return err
 	}

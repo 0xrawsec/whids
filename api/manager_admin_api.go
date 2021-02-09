@@ -43,9 +43,9 @@ func readPostAsJSON(rq *http.Request, i interface{}) error {
 
 // AdminAPIConfig configuration for Administrative API
 type AdminAPIConfig struct {
-	Host  string      `json:"host"`
-	Port  int         `json:"port"`
-	Users []AdminUser `json:"users"`
+	Host  string      `toml:"host" comment:"Hostname or IP address where the API should listen to"`
+	Port  int         `toml:"port" comment:"Port used by the API"`
+	Users []AdminUser `toml:"users" comment:"List of admin users"`
 }
 
 //////////////// AdminAPIResponse
@@ -276,6 +276,11 @@ func (m *Manager) EndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 
 	pPivot := rq.URL.Query().Get("pivot")
 	pDelta := rq.URL.Query().Get("delta")
+
+	if !m.Config.Logging.EnEnptLogs {
+		wt.Write(admErrStr("Endpoint logging is disabled, enable it and try again"))
+		return
+	}
 
 	// Parsing parameters
 	if pStart != "" {

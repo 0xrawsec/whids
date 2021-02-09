@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api"
+	"github.com/pelletier/go-toml"
 )
 
 const (
@@ -42,6 +42,27 @@ var (
 	// Used for certificate generation
 	defaultOrg          = "WHIDS Manager"
 	defaultCertValidity = time.Hour * 24 * 365
+
+	dummyManagerConfig = api.ManagerConfig{
+		AdminAPI: api.AdminAPIConfig{
+			Host:  "localhost",
+			Port:  8001,
+			Users: []api.AdminUser{{"admin", api.KeyGen(api.DefaultKeySize)}},
+		},
+		EndpointAPI: api.EndpointAPIConfig{
+			Host:      "0.0.0.0",
+			Port:      8000,
+			Endpoints: []api.EndpointConfig{{api.CheapUUID().String(), api.KeyGen(api.DefaultKeySize)}},
+		},
+		Logging: api.ManagerLogConfig{
+			Root:        "./data/logs",
+			LogBasename: "forwarded",
+			EnEnptLogs:  true,
+		},
+		ContainersDir: "./data/containers",
+		RulesDir:      "./data/rules",
+		DumpDir:       "./data/dumps",
+	}
 )
 
 /////////////////////////// generate_cert.go ///////////////////////////////////
@@ -173,6 +194,8 @@ func printInfo(writer io.Writer) {
 	fmt.Fprintf(writer, "Version: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", version, commitID, copyright, license)
 }
 
+var ()
+
 func main() {
 
 	flag.BoolVar(&keygen, "key", keygen, "Generate a random client API key. Both client and manager configuration file will needs to be updated with it.")
@@ -208,11 +231,11 @@ func main() {
 	}
 
 	if dumpConfig {
-		b, err := json.MarshalIndent(api.ManagerConfig{}, "", "    ")
-		if err != nil {
+		enc := toml.NewEncoder(os.Stdout)
+		enc.Order(toml.OrderPreserve)
+		if err := enc.Encode(dummyManagerConfig); err != nil {
 			panic(err)
 		}
-		fmt.Println(string(b))
 		os.Exit(0)
 	}
 
@@ -225,7 +248,7 @@ func main() {
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to read configuration file: %s", err))
 	}
-	err = json.Unmarshal(b, &managerConf)
+	err = toml.Unmarshal(b, &managerConf)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to parse configuration data: %s", err))
 	}
