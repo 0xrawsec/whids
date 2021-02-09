@@ -22,7 +22,7 @@ var (
 		Client: cconf,
 		Logging: LoggingConfig{
 			Dir:              "./data/Queued",
-			RotationInterval: "2s",
+			RotationInterval: time.Second * 2,
 		},
 	}
 
@@ -369,7 +369,7 @@ func TestForwarderCleanup(t *testing.T) {
 	defer clean(&mconf, &fconf)
 
 	// Change rotation interval not to create unexpected number of files
-	fconf.Logging.RotationInterval = "1h"
+	fconf.Logging.RotationInterval = time.Hour
 	// Inititialize the forwarder
 	f, err := NewForwarder(&fconf)
 	if err != nil {

@@ -14,13 +14,13 @@ import (
 	"strings"
 
 	"github.com/0xrawsec/gene/engine"
+	"github.com/pelletier/go-toml"
 	"golang.org/x/sys/windows/svc"
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
 
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/whids/utils"
 )
 
 const (
@@ -54,7 +54,7 @@ var (
 
 	importRules string
 
-	config = filepath.Join(abs, "config.json")
+	config = filepath.Join(abs, "config.toml")
 
 	osSignals = make(chan os.Signal)
 )
@@ -188,7 +188,11 @@ func main() {
 	}
 
 	if flagDumpDefault {
-		fmt.Println(utils.PrettyJSON(DefaultHIDSConfig))
+		enc := toml.NewEncoder(os.Stdout)
+		enc.Order(toml.OrderPreserve)
+		if err := enc.Encode(DefaultHIDSConfig); err != nil {
+			panic(err)
+		}
 		os.Exit(exitSuccess)
 	}
 

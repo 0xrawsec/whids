@@ -4,7 +4,7 @@ set BASENAME=Whids.exe
 set INSTALL_DIR=%programfiles%\Whids
 set UNINSTALL_SCRIPT=%INSTALL_DIR%\Uninstall.bat
 set BINPATH=%INSTALL_DIR%\%BASENAME%
-set CONFIG=%INSTALL_DIR%\config.json
+set CONFIG=%INSTALL_DIR%\config.toml
 REM default during installation used to clean
 set ALERTS=%INSTALL_DIR%\Logs\Alerts
 set DUMPS=%INSTALL_DIR%\Dumps

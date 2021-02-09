@@ -39,25 +39,15 @@ func buildURI(proto, host, port, url string) string {
 
 // LoggingConfig structure to encode Logging configuration of the forwarder
 type LoggingConfig struct {
-	Dir              string `json:"dir"`
-	RotationInterval string `json:"rotation-interval"`
-}
-
-// ParseRotationInterval returns the parsed time.Duration
-// from configuration structure.
-func (l *LoggingConfig) ParseRotationInterval() (d time.Duration, err error) {
-	d, err = time.ParseDuration(l.RotationInterval)
-	/*if d < MinRotationInterval {
-		d = MinRotationInterval
-	}*/
-	return
+	Dir              string        `toml:"dir" comment:"Directory used to store logs"`
+	RotationInterval time.Duration `toml:"rotation-interval" comment:"Logfile rotation interval"`
 }
 
 // ForwarderConfig structure definition
 type ForwarderConfig struct {
-	Client  ClientConfig  `json:"manager-client"`
-	Logging LoggingConfig `json:"logging"`
-	Local   bool          `json:"local"`
+	Local   bool          `toml:"local" comment:"If forwarder is local (this setting equals true)\n neither alerts nor dumps will be forwarded to manager"`
+	Client  ClientConfig  `toml:"manager" comment:"Configure connection to the manager"`
+	Logging LoggingConfig `toml:"logging" comment:"Forwarder's logging configuration"`
 }
 
 // Forwarder structure definition
@@ -153,7 +143,7 @@ func (f *Forwarder) PipeEvent(e *evtx.GoEvtxMap) {
 }
 
 // Save save the piped events to the disks
-func (f *Forwarder) Save() error {
+func (f *Forwarder) Save() (err error) {
 	log.Debugf("Collector saved logs to be sent later on")
 
 	// Clean queued files if needed
@@ -169,17 +159,14 @@ func (f *Forwarder) Save() error {
 		// This will reopen the first available alerts.gz.X file if several
 		//lf := filepath.Join(f.fwdConfig.LogConf.Dir, "alerts.gz")
 		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts.log")
-		ri, err := f.fwdConfig.Logging.ParseRotationInterval()
-		if err != nil {
-			return err
-		}
+		ri := f.fwdConfig.Logging.RotationInterval
 		log.Infof("Rotating logfile every %s", ri)
 		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, DefaultLogPerm, ri); err != nil {
-			return err
+			return
 		}
 	}
-	_, err := f.logfile.Write(f.Pipe.Bytes())
-	return err
+	_, err = f.logfile.Write(f.Pipe.Bytes())
+	return
 }
 
 // HasQueuedEvents checks whether some events are waiting to be sent

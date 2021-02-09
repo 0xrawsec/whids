@@ -15,6 +15,7 @@ import (
 
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
+	"github.com/pelletier/go-toml"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -92,8 +93,12 @@ var (
 
 	// DefaultHIDSConfig is the default HIDS configuration
 	DefaultHIDSConfig = HIDSConfig{
-		RulesDB:      filepath.Join(abs, "Database", "Rules"),
-		ContainersDB: filepath.Join(abs, "Database", "Containers"),
+		RulesConfig: RulesConfig{
+			RulesDB:        filepath.Join(abs, "Database", "Rules"),
+			ContainersDB:   filepath.Join(abs, "Database", "Containers"),
+			UpdateInterval: 60 * time.Second,
+		},
+
 		FwdConfig: api.ForwarderConfig{
 			Local: true,
 			Client: api.ClientConfig{
@@ -101,7 +106,7 @@ var (
 			},
 			Logging: api.LoggingConfig{
 				Dir:              filepath.Join(logDir, "Alerts"),
-				RotationInterval: "24h",
+				RotationInterval: time.Hour * 24,
 			},
 		},
 		Channels: []string{"all"},
@@ -118,22 +123,21 @@ var (
 			MaxDumps:      4,
 			DumpUntracked: false,
 		},
-		CritTresh:      5,
-		UpdateInterval: 60,
-		Logfile:        filepath.Join(logDir, "whids.log"),
-		EnableHooks:    true,
-		Endpoint:       true,
-		LogAll:         false}
+		CritTresh:   5,
+		Logfile:     filepath.Join(logDir, "whids.log"),
+		EnableHooks: true,
+		Endpoint:    true,
+		LogAll:      false}
 )
 
 // DumpConfig structure definition
 type DumpConfig struct {
-	Mode          string `json:"mode"`
-	Treshold      int    `json:"treshold"`
-	Dir           string `json:"dir"`
-	Compression   bool   `json:"compression"`
-	MaxDumps      int    `json:"max-dumps"`      // maximum number of dump per GUID
-	DumpUntracked bool   `json:"dump-untracked"` // whether or not we should dump untracked processes, if true it would create many FPs
+	Mode          string `toml:"mode" comment:"Dump mode (choices: file, registry, memory)\n Modes can be combined together, separated by |"`
+	Dir           string `toml:"dir" comment:"Directory used to store dumps"`
+	Treshold      int    `toml:"treshold" comment:"Dumps only when event criticality is above this threshold"`
+	MaxDumps      int    `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
+	Compression   bool   `toml:"compression" comment:"Enable dumps compression"`
+	DumpUntracked bool   `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
 }
 
 // IsModeEnabled checks if dump mode is enabled
@@ -145,27 +149,29 @@ func (d *DumpConfig) IsModeEnabled(mode string) bool {
 }
 
 type SysmonConfig struct {
-	Bin              string `json:"bin"`
-	ArchiveDirectory string `json:"archive-directory"`
-	CleanArchived    bool   `json:"clean-archived"`
+	Bin              string `toml:"bin" comment:"Path to Sysmon binary"`
+	ArchiveDirectory string `toml:"archive-directory" comment:"Path to Sysmon Archive directory"`
+	CleanArchived    bool   `toml:"clean-archived" comment:"Delete files older than 5min archived by Sysmon"`
+}
+
+type RulesConfig struct {
+	RulesDB        string        `toml:"rules-db" comment:"Path to Gene rules database"`
+	ContainersDB   string        `toml:"containers-db" comment:"Path to Gene rules containers\n (c.f. Gene documentation)"`
+	UpdateInterval time.Duration `toml:"update-interval" comment:"Update interval at which rules should be pulled from manager\n NB: only applies if a manager server is configured"`
 }
 
 // HIDSConfig structure
 type HIDSConfig struct {
-	RulesDB        string              `json:"rules-db"`
-	ContainersDB   string              `json:"containers-db"`
-	FwdConfig      api.ForwarderConfig `json:"forwarder"`
-	Channels       []string            `json:"channels"`
-	Sysmon         SysmonConfig        `json:"sysmon"`
-	Dump           DumpConfig          `json:"dump"`
-	CritTresh      int                 `json:"criticality-treshold"`
-	UpdateInterval time.Duration       `json:"update-interval"`
-	EnableHooks    bool                `json:"en-hooks"`
-	Logfile        string              `json:"logfile"` // for WHIDS log messages (not alerts)
-	LogAll         bool                `json:"log-all"` // log all events to logfile (used for debugging)
-	Endpoint       bool                `json:"endpoint"`
-	// private members
-	//sysmonArchiveDirectory string
+	Channels    []string            `toml:"channels" comment:"Windows log channels to listen to. Either channel names\n can be used (i.e. Microsoft-Windows-Sysmon/Operational) or aliases"`
+	CritTresh   int                 `toml:"criticality-treshold" comment:"Dumps/forward only events above criticality threshold\n or filtered events (i.e. Gene filtering rules)"`
+	EnableHooks bool                `toml:"en-hooks" comment:"Enable enrichment hooks and dump hooks"`
+	Logfile     string              `toml:"logfile" comment:"Logfile used to log messages generated by the engine"` // for WHIDS log messages (not alerts)
+	LogAll      bool                `toml:"log-all" comment:"Log any incoming event passing through the engine"`    // log all events to logfile (used for debugging)
+	Endpoint    bool                `toml:"endpoint" comment:"True if current host is the endpoint on which logs are generated\n Example: turn this off if running on a WEC"`
+	FwdConfig   api.ForwarderConfig `toml:"forwarder" comment:"Forwarder configuration"`
+	Sysmon      SysmonConfig        `toml:"sysmon" comment:"Sysmon related settings"`
+	Dump        DumpConfig          `toml:"dump" comment:"Dump related settings"`
+	RulesConfig RulesConfig         `toml:"rules" comment:"Gene rules related settings\n Gene repo: https://github.com/0xrawsec/gene\n Gene rules repo: https://github.com/0xrawsec/gene-rules"`
 }
 
 // LoadsHIDSConfig loads a HIDS configuration from a file
@@ -175,7 +181,7 @@ func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
 		return
 	}
 	defer fd.Close()
-	dec := json.NewDecoder(fd)
+	dec := toml.NewDecoder(fd)
 	err = dec.Decode(&c)
 	return
 }
@@ -203,11 +209,11 @@ func (c *HIDSConfig) IsForwardingEnabled() bool {
 
 // Prepare creates directory used in the config if not existing
 func (c *HIDSConfig) Prepare() {
-	if !fsutil.Exists(c.RulesDB) {
-		os.MkdirAll(c.RulesDB, 0600)
+	if !fsutil.Exists(c.RulesConfig.RulesDB) {
+		os.MkdirAll(c.RulesConfig.RulesDB, 0600)
 	}
-	if !fsutil.Exists(c.ContainersDB) {
-		os.MkdirAll(c.ContainersDB, 0600)
+	if !fsutil.Exists(c.RulesConfig.ContainersDB) {
+		os.MkdirAll(c.RulesConfig.ContainersDB, 0600)
 	}
 	if !fsutil.Exists(c.Dump.Dir) {
 		os.MkdirAll(c.Dump.Dir, 0600)
@@ -222,10 +228,10 @@ func (c *HIDSConfig) Prepare() {
 
 // Verify validate HIDS configuration object
 func (c *HIDSConfig) Verify() error {
-	if !fsutil.IsDir(c.RulesDB) {
+	if !fsutil.IsDir(c.RulesConfig.RulesDB) {
 		return fmt.Errorf("Rules database must be a directory")
 	}
-	if !fsutil.IsDir(c.ContainersDB) {
+	if !fsutil.IsDir(c.RulesConfig.ContainersDB) {
 		return fmt.Errorf("Containers database must be a directory")
 	}
 	return nil
@@ -390,7 +396,7 @@ func (h *HIDS) cleanArchivedRoutine() bool {
 
 // returns true if the update routine is started
 func (h *HIDS) updateRoutine() bool {
-	d := h.config.UpdateInterval * time.Second
+	d := h.config.RulesConfig.UpdateInterval
 	if h.config.IsForwardingEnabled() {
 		if d > 0 {
 			go func() {
@@ -438,14 +444,14 @@ func (h *HIDS) updateEngine(force bool) error {
 		h.engine = engine.NewEngine(false)
 
 		// containers must be loaded before the rules anyway
-		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.ContainersDB)
+		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.RulesConfig.ContainersDB)
 		if err := h.loadContainers(); err != nil {
 			return fmt.Errorf("Error loading containers: %s", err)
 		}
 
 		if reloadRules || force {
-			log.Infof("Loading HIDS rules from: %s", h.config.RulesDB)
-			if err := h.engine.LoadDirectory(h.config.RulesDB); err != nil {
+			log.Infof("Loading HIDS rules from: %s", h.config.RulesConfig.RulesDB)
+			if err := h.engine.LoadDirectory(h.config.RulesConfig.RulesDB); err != nil {
 				return fmt.Errorf("Failed to load rules: %s", err)
 			}
 			log.Infof("Number of rules loaded in engine: %d", h.engine.Count())
@@ -540,14 +546,14 @@ func (h *HIDS) updateRules() (err error) {
 
 // containerPaths returns the path to the container and the path to its sha256 file
 func (h *HIDS) containerPaths(container string) (path, sha256Path string) {
-	path = filepath.Join(h.config.ContainersDB, fmt.Sprintf("%s%s", container, containerExt))
+	path = filepath.Join(h.config.RulesConfig.ContainersDB, fmt.Sprintf("%s%s", container, containerExt))
 	sha256Path = fmt.Sprintf("%s.sha256", path)
 	return
 }
 
 // rulesPaths returns the path used by WHIDS to save gene rules
 func (h *HIDS) rulesPaths() (path, sha256Path string) {
-	path = filepath.Join(h.config.RulesDB, "database.gen")
+	path = filepath.Join(h.config.RulesConfig.RulesDB, "database.gen")
 	sha256Path = fmt.Sprintf("%s.sha256", path)
 	return
 }
@@ -597,7 +603,7 @@ func (h *HIDS) updateContainers() (err error) {
 
 // loads containers found in container database directory
 func (h *HIDS) loadContainers() (lastErr error) {
-	for wi := range fswalker.Walk(h.config.ContainersDB) {
+	for wi := range fswalker.Walk(h.config.RulesConfig.ContainersDB) {
 		for _, fi := range wi.Files {
 			path := filepath.Join(wi.Dirpath, fi.Name())
 			// we take only files with good extension

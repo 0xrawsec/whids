@@ -25,15 +25,15 @@ import (
 
 // ClientConfig structure definition
 type ClientConfig struct {
-	Host              string `json:"host"`
-	Port              int    `json:"port"`
-	Proto             string `json:"proto"`
-	UUID              string `json:"endpoint-uuid"`
-	Key               string `json:"endpoint-key"`
-	ServerKey         string `json:"server-key"`
-	ServerFingerprint string `json:"server-fingerprint"`
-	Unsafe            bool   `json:"unsafe"`
-	MaxUploadSize     int64  `json:"max-upload-size"`
+	Proto             string `toml:"proto" comment:"Protocol to use to connect to manager (http or https)"`
+	Host              string `toml:"host" comment:"Hostname or IP of the manager"`
+	Port              int    `toml:"port" comment:"Port at which endpoint API is running on manager server"`
+	UUID              string `toml:"endpoint-uuid" comment:"Endpoint UUID configured on manager used to authenticate this endpoint"`
+	Key               string `toml:"endpoint-key" comment:"Endpoint key configured on manager used to authenticate this endpoint"`
+	ServerKey         string `toml:"server-key" comment:"Key configured on manager, used to authenticate server on this endpoint\n This settings does not protect from MITM, so configuring server\n certificate pinning is recommended."`
+	ServerFingerprint string `toml:"server-fingerprint" comment:"Configure manager certificate pinning\n Put here the manager's certificate fingerprint"`
+	Unsafe            bool   `toml:"unsafe" comment:"Allow unsafe HTTPS connection"`
+	MaxUploadSize     int64  `toml:"max-upload-size" comment:"Maximum allowed upload size"`
 }
 
 // ManagerIP returns the IP address of the manager if any, returns nil otherwise
