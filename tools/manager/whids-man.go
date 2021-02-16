@@ -46,12 +46,12 @@ var (
 	dummyManagerConfig = api.ManagerConfig{
 		AdminAPI: api.AdminAPIConfig{
 			Host:  "localhost",
-			Port:  8001,
+			Port:  api.AdmAPIDefaultPort,
 			Users: []api.AdminUser{{"admin", api.KeyGen(api.DefaultKeySize)}},
 		},
 		EndpointAPI: api.EndpointAPIConfig{
 			Host:      "0.0.0.0",
-			Port:      8000,
+			Port:      api.EptAPIDefaultPort,
 			Endpoints: []api.EndpointConfig{{api.UUIDGen().String(), api.KeyGen(api.DefaultKeySize)}},
 		},
 		Logging: api.ManagerLogConfig{

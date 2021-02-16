@@ -45,8 +45,10 @@ const (
 	DefaultManagerLogSize = logfile.MB * 100
 	// DefaultKeySize default size for API key generation
 	DefaultKeySize = 64
-	// DefaultPort default port used by Manager
-	DefaultPort = "1519"
+	// EptAPIDefaultPort default port used by manager's endpoint API
+	EptAPIDefaultPort = 1519
+	// AdmAPIDefaultPort default port used by manager's admin API
+	AdmAPIDefaultPort = 1520
 )
 
 var (
