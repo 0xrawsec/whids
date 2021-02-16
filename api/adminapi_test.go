@@ -91,7 +91,7 @@ func failOnAdminAPIError(t *testing.T, r AdminAPIResponse) {
 }
 
 func getEndpointUUID() string {
-	r := get(GetEndpointsURL)
+	r := get(AdmAPIEndpointsPath)
 	a := r.Data.([]interface{})
 	m := a[0].(map[string]interface{})
 	return m["uuid"].(string)
@@ -152,7 +152,7 @@ func TestAdminAPIGetEndpoints(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	r := get(GetEndpointsURL)
+	r := get(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 }
@@ -164,7 +164,7 @@ func TestAdminAPIGetCommand(t *testing.T) {
 		m.Wait()
 	}()
 	euuid := getEndpointUUID()
-	r := get(format("%s/%s/command", GetEndpointsURL, euuid))
+	r := get(format("%s/%s/command", AdmAPIEndpointsPath, euuid))
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 }
@@ -180,14 +180,14 @@ func TestAdminAPIPostCommand(t *testing.T) {
 		CommandLine: "/bin/ls",
 		FetchFiles:  []string{"/etc/fstab"},
 	}
-	r := post(format("%s/%s/command", GetEndpointsURL, euuid), JSON(ca))
+	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
 	if err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Failed to execute command: %s", err)
 		t.FailNow()
 	}
 
-	r = get(format("%s/%s/command", GetEndpointsURL, euuid))
+	r = get(format("%s/%s/command", AdmAPIEndpointsPath, euuid))
 	cmd := Command{}
 	if err := r.UnmarshalData(&cmd); err != nil {
 		t.Errorf("Failed to unmarshal response data")
@@ -211,14 +211,14 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 		CommandLine: "/bin/ls",
 		FetchFiles:  []string{"/etc/fstab"},
 	}
-	r := post(format("%s/%s/command", GetEndpointsURL, euuid), JSON(ca))
+	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
 
 	if err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Failed to execute command: %s", err)
 		t.FailNow()
 	}
-	r = get(format("%s/%s/command/stdout", GetEndpointsURL, euuid))
+	r = get(format("%s/%s/command/stdout", AdmAPIEndpointsPath, euuid))
 	failOnAdminAPIError(t, r)
 
 	if err := r.UnmarshalData(&stdout); err != nil {
@@ -228,7 +228,7 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 	}
 	t.Logf("stdout: %s", stdout)
 
-	r = get(format("%s/%s/command/files", GetEndpointsURL, euuid))
+	r = get(format("%s/%s/command/files", AdmAPIEndpointsPath, euuid))
 	failOnAdminAPIError(t, r)
 	t.Logf("files: %s", prettyJSON(r))
 	if err := r.UnmarshalData(&files); err != nil {
@@ -251,11 +251,11 @@ func TestAdminAPIGetNewEndpoint(t *testing.T) {
 		m.Wait()
 	}()
 
-	r := put(GetEndpointsURL)
+	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 
-	r = get(GetEndpointsURL)
+	r = get(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 }
@@ -280,11 +280,11 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 	euuid := getEndpointUUID()
 
 	// creating a new endpoint
-	r := put(GetEndpointsURL)
+	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 
 	for _, e := range events {
-		r, err := mc.PrepareGzip("POST", PostLogsURL, bytes.NewBufferString(e))
+		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBufferString(e))
 		if err != nil {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
@@ -294,16 +294,16 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	r = get(GetEndpointsReports)
+	r = get(AdmAPIEndpointsReportsPath)
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 
-	r = doRequest("DELETE", GetEndpointsURL+"/"+euuid+"/report")
+	r = doRequest("DELETE", AdmAPIEndpointsPath+"/"+euuid+"/report")
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 
 	time.Sleep(1 * time.Second)
-	r = get(GetEndpointsReports)
+	r = get(AdmAPIEndpointsReportsPath)
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 }
@@ -331,11 +331,11 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	euuid := getEndpointUUID()
 
 	// creating a new endpoint
-	r := put(GetEndpointsURL)
+	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 
 	for _, e := range events {
-		r, err := mc.PrepareGzip("POST", PostLogsURL, bytes.NewBufferString(e))
+		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBufferString(e))
 		if err != nil {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
@@ -346,7 +346,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// test retrieving all the logs
-	r = get(GetEndpointsURL + "/" + euuid + "/logs")
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs")
 	failOnAdminAPIError(t, r)
 	data := make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -358,7 +358,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	// test pivoting
 	v := url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
-	r = get(GetEndpointsURL + "/" + euuid + "/logs?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -371,7 +371,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	v = url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
 	v.Set("delta", "3h")
-	r = get(GetEndpointsURL + "/" + euuid + "/logs?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -384,7 +384,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	v = url.Values{}
 	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
 	v.Set("stop", time.Now().Format(time.RFC3339))
-	r = get(GetEndpointsURL + "/" + euuid + "/logs?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -427,14 +427,14 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	euuid := getEndpointUUID()
 
 	// creating a new endpoint
-	r := put(GetEndpointsURL)
+	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 
 	tmp := make([]string, 0)
 	tmp = append(tmp, alerts...)
 	tmp = append(tmp, events...)
 	for _, e := range tmp {
-		r, err := mc.PrepareGzip("POST", PostLogsURL, bytes.NewBufferString(e))
+		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBufferString(e))
 		if err != nil {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
@@ -445,7 +445,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// test retrieving all the logs
-	r = get(GetEndpointsURL + "/" + euuid + "/alerts")
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts")
 	failOnAdminAPIError(t, r)
 	data := make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -457,7 +457,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	// test pivoting
 	v := url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
-	r = get(GetEndpointsURL + "/" + euuid + "/alerts?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -470,7 +470,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	v = url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
 	v.Set("delta", "3h")
-	r = get(GetEndpointsURL + "/" + euuid + "/alerts?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -483,7 +483,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	v = url.Values{}
 	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
 	v.Set("stop", time.Now().Format(time.RFC3339))
-	r = get(GetEndpointsURL + "/" + euuid + "/alerts?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)

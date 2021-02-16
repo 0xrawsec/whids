@@ -110,7 +110,7 @@ func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (m *Manager) GetEndpoints(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
@@ -123,7 +123,7 @@ func (m *Manager) GetEndpoints(wt http.ResponseWriter, rq *http.Request) {
 		wt.Write(NewAdminAPIResponse(endpoints).ToJSON())
 
 	case rq.Method == "PUT":
-		endpt := NewEndpoint(CheapUUID().String(), KeyGen(DefaultKeySize))
+		endpt := NewEndpoint(UUIDGen().String(), KeyGen(DefaultKeySize))
 		m.endpoints.Add(endpt)
 		m.Config.AddEndpointConfig(endpt.UUID, endpt.Key)
 		if err := m.Config.Save(); err != nil {
@@ -133,7 +133,7 @@ func (m *Manager) GetEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-func (m *Manager) GetEndpoint(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
 
@@ -159,6 +159,7 @@ func (m *Manager) GetEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
+// CommandAPI structure used by Admin API clients to POST commands
 type CommandAPI struct {
 	CommandLine string        `json:"command-line"`
 	FetchFiles  []string      `json:"fetch-files"`
@@ -166,6 +167,7 @@ type CommandAPI struct {
 	Timeout     time.Duration `json:"timeout"`
 }
 
+// ToCommand converts a CommandAPI to a Command
 func (c *CommandAPI) ToCommand() (*Command, error) {
 	cmd := NewCommand()
 	// adding command line
@@ -188,7 +190,7 @@ func (c *CommandAPI) ToCommand() (*Command, error) {
 	return cmd, nil
 }
 
-func (m *Manager) EndpointCommand(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
 
@@ -227,7 +229,7 @@ func (m *Manager) EndpointCommand(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-func (m *Manager) EndpointCommandField(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Request) {
 	var euuid, field string
 	var err error
 
@@ -264,7 +266,7 @@ func (m *Manager) EndpointCommandField(wt http.ResponseWriter, rq *http.Request)
 	}
 }
 
-func (m *Manager) EndpointLogs(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 	var euuid string
 	var start, stop, pivot time.Time
@@ -396,7 +398,7 @@ func (m *Manager) EndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-func (m *Manager) EndpointReport(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
 
@@ -416,12 +418,25 @@ func (m *Manager) EndpointReport(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-func (m *Manager) EndpointsReports(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Request) {
 	out := make(map[string]*reducer.ReducedStats)
 	for _, e := range m.endpoints.MutEndpoints() {
 		out[e.UUID] = m.reducer.ReduceCopy(e.UUID)
 	}
 	wt.Write(NewAdminAPIResponse(out).ToJSON())
+}
+
+type stats struct {
+	EndpointCount int `json:"endpoint-count"`
+	RuleCount     int `json:"rule-count"`
+}
+
+func (m *Manager) admAPIStats(wt http.ResponseWriter, rq *http.Request) {
+	s := stats{
+		EndpointCount: m.endpoints.Len(),
+		RuleCount:     m.geneEng.Count(),
+	}
+	wt.Write(NewAdminAPIResponse(s).ToJSON())
 }
 
 func (m *Manager) runAdminAPI() {
@@ -446,14 +461,15 @@ func (m *Manager) runAdminAPI() {
 
 		// Routes initialization
 
-		rt.HandleFunc(GetEndpointsURL, m.GetEndpoints).Methods("GET", "PUT")
-		rt.HandleFunc(GetEndpointsByIdURL, m.GetEndpoint).Methods("GET", "DELETE")
-		rt.HandleFunc(GetEndpointCommand, m.EndpointCommand).Methods("GET", "POST")
-		rt.HandleFunc(GetEndpointCommandField, m.EndpointCommandField).Methods("GET")
-		rt.HandleFunc(GetEndpointsReports, m.EndpointsReports).Methods("GET")
-		rt.HandleFunc(GetEndpointLogs, m.EndpointLogs).Methods("GET")
-		rt.HandleFunc(GetEndpointAlerts, m.EndpointLogs).Methods("GET")
-		rt.HandleFunc(GetEndpointReport, m.EndpointReport).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointsPath, m.admAPIEndpoints).Methods("GET", "PUT")
+		rt.HandleFunc(AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointCommandPath, m.admAPIEndpointCommand).Methods("GET", "POST")
+		rt.HandleFunc(AdmAPIEndpointCommandFieldPath, m.admAPIEndpointCommandField).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointsReportsPath, m.admAPIEndpointsReports).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointAlertsPath, m.admAPIEndpointLogs).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
 
 		uri := fmt.Sprintf("%s:%d", m.Config.AdminAPI.Host, m.Config.AdminAPI.Port)
 		m.adminAPI = &http.Server{

@@ -87,8 +87,8 @@ func IPFromRequest(req *http.Request) (net.IP, error) {
 // Middleware definitions
 func logHTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// src-ip:src-port http-method http-proto url user-agent authorization  content-length
-		fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get("Api-Key"), r.ContentLength)
+		// src-ip:src-port http-method http-proto url user-agent UUID content-length
+		fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get("UUID"), r.ContentLength)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -198,8 +198,8 @@ func (t *TLSConfig) Verify() error {
 
 /////////////////////// Manager
 
-// CheapUUID generates a random UUID in a cheap way
-func CheapUUID() uuid.UUID {
+// UUIDGen generates a random UUID
+func UUIDGen() uuid.UUID {
 	uuid := uuid.UUID{}
 	for i := 0; i < len(uuid); i++ {
 		uuid[i] = uint8(rand.Uint32() >> 24)
@@ -233,11 +233,13 @@ type AdminUser struct {
 	Key        string `toml:"key"`
 }
 
+// EndpointConfig structure to hold the configuration for one endpoint
 type EndpointConfig struct {
 	UUID string `toml:"uuid" comment:"Unique client identifier"`
 	Key  string `toml:"key" comment:"API key used to authenticate the client"`
 }
 
+// EndpointAPIConfig structure holding configuration for the API used by endpoints
 type EndpointAPIConfig struct {
 	Host      string           `toml:"host" comment:"Hostname or IP where the API should listen to"`
 	Port      int              `toml:"port" comment:"Port used by the API"`
@@ -245,6 +247,7 @@ type EndpointAPIConfig struct {
 	Endpoints []EndpointConfig `toml:"endpoints" comment:"Endpoints configurations"`
 }
 
+// DelEndpoint deletes an endpoint from the configuration
 func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
 	new := make([]EndpointConfig, 0, len(ec.Endpoints)-1)
 	for _, e := range ec.Endpoints {
@@ -255,20 +258,25 @@ func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
 	ec.Endpoints = new
 }
 
+// ManagerLogConfig structure to hold manager's logging configuration
 type ManagerLogConfig struct {
 	Root        string `toml:"root" comment:"Root directory where logfiles are stored"`
-	LogBasename string `toml:"logfile" comment:"Logfile name (relative to root) used to store logs."`
-	EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints."`
+	LogBasename string `toml:"logfile" comment:"Logfile name (relative to root) used to store logs"`
+	EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints"`
+	VerboseHTTP bool   `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
 }
 
+// AlertPath builds the path where to store alerts for an endpoint
 func (c *ManagerLogConfig) AlertPath(uuid string, date time.Time) string {
 	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), "alerts.gz")
 }
 
+// LogPath builds the path where to store logs for an endpoint
 func (c *ManagerLogConfig) LogPath(uuid string, date time.Time) string {
 	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), "logs.gz")
 }
 
+// MispConfig with TOML tags
 type MispConfig struct {
 	Proto  string `toml:"protocol" comment:"HTTP protocol to use (http or https)"`
 	Host   string `toml:"host" comment:"Hostname or IP address of MISP server"`
@@ -277,17 +285,19 @@ type MispConfig struct {
 
 // ManagerConfig defines manager's configuration structure
 type ManagerConfig struct {
+	// TOML strings need to be first otherwise issue parsing back config
+	RulesDir      string            `toml:"rules-dir" comment:"Gene rule directory\n See: https://github.com/0xrawsec/gene-rules"`
+	DumpDir       string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
+	ContainersDir string            `toml:"containers-dir" comment:"Gene rules' containers directory\n (c.f. Gene documentation https://github.com/0xrawsec/gene)"`
 	AdminAPI      AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
 	EndpointAPI   EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
 	Logging       ManagerLogConfig  `toml:"logging" comment:"Logging settings"`
 	TLS           TLSConfig         `toml:"tls" comment:"TLS settings. Leave empty, not to use TLS"`
-	MISP          MispConfig        `toml:"misp" comment:"MISP settings. Use this setting to push IOCs as containers on endpoints."`
-	RulesDir      string            `toml:"rules-dir" comment:"Gene rule directory.\n See: https://github.com/0xrawsec/gene-rules"`
-	DumpDir       string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
-	ContainersDir string            `toml:"containers-dir" comment:"Gene rules' containers directory\n (c.f. Gene documentation https://github.com/0xrawsec/gene)"`
+	MISP          MispConfig        `toml:"misp" comment:"MISP settings. Use this setting to push IOCs as containers on endpoints"`
 	path          string
 }
 
+// LoadManagerConfig loads the manager configuration from a file
 func LoadManagerConfig(path string) (*ManagerConfig, error) {
 	mc := ManagerConfig{}
 	b, err := ioutil.ReadFile(path)
@@ -299,15 +309,18 @@ func LoadManagerConfig(path string) (*ManagerConfig, error) {
 	return &mc, err
 }
 
+// AddEndpointConfig adds a new endpoint with uuid and key to the manager
 func (mc *ManagerConfig) AddEndpointConfig(uuid, key string) {
 	ec := EndpointConfig{UUID: uuid, Key: key}
 	mc.EndpointAPI.Endpoints = append(mc.EndpointAPI.Endpoints, ec)
 }
 
+// SetPath exposes the path member for changes
 func (mc *ManagerConfig) SetPath(path string) {
 	mc.path = path
 }
 
+// Save saves the configuration to a path specified by the path member of the structure
 func (mc *ManagerConfig) Save() error {
 	b, err := toml.Marshal(mc)
 	if err != nil {
@@ -316,6 +329,7 @@ func (mc *ManagerConfig) Save() error {
 	return ioutil.WriteFile(mc.path, b, 0650)
 }
 
+// Endpoints structure used to manage endpoints
 // This struct looks over complicated for what it
 // does but it is because it was more complex before
 // and got simplified (too lazy to change it...)
@@ -325,6 +339,7 @@ type Endpoints struct {
 	mapUUID   map[string]int
 }
 
+// NewEndpoints creates a new Endpoints structure
 func NewEndpoints() Endpoints {
 	return Endpoints{
 		endpoints: make([]*Endpoint, 0),
@@ -332,6 +347,7 @@ func NewEndpoints() Endpoints {
 	}
 }
 
+// Add adds an Endpoint to the Endpoints
 func (es *Endpoints) Add(e *Endpoint) {
 	es.Lock()
 	defer es.Unlock()
@@ -339,6 +355,7 @@ func (es *Endpoints) Add(e *Endpoint) {
 	es.mapUUID[e.UUID] = len(es.endpoints) - 1
 }
 
+// DelByUUID deletes an Endpoint by its UUID
 func (es *Endpoints) DelByUUID(uuid string) {
 	es.Lock()
 	defer es.Unlock()
@@ -360,6 +377,7 @@ func (es *Endpoints) DelByUUID(uuid string) {
 	}
 }
 
+// GetByUUID returns a reference to the copy of an Endpoint by its UUID
 func (es *Endpoints) GetByUUID(uuid string) (*Endpoint, bool) {
 	es.RLock()
 	defer es.RUnlock()
@@ -369,6 +387,7 @@ func (es *Endpoints) GetByUUID(uuid string) (*Endpoint, bool) {
 	return nil, false
 }
 
+// GetMutByUUID returns reference to an Endpoint
 func (es *Endpoints) GetMutByUUID(uuid string) (*Endpoint, bool) {
 	es.RLock()
 	defer es.RUnlock()
@@ -378,12 +397,14 @@ func (es *Endpoints) GetMutByUUID(uuid string) (*Endpoint, bool) {
 	return nil, false
 }
 
+// Len returns the number of endpoints
 func (es *Endpoints) Len() int {
 	es.RLock()
 	defer es.RUnlock()
 	return len(es.endpoints)
 }
 
+// Endpoints returns a list of references to copies of the endpoints
 func (es *Endpoints) Endpoints() []*Endpoint {
 	es.RLock()
 	defer es.RUnlock()
@@ -394,6 +415,7 @@ func (es *Endpoints) Endpoints() []*Endpoint {
 	return endpts
 }
 
+// MutEndpoints returns a list of references of the endpoints
 func (es *Endpoints) MutEndpoints() []*Endpoint {
 	es.RLock()
 	defer es.RUnlock()
@@ -553,7 +575,7 @@ func (m *Manager) updateMispContainer() {
 	m.containersSha256[mispContName] = Sha256StringArray(mispContainer)
 }
 
-// AddAuthKey adds an authorized key to access the manager
+// AddEndpoint adds new endpoint to the manager
 func (m *Manager) AddEndpoint(uuid, key string) {
 	m.endpoints.Add(NewEndpoint(uuid, key))
 }
@@ -583,6 +605,7 @@ func (m *Manager) Wait() {
 	<-m.stop
 }
 
+// IsDone returns true when manager is done
 func (m *Manager) IsDone() bool {
 	return m.done
 }

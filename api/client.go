@@ -203,7 +203,7 @@ func (m *ManagerClient) IsServerAuthEnforced() bool {
 
 // IsServerUp returns true if manager server is up
 func (m *ManagerClient) IsServerUp() bool {
-	get, err := m.Prepare("GET", GetServerKeyURL, nil)
+	get, err := m.Prepare("GET", EptAPIServerKeyPath, nil)
 	if err != nil {
 		log.Errorf("IsServerUp cannot create server key request: %s", err)
 		return false
@@ -224,7 +224,7 @@ func (m *ManagerClient) IsServerUp() bool {
 // IsServerAuthenticated returns true if the server is authenticated and thus can be trusted
 func (m *ManagerClient) IsServerAuthenticated() (auth bool, up bool) {
 	if m.IsServerAuthEnforced() {
-		get, err := m.Prepare("GET", GetServerKeyURL, nil)
+		get, err := m.Prepare("GET", EptAPIServerKeyPath, nil)
 		if err != nil {
 			log.Errorf("IsServerAuthenticated cannot create server key request: %s", err)
 			return false, false
@@ -261,7 +261,7 @@ func (m *ManagerClient) buildURI(url string) string {
 // GetRulesSha256 returns the sha256 string of the latest batch of rules available on the server
 func (m *ManagerClient) GetRulesSha256() (string, error) {
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", GetRulesSha256URL, nil)
+		req, err := m.Prepare("GET", EptAPIRulesSha256Path, nil)
 		if err != nil {
 			return "", fmt.Errorf("GetRulesSha256 failed to prepare request: %s", err)
 		}
@@ -291,7 +291,7 @@ func (m *ManagerClient) GetContainer(name string) ([]string, error) {
 	ctn := make([]string, 0)
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", strings.Replace(GetContainerURL, "{name}", name, 1), nil)
+		req, err := m.Prepare("GET", strings.Replace(EptAPIContainerPath, "{name}", name, 1), nil)
 		if err != nil {
 			return ctn, fmt.Errorf("GetContainer failed to prepare request: %s", err)
 		}
@@ -320,7 +320,7 @@ func (m *ManagerClient) GetContainersList() ([]string, error) {
 	ctn := make([]string, 0)
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", GetContainerListURL, nil)
+		req, err := m.Prepare("GET", EptAPIContainerListPath, nil)
 		if err != nil {
 			return ctn, fmt.Errorf("GetContainersList failed to prepare request: %s", err)
 		}
@@ -348,7 +348,7 @@ func (m *ManagerClient) GetContainersList() ([]string, error) {
 func (m *ManagerClient) GetContainerSha256(name string) (string, error) {
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", strings.Replace(GetContainerSha256URL, "{name}", name, 1), nil)
+		req, err := m.Prepare("GET", strings.Replace(EptAPIContainerSha256Path, "{name}", name, 1), nil)
 		if err != nil {
 			return "", fmt.Errorf("GetContainerSha256 failed to prepare request: %s", err)
 		}
@@ -376,7 +376,7 @@ func (m *ManagerClient) GetContainerSha256(name string) (string, error) {
 // GetRules retrieve the latest batch of Gene rules available on the server
 func (m *ManagerClient) GetRules() (string, error) {
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", GetRulesURL, nil)
+		req, err := m.Prepare("GET", EptAPIRulesPath, nil)
 		if err != nil {
 			return "", fmt.Errorf("GetRules failed to prepare request: %s", err)
 		}
@@ -440,7 +440,7 @@ func (m *ManagerClient) PostDump(f *FileUpload) error {
 				return fmt.Errorf("PostDump failed to JSON encode")
 			}
 
-			req, err := m.Prepare("POST", PostDumpURL, bytes.NewBuffer(body))
+			req, err := m.Prepare("POST", EptAPIPostDumpPath, bytes.NewBuffer(body))
 
 			if err != nil {
 				return fmt.Errorf("PostDump failed to prepare request: %s", err)
@@ -469,7 +469,7 @@ func (m *ManagerClient) PostDump(f *FileUpload) error {
 func (m *ManagerClient) PostLogs(r io.Reader) error {
 	if auth, up := m.IsServerAuthenticated(); auth {
 		if up {
-			req, err := m.PrepareGzip("POST", PostLogsURL, r)
+			req, err := m.PrepareGzip("POST", EptAPIPostLogsPath, r)
 
 			if err != nil {
 				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
@@ -502,7 +502,7 @@ func (m *ManagerClient) ExecuteCommand() error {
 		command := NewCommandWithEnv(&env)
 
 		// getting command to be executed
-		req, err := m.Prepare("GET", CommandURL, nil)
+		req, err := m.Prepare("GET", EptAPICommandPath, nil)
 		if err != nil {
 			return fmt.Errorf("ExecuteCommand failed to prepare request: %s", err)
 		}
@@ -545,7 +545,7 @@ func (m *ManagerClient) ExecuteCommand() error {
 		}
 
 		// send back the response
-		req, err = m.PrepareGzip("POST", CommandURL, bytes.NewBuffer(jsonCommand))
+		req, err = m.PrepareGzip("POST", EptAPICommandPath, bytes.NewBuffer(jsonCommand))
 		if err != nil {
 			return fmt.Errorf("ExecuteCommand failed to prepare POST request")
 		}

@@ -70,7 +70,7 @@ type Command struct {
 
 // NewCommand creates a new Command to run on an endpoint
 func NewCommand() *Command {
-	id := CheapUUID()
+	id := UUIDGen()
 	cmd := &Command{
 		UUID:  id.String(),
 		Drop:  make([]*EndpointFile, 0),
@@ -80,7 +80,7 @@ func NewCommand() *Command {
 
 // NewCommandWithEnv creates a new Command to run on an endpoint
 func NewCommandWithEnv(env *AliasEnv) *Command {
-	id := CheapUUID()
+	id := UUIDGen()
 	cmd := &Command{
 		UUID:     id.String(),
 		Drop:     make([]*EndpointFile, 0),
@@ -111,7 +111,7 @@ func (c *Command) AddDropFile(filename, filepath string) error {
 	var err error
 
 	ef := EndpointFile{
-		UUID: CheapUUID().String(),
+		UUID: UUIDGen().String(),
 		Name: filename}
 	if ef.Data, err = ioutil.ReadFile(filepath); err != nil {
 		return fmt.Errorf("failed at reading file to drop: %w", err)
@@ -130,7 +130,7 @@ func (c *Command) AddDropFileFromPath(path string) error {
 
 // AddFetchFile adds a file to fetch from the endpoint.
 func (c *Command) AddFetchFile(filepath string) {
-	c.Fetch[filepath] = &EndpointFile{UUID: CheapUUID().String()}
+	c.Fetch[filepath] = &EndpointFile{UUID: UUIDGen().String()}
 }
 
 // BuildCmd builds up an exec.Cmd from Command
@@ -288,13 +288,16 @@ func prev(ip net.IP) net.IP {
 }
 
 const (
+	// ContainRuleName is the name of the Windows firewall rule used to contain endpoint
 	ContainRuleName = "EDR containment"
 )
 
+// AliasEnv is a structure to hold variables needed by aliases
 type AliasEnv struct {
 	ManagerIP net.IP
 }
 
+// ContainAlias is an alias to contain an endpoint
 func ContainAlias(ip net.IP) *exec.Cmd {
 	if ip != nil {
 		ip = ip.To4()
@@ -314,6 +317,8 @@ func ContainAlias(ip net.IP) *exec.Cmd {
 	return nil
 }
 
+// UncontainAlias builds a command to uncontain an endpoint
+// NB: implementation must be in line with what is done in ContainAlias
 func UncontainAlias() *exec.Cmd {
 	// building up netsh.exe arguments
 	args := []string{"advfirewall",

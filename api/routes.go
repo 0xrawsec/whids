@@ -4,44 +4,54 @@ package api
 const (
 	// GET based API routes
 
-	// GetServerKeyURL API route used to get server key
-	GetServerKeyURL = "/key"
-	// GetRulesURL API route used to get Gene rules available in server
-	GetRulesURL = "/rules"
-	// GetRulesSha256URL API route used to retrieve sha256 of latest batch of Gene rules
-	GetRulesSha256URL = "/rules/sha256"
-	// GetContainerListURL API route to serve the list of containers available in the Manager
-	GetContainerListURL = "/containers"
-	// GetContainerURL API route to get a container
-	GetContainerURL = "/container/{name}"
-	// GetContainerSha256URL API route to serve sha256 of the different containers
-	GetContainerSha256URL = "/container/sha256/{name}"
+	// EptAPIServerKeyPath API route used to get server key
+	EptAPIServerKeyPath = "/key"
+	// EptAPIRulesPath API route used to get Gene rules available in server
+	EptAPIRulesPath = "/rules"
+	// EptAPIRulesSha256Path API route used to retrieve sha256 of latest batch of Gene rules
+	EptAPIRulesSha256Path = "/rules/sha256"
+	// EptAPIContainerListPath API route to serve the list of containers available in the Manager
+	EptAPIContainerListPath = "/containers"
+	// EptAPIContainerPath API route to get a container
+	EptAPIContainerPath = "/container/{name}"
+	// EptAPIContainerSha256Path API route to serve sha256 of the different containers
+	EptAPIContainerSha256Path = "/container/sha256/{name}"
 
 	// POST based API routes
 
-	// PostLogsURL API route used to post logs
-	PostLogsURL = "/logs"
-	// PostDumpURL API route used to dump things
-	PostDumpURL = "/upload/dumps"
+	// EptAPIPostLogsPath API route used to post logs
+	EptAPIPostLogsPath = "/logs"
+	// EptAPIPostDumpPath API route used to dump things
+	EptAPIPostDumpPath = "/upload/dumps"
 
 	// GET and POST routes
 
-	// CommandURL used to GET commands and POST results
-	CommandURL = "/commands"
+	// EptAPICommandPath used to GET commands and POST results
+	EptAPICommandPath = "/commands"
+)
+
+var (
+	eptAPIVerbosePaths = []string{
+		EptAPIServerKeyPath,
+		EptAPICommandPath,
+		EptAPIRulesSha256Path,
+		EptAPIContainerListPath,
+	}
 )
 
 // Routes used for Admin API
 const (
-	uuidRe              = "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}"
-	GetEndpointsURL     = "/endpoints"
-	GetEndpointsByIdURL = GetEndpointsURL + "/{euuid:" + uuidRe + "}"
+	uuidRe                  = "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}"
+	AdmAPIStatsPath         = "/stats"
+	AdmAPIEndpointsPath     = "/endpoints"
+	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related
-	GetEndpointCommand      = GetEndpointsByIdURL + "/command"
-	GetEndpointCommandField = GetEndpointCommand + "/{field}"
+	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + "/command"
+	AdmAPIEndpointCommandFieldPath = AdmAPIEndpointCommandPath + "/{field}"
 	// Logs related
-	GetEndpointLogs   = GetEndpointsByIdURL + "/logs"
-	GetEndpointAlerts = GetEndpointsByIdURL + "/alerts"
+	AdmAPIEndpointLogsPath   = AdmAPIEndpointsByIDPath + "/logs"
+	AdmAPIEndpointAlertsPath = AdmAPIEndpointsByIDPath + "/alerts"
 	// Reports related
-	GetEndpointsReports = GetEndpointsURL + "/reports"
-	GetEndpointReport   = GetEndpointsByIdURL + "/report"
+	AdmAPIEndpointsReportsPath = AdmAPIEndpointsPath + "/reports"
+	AdmAPIEndpointReportPath   = AdmAPIEndpointsByIDPath + "/report"
 )

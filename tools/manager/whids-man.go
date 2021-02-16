@@ -52,7 +52,7 @@ var (
 		EndpointAPI: api.EndpointAPIConfig{
 			Host:      "0.0.0.0",
 			Port:      8000,
-			Endpoints: []api.EndpointConfig{{api.CheapUUID().String(), api.KeyGen(api.DefaultKeySize)}},
+			Endpoints: []api.EndpointConfig{{api.UUIDGen().String(), api.KeyGen(api.DefaultKeySize)}},
 		},
 		Logging: api.ManagerLogConfig{
 			Root:        "./data/logs",

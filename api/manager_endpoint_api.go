@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,6 +19,7 @@ import (
 )
 
 var (
+	// ErrUnkEndpoint error to return when endpoint is unknown
 	ErrUnkEndpoint = fmt.Errorf("Unknown endpoint")
 )
 
@@ -76,6 +78,25 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 	})
 }
 
+func isVerboseURL(u *url.URL) bool {
+	for _, vu := range eptAPIVerbosePaths {
+		if u.Path == vu {
+			return true
+		}
+	}
+	return false
+}
+
+func quietLogHTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isVerboseURL(r.URL) {
+			// src-ip:src-port http-method http-proto url user-agent UUID content-length
+			fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get("UUID"), r.ContentLength)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (m *Manager) runEndpointAPI() {
 
 	go func() {
@@ -90,7 +111,12 @@ func (m *Manager) runEndpointAPI() {
 		rt := mux.NewRouter()
 		// Middleware initialization
 		// Manages Request Logging
-		rt.Use(logHTTPMiddleware)
+		if m.Config.Logging.VerboseHTTP {
+			rt.Use(logHTTPMiddleware)
+		} else {
+			rt.Use(quietLogHTTPMiddleware)
+		}
+
 		// Manages Authorization
 		rt.Use(m.endpointAuthorizationMiddleware)
 		// Manages Compression
@@ -98,19 +124,19 @@ func (m *Manager) runEndpointAPI() {
 
 		// Routes initialization
 		// POST based
-		rt.HandleFunc(PostLogsURL, m.Collect).Methods("POST")
-		rt.HandleFunc(PostDumpURL, m.UploadDump).Methods("POST")
+		rt.HandleFunc(EptAPIPostLogsPath, m.Collect).Methods("POST")
+		rt.HandleFunc(EptAPIPostDumpPath, m.UploadDump).Methods("POST")
 
 		// GET based
-		rt.HandleFunc(GetServerKeyURL, m.ServerKey).Methods("GET")
-		rt.HandleFunc(GetRulesURL, m.Rules).Methods("GET")
-		rt.HandleFunc(GetRulesSha256URL, m.RulesSha256).Methods("GET")
-		rt.HandleFunc(GetContainerURL, m.Container).Methods("GET")
-		rt.HandleFunc(GetContainerListURL, m.ContainerList).Methods("GET")
-		rt.HandleFunc(GetContainerSha256URL, m.ContainerSha256).Methods("GET")
+		rt.HandleFunc(EptAPIServerKeyPath, m.ServerKey).Methods("GET")
+		rt.HandleFunc(EptAPIRulesPath, m.Rules).Methods("GET")
+		rt.HandleFunc(EptAPIRulesSha256Path, m.RulesSha256).Methods("GET")
+		rt.HandleFunc(EptAPIContainerPath, m.Container).Methods("GET")
+		rt.HandleFunc(EptAPIContainerListPath, m.ContainerList).Methods("GET")
+		rt.HandleFunc(EptAPIContainerSha256Path, m.ContainerSha256).Methods("GET")
 
 		// GET and POST
-		rt.HandleFunc(CommandURL, m.Command).Methods("GET", "POST")
+		rt.HandleFunc(EptAPICommandPath, m.Command).Methods("GET", "POST")
 
 		uri := fmt.Sprintf("%s:%d", m.Config.EndpointAPI.Host, m.Config.EndpointAPI.Port)
 		m.endpointAPI = &http.Server{
@@ -153,6 +179,8 @@ func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
 
 // UploadDump HTTP handler used to upload dump files from client to manager
 func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
+	uuid := rq.Header.Get("UUID")
+
 	defer rq.Body.Close()
 
 	if m.Config.DumpDir == "" {
@@ -170,7 +198,8 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	if err := fu.Dump(m.Config.DumpDir); err != nil {
+	fullDumpDir := filepath.Join(m.Config.DumpDir, uuid)
+	if err := fu.Dump(fullDumpDir); err != nil {
 		log.Errorf("Upload handler failed to dump file (%s): %s", fu.Implode(), err)
 		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
 		return
@@ -287,6 +316,7 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 	log.Debugf("Count Event Received: %d", cnt)
 }
 
+// AddCommand sets a command to be executed on endpoint specified by UUID
 func (m *Manager) AddCommand(uuid string, c *Command) error {
 	if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
 		endpt.Command = c
@@ -295,6 +325,7 @@ func (m *Manager) AddCommand(uuid string, c *Command) error {
 	return ErrUnkEndpoint
 }
 
+// GetCommand gets the command set for an endpoint specified by UUID
 func (m *Manager) GetCommand(uuid string) (*Command, error) {
 	if endpt, ok := m.endpoints.GetByUUID(uuid); ok {
 		// We return the command of an unmutable endpoint struct

@@ -236,22 +236,27 @@ var (
 )
 
 var (
-	// Filters definitions
-	fltAnySysmon       = hooks.NewFilter([]int64{}, "Microsoft-Windows-Sysmon/Operational")
-	fltProcessCreate   = hooks.NewFilter([]int64{1}, "Microsoft-Windows-Sysmon/Operational")
-	fltNetworkConnect  = hooks.NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
-	fltProcTermination = hooks.NewFilter([]int64{5}, "Microsoft-Windows-Sysmon/Operational")
-	fltImageLoad       = hooks.NewFilter([]int64{7}, "Microsoft-Windows-Sysmon/Operational")
-	fltProcessAccess   = hooks.NewFilter([]int64{10}, "Microsoft-Windows-Sysmon/Operational")
-	fltRegSetValue     = hooks.NewFilter([]int64{13}, "Microsoft-Windows-Sysmon/Operational")
-	fltNetwork         = hooks.NewFilter([]int64{3, 22}, "Microsoft-Windows-Sysmon/Operational")
-	fltImageSize       = hooks.NewFilter([]int64{1, 6, 7}, "Microsoft-Windows-Sysmon/Operational")
-	fltStats           = hooks.NewFilter([]int64{1, 3, 11}, "Microsoft-Windows-Sysmon/Operational")
-	fltDNS             = hooks.NewFilter([]int64{22}, "Microsoft-Windows-Sysmon/Operational")
-	fltClipboard       = hooks.NewFilter([]int64{24}, "Microsoft-Windows-Sysmon/Operational")
-	fltImageTampering  = hooks.NewFilter([]int64{25}, "Microsoft-Windows-Sysmon/Operational")
+	// SysmonChannel Sysmon windows event log channel
+	SysmonChannel = "Microsoft-Windows-Sysmon/Operational"
+	// SecurityChannel Security windows event log channel
+	SecurityChannel = "Security"
 
-	fltFSObjectAccess = hooks.NewFilter([]int64{4663}, "Security")
+	// Filters definitions
+	fltAnySysmon       = hooks.NewFilter([]int64{}, SysmonChannel)
+	fltProcessCreate   = hooks.NewFilter([]int64{1}, SysmonChannel)
+	fltNetworkConnect  = hooks.NewFilter([]int64{3}, SysmonChannel)
+	fltProcTermination = hooks.NewFilter([]int64{5}, SysmonChannel)
+	fltImageLoad       = hooks.NewFilter([]int64{7}, SysmonChannel)
+	fltProcessAccess   = hooks.NewFilter([]int64{10}, SysmonChannel)
+	fltRegSetValue     = hooks.NewFilter([]int64{13}, SysmonChannel)
+	fltNetwork         = hooks.NewFilter([]int64{3, 22}, SysmonChannel)
+	fltImageSize       = hooks.NewFilter([]int64{1, 6, 7}, SysmonChannel)
+	fltStats           = hooks.NewFilter([]int64{1, 3, 11}, SysmonChannel)
+	fltDNS             = hooks.NewFilter([]int64{22}, SysmonChannel)
+	fltClipboard       = hooks.NewFilter([]int64{24}, SysmonChannel)
+	fltImageTampering  = hooks.NewFilter([]int64{25}, SysmonChannel)
+
+	fltFSObjectAccess = hooks.NewFilter([]int64{4663}, SecurityChannel)
 )
 
 var (
@@ -401,13 +406,18 @@ func isSelf(e *evtx.GoEvtxMap) bool {
 	return false
 }
 
+// helper function which checks if the event belongs to current WHIDS
+func isSysmonProcessTerminate(e *evtx.GoEvtxMap) bool {
+	return e.Channel() == SysmonChannel && e.EventID() == IDProcessTerminate
+}
+
 // hook applying on Sysmon events containing image information and
 // adding a new field containing the image size
 func hookSetImageSize(e *evtx.GoEvtxMap) {
 	var path *evtx.GoEvtxPath
 	var modpath *evtx.GoEvtxPath
 	switch e.EventID() {
-	case 1:
+	case IDProcessCreate:
 		path = &pathSysmonImage
 		modpath = &pathImSize
 	default:
@@ -541,11 +551,11 @@ func hookStats(e *evtx.GoEvtxMap) {
 			if pt := processTracker.GetByGuid(guid); pt != nil {
 				//pt := v.(*processTrack)
 				switch e.EventID() {
-				case 1:
+				case IDProcessCreate:
 					pt.Stats.CountProcessCreated++
-				case 3:
+				case IDNetworkConnect:
 					pt.Stats.CountNetConn++
-				case 11:
+				case IDFileCreate:
 					if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
 						ext := filepath.Ext(target)
 						if pt.Stats.CountFilesCreatedByExt[ext] == nil {
@@ -605,7 +615,7 @@ func terminator(pid int) error {
 
 // hook terminating previously blacklisted processes (according to their CommandLine)
 func hookTerminator(e *evtx.GoEvtxMap) {
-	if e.EventID() == 1 {
+	if e.EventID() == IDProcessCreate {
 		if commandLine, err := e.GetString(&pathSysmonCommandLine); err == nil {
 			if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
 				if blacklistedImages.Contains(commandLine) {
@@ -629,18 +639,16 @@ func hookProcTerm(e *evtx.GoEvtxMap) {
 		processTracker.Terminate(guid)
 		terminated.Del(guid)
 		memdumped.Del(guid)
-		//svchostTrack.Del(guid)
 	}
 }
 
 func hookSelfGUID(e *evtx.GoEvtxMap) {
 	if selfGUID == "" {
-		if e.EventID() == 1 {
+		if e.EventID() == IDProcessCreate {
 			// Sometimes it happens that other events are generated before process creation
 			// Check parent image first because we launch whids.exe -h to test process termination
 			// and we catch it up if we check image first
 			if pimage, err := e.GetString(&pathSysmonParentImage); err == nil {
-				//log.Infof("pimage=%s self=%s", pimage, selfPath)
 				if pimage == selfPath {
 					if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
 						selfGUID = pguid
@@ -650,7 +658,6 @@ func hookSelfGUID(e *evtx.GoEvtxMap) {
 				}
 			}
 			if image, err := e.GetString(&pathSysmonImage); err == nil {
-				//log.Infof("image=%s self=%s", image, selfPath)
 				if image == selfPath {
 					if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
 						selfGUID = guid
@@ -696,50 +703,53 @@ func hookProcessIntegrityProcTamp(e *evtx.GoEvtxMap) {
 	// Sysmon Create Process
 	if e.EventID() == IDProcessTampering {
 		if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
-			if kernel32.IsPIDRunning(int(pid)) {
-				// we first need to wait main process thread
-				mainTid := kernel32.GetFirstTidOfPid(int(pid))
-				// if we found the main thread of pid
-				if mainTid > 0 {
-					hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-					if err != nil {
-						log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
-					} else {
-						defer kernel32.CloseHandle(hThread)
-						if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
-							// We check whether the thread still exists
-							checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-							if err == nil {
-								log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
-							}
-							kernel32.CloseHandle(checkThread)
+			// prevent stopping our own process, it may happen in some
+			// cases when selfGuid is not found fast enough
+			if pid != int64(os.Getpid()) {
+				if kernel32.IsPIDRunning(int(pid)) {
+					// we first need to wait main process thread
+					mainTid := kernel32.GetFirstTidOfPid(int(pid))
+					// if we found the main thread of pid
+					if mainTid > 0 {
+						hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+						if err != nil {
+							log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
 						} else {
-							da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
-							hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
-
-							if err != nil {
-								log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
+							defer kernel32.CloseHandle(hThread)
+							if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
+								// We check whether the thread still exists
+								checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+								if err == nil {
+									log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
+								}
+								kernel32.CloseHandle(checkThread)
 							} else {
-								defer kernel32.CloseHandle(hProcess)
-								bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
+								da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
+								hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
+
 								if err != nil {
-									log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
+									log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
 								} else {
-									if slen != 0 {
-										integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
-										e.Set(&pathProcessIntegrity, toString(integrity))
+									defer kernel32.CloseHandle(hProcess)
+									bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
+									if err != nil {
+										log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
+									} else {
+										if slen != 0 {
+											integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
+											e.Set(&pathProcessIntegrity, toString(integrity))
+										}
 									}
 								}
 							}
 						}
 					}
 				}
-			} else {
-				log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
 			}
+		} else {
+			log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
 		}
 	}
-
 }
 
 func hookProcessIntegrityProcCreate(e *evtx.GoEvtxMap) {
@@ -749,7 +759,7 @@ func hookProcessIntegrityProcCreate(e *evtx.GoEvtxMap) {
 	e.Set(&pathIntegrityTimeout, toString(false))
 
 	// Sysmon Create Process
-	if bootCompleted && e.EventID() == 1 {
+	if bootCompleted && e.EventID() == IDProcessCreate {
 		if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
 			// parent processTrack
 			ppt := processTracker.GetByGuid(pguid)
@@ -857,10 +867,10 @@ func hookEnrichServices(e *evtx.GoEvtxMap) {
 	eventID := e.EventID()
 	if flagProcTermEn {
 		switch eventID {
-		case 6, 19, 20, 21:
+		case IDDriverLoad, IDWMIBinding, IDWMIConsumer, IDWMIFilter:
 			// Nothing to do
 			break
-		case 8, 10:
+		case IDCreateRemoteThread, IDAccessProcess:
 			e.Set(&pathSourceServices, "?")
 			e.Set(&pathTargetServices, "?")
 
@@ -966,12 +976,12 @@ func eventHas(e *evtx.GoEvtxMap, p *evtx.GoEvtxPath) bool {
 func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 	eventID := e.EventID()
 	switch eventID {
-	case 1, 6:
+	case IDProcessCreate, IDDriverLoad:
 		// ProcessCreation is already processed in hookTrack
 		// DriverLoad does not contain any GUID information
 		break
 
-	case 8, 10:
+	case IDCreateRemoteThread, IDAccessProcess:
 		// Handling CreateRemoteThread and ProcessAccess events
 		// Default Values for the fields
 		e.Set(&pathSourceUser, "?")
@@ -985,7 +995,7 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		sguidPath := &pathSysmonSourceProcessGUID
 		tguidPath := &pathSysmonTargetProcessGUID
 
-		if eventID == 8 {
+		if eventID == IDCreateRemoteThread {
 			sguidPath = &pathCRTSourceProcessGuid
 			tguidPath = &pathCRTTargetProcessGuid
 		}
@@ -1119,8 +1129,6 @@ func compress(path string) {
 func dumpPidAndCompress(pid int, guid, id string) {
 	// prevent stopping ourself (><)
 	if kernel32.IsPIDRunning(pid) && pid != selfPid && !memdumped.Contains(guid) && !memdumping.Contains(guid) {
-		//kernel32.SuspendProcess(int(pid))
-		//defer kernel32.ResumeProcess(int(pid))
 
 		// To avoid dumping the same process twice, possible if two alerts
 		// comes from the same GUID in a short period of time
@@ -1216,7 +1224,7 @@ func hookDumpProcess(e *evtx.GoEvtxMap) {
 
 		// the interesting pid to dump depends on the event
 		switch e.EventID() {
-		case 8, 10:
+		case IDCreateRemoteThread, IDAccessProcess:
 			pidPath = &pathSysmonSourceProcessId
 			procGUIDPath = &pathSysmonSourceProcessGUID
 		default:
@@ -1313,7 +1321,6 @@ func dumpCommandLine(e *evtx.GoEvtxMap, dumpPath string) {
 
 func dumpParentCommandLine(e *evtx.GoEvtxMap, dumpPath string) {
 	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
-		//if cwd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
 		if track := processTracker.GetByGuid(guid); track != nil {
 			if argv, err := utils.ArgvFromCommandLine(track.ParentCommandLine); err == nil {
 				if len(argv) > 1 {
@@ -1378,31 +1385,31 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 		// Handling different kinds of event IDs
 		switch e.EventID() {
 
-		case 2, 11, 15:
+		case IDFileTime, IDFileCreate, IDCreateStreamHash:
 			if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
 				if err = dumpFileAndCompress(target, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), target, err)
 				}
 			}
 
-		case 6:
+		case IDDriverLoad:
 			if im, err := e.GetString(&pathSysmonImageLoaded); err == nil {
 				if err = dumpFileAndCompress(im, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)
 				}
 			}
 
-		case 10:
+		case IDAccessProcess:
 			if sim, err := e.GetString(&pathSysmonSourceImage); err == nil {
 				if err = dumpFileAndCompress(sim, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), sim, err)
 				}
 			}
 
-		case 13, 20:
+		case IDRegSetValue, IDWMIConsumer:
 			// for event ID 13
 			path := &pathSysmonDetails
-			if e.EventID() == 20 {
+			if e.EventID() == IDWMIConsumer {
 				path = &pathSysmonDestination
 			}
 			if cl, err := e.GetString(path); err == nil {
@@ -1418,7 +1425,7 @@ func hookDumpFile(e *evtx.GoEvtxMap) {
 				}
 			}
 
-		case 23:
+		case IDFileDelete:
 			if im, err := e.GetString(&pathSysmonImage); err == nil {
 				if err = dumpFileAndCompress(im, dumpPath); err != nil {
 					log.Errorf("Error dumping file from EventID=%d \"%s\": %s", e.EventID(), im, err)

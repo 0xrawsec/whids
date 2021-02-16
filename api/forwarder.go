@@ -23,8 +23,8 @@ const (
 	DefaultDirPerm = 0700
 	// DefaultLogfileSize default forwarder logfile size
 	DefaultLogfileSize = logfile.MB * 5
-	// DiskSpaceThreshold allow 100MB of queued events
-	DiskSpaceThreshold = DefaultLogfileSize * 20
+	// DiskSpaceThreshold allow 1GB of queued events
+	DiskSpaceThreshold = logfile.GB
 	// MinRotationInterval is the minimum rotation interval allowed
 	MinRotationInterval = time.Minute
 )
@@ -90,7 +90,6 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	}
 
 	// queue directory
-	c.Logging.Dir = c.Logging.Dir
 	if c.Logging.Dir == "" {
 		return nil, fmt.Errorf("Field \"logs-dir\" is missing from configuration")
 	}
@@ -125,12 +124,10 @@ func (f *Forwarder) ArchiveLogs() {
 			if !strings.HasSuffix(fp, ".gz") {
 				if err := fileutils.GzipFile(fp); err != nil {
 					log.Errorf("Failed to archive log: %s", err)
-
 				}
 			}
 		}
 	}
-
 }
 
 // PipeEvent pipes an event to be sent through the forwarder
@@ -297,7 +294,7 @@ func (f *Forwarder) ProcessQueue() {
 		}
 
 		// everything went fine, then we can delete the queued file
-		log.Info("Deleting queue file : %s", fp)
+		log.Infof("Deleting queue file : %s", fp)
 		if err = os.Remove(fp); err != nil {
 			log.Errorf("Failed to delete queued file (%s): %s", fp, err)
 		}
