@@ -72,7 +72,7 @@ In order to get the most of WHIDS you might want to improve your logging policy.
     1. gpedit.msc -> `Computer Configuration\Windows Settings\Security Settings\Advanced Audit Policy Configuration\System Audit Policies\Object Access\Audit File System` -> Enable
     2. Right Click Any Folder -> Properties -> Security -> Advanced -> Auditing -> Add
         1. `Select a principal` (put here the name of the user/group you want the audit for). Put group **Everyone** if you want to log access from any user.
-        2. `Apply this to` is used to select the scope of this audit policy starting from this folder
+        2. `Apply this to` is used to select the scope of this audit policy starting from the folder you have selected
         3. `Basic permissions` select the kinds of accesses you want the logs to be generated for
         4. Validate
     3. File System auditing logs will appear in the `Security` log channel
