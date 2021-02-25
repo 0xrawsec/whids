@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/0xrawsec/whids/blob/master/doc/img/logo.png?s=200" alt="logo">
+  <img src="./doc/img/logo.png" alt="logo" width="40%">
 </p>
 
 ## What
