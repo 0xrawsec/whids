@@ -2,19 +2,26 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/gene/reducer"
+	"github.com/0xrawsec/gene/rules"
 	"github.com/0xrawsec/golang-evtx/evtx"
 
 	"github.com/0xrawsec/golang-utils/fsutil"
+	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/mux"
 )
@@ -53,23 +60,24 @@ type AdminAPIConfig struct {
 // AdminAPIResponse standard structure to encode any response
 // from the AdminAPI
 type AdminAPIResponse struct {
-	Data  interface{} `json:"data"`
-	Error string      `json:"error"`
+	Data    interface{} `json:"data"`
+	Message string      `json:"message"`
+	Error   string      `json:"error"`
 }
 
 // NewAdminAPIResponse creates a new response from data
 func NewAdminAPIResponse(data interface{}) *AdminAPIResponse {
-	return &AdminAPIResponse{Data: data}
+	return &AdminAPIResponse{Data: data, Message: "OK"}
 }
 
 // NewAdminAPIRespError creates a new response from an error
 func NewAdminAPIRespError(err error) *AdminAPIResponse {
-	return &AdminAPIResponse{Error: fmt.Sprintf("%s", err)}
+	return &AdminAPIResponse{Message: "NOK", Error: format("%s", err)}
 }
 
 // NewAdminAPIRespErrorString creates a new error response from an error
 func NewAdminAPIRespErrorString(err string) *AdminAPIResponse {
-	return &AdminAPIResponse{Error: err}
+	return &AdminAPIResponse{Message: "NOK", Error: err}
 }
 
 // UnmarshalData unmarshals the Data field of the response to an interface
@@ -85,7 +93,7 @@ func (r *AdminAPIResponse) UnmarshalData(i interface{}) error {
 func (r *AdminAPIResponse) ToJSON() []byte {
 	b, err := json.Marshal(r)
 	if err != nil {
-		safe := AdminAPIResponse{Error: fmt.Sprintf("Failed to encode data to JSON: %s", err)}
+		safe := AdminAPIResponse{Error: format("Failed to encode data to JSON: %s", err)}
 		sb, _ := json.Marshal(safe)
 		return sb
 	}
@@ -94,6 +102,11 @@ func (r *AdminAPIResponse) ToJSON() []byte {
 
 func admErrStr(s string) []byte {
 	return NewAdminAPIRespErrorString(s).ToJSON()
+}
+
+func admMsgStr(s string) []byte {
+	r := AdminAPIResponse{Message: s}
+	return r.ToJSON()
 }
 
 /////////////////// Manager functions
@@ -357,12 +370,12 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 			if fsutil.IsFile(path) {
 				fd, err := os.Open(path)
 				if err != nil {
-					wt.Write(admErrStr(fmt.Sprintf("Failed to open log file: %s", err)))
+					wt.Write(admErrStr(format("Failed to open log file: %s", err)))
 				}
 				defer fd.Close()
 				r, err := gzip.NewReader(fd)
 				if err != nil {
-					wt.Write(admErrStr(fmt.Sprintf("Failed to create gzip reader: %s", err)))
+					wt.Write(admErrStr(format("Failed to create gzip reader: %s", err)))
 				}
 				defer r.Close()
 				s := bufio.NewScanner(r)
@@ -387,7 +400,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 				fd.Close()
 
 				if s.Err() != nil {
-					wt.Write(admErrStr(fmt.Sprintf("Scanner terminated with error: %s", s.Err())))
+					wt.Write(admErrStr(format("Scanner terminated with error: %s", s.Err())))
 				}
 			}
 			if s.After(stop) || s.After(time.Now()) {
@@ -439,6 +452,218 @@ func (m *Manager) admAPIStats(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write(NewAdminAPIResponse(s).ToJSON())
 }
 
+func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
+	// used in case of POST / DELETE
+	rulesBasename := "compiled-updated.gen"
+	name := rq.URL.Query().Get("name")
+
+	switch rq.Method {
+	case "GET":
+		rulesList := make([]rules.Rule, 0, m.geneEng.Count())
+		if name == "" {
+			name = ".*"
+		}
+		for r := range m.geneEng.GetRawRule(name) {
+			jr := rules.Rule{}
+			if err := json.Unmarshal([]byte(r), &jr); err != nil {
+				wt.Write(admErrStr(err.Error()))
+				return
+			}
+			rulesList = append(rulesList, jr)
+		}
+		wt.Write(NewAdminAPIResponse(rulesList).ToJSON())
+
+	case "DELETE":
+		// we want to be sure to be able to create the file before going on
+		newRulesPath := filepath.Join(m.Config.RulesDir, rulesBasename)
+		if m.geneEng.GetRawRuleByName(name) == "" {
+			wt.Write(admErrStr(format(`No such rule "%s", doing nothing`, name)))
+			return
+		}
+
+		fd, err := os.Create(format("%s.tmp", newRulesPath))
+		if err != nil {
+			wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+			return
+		}
+		defer fd.Close()
+
+		// we delete previous rule files
+		for wi := range fswalker.Walk(m.Config.RulesDir) {
+			for _, fi := range wi.Files {
+				fp := filepath.Join(m.Config.RulesDir, fi.Name())
+				if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
+					if err := os.Remove(fp); err != nil {
+						wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+						return
+					}
+				}
+			}
+		}
+
+		// we update the rule file
+		for _, ruleName := range m.geneEng.GetRuleNames() {
+			if name != ruleName {
+				// we write as is the rules not needing updates
+				if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(ruleName))); err != nil {
+					wt.Write(admErrStr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
+					return
+				}
+			}
+		}
+
+		// close file before renaming
+		fd.Close()
+		if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
+			wt.Write(admErrStr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
+			return
+		}
+		wt.Write(admMsgStr("Rules updated succesfully, engine needs to be reloaded"))
+
+	case "POST":
+		m.Lock()
+		defer m.Unlock()
+		defer rq.Body.Close()
+		paramUpdate := rq.URL.Query().Get("update")
+		b, err := ioutil.ReadAll(rq.Body)
+		if err != nil {
+			wt.Write(admErrStr(format("Failed to read request body: %s", err)))
+		} else {
+			// LoadReader also asses that the rules are all compilable
+			if err := m.geneEng.LoadReader(bytes.NewReader(b)); err != nil {
+				update, _ := strconv.ParseBool(paramUpdate)
+				// if we have the correct error and we want to replace existing rules
+				if _, ok := err.(engine.ErrRuleExist); ok && update {
+					// we want to be sure to be able to create the file before going on
+					newRulesPath := filepath.Join(m.Config.RulesDir, rulesBasename)
+					fd, err := os.Create(format("%s.tmp", newRulesPath))
+					if err != nil {
+						wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+						return
+					}
+					defer fd.Close()
+
+					// we verify we can decode all the body
+					newRules := make(map[string]rules.Rule)
+					dec := json.NewDecoder(bytes.NewReader(b))
+					for {
+						jr := rules.Rule{}
+						err := dec.Decode(&jr)
+
+						if err == io.EOF {
+							break
+						}
+						if err != nil {
+							wt.Write(admErrStr(format("Failed to parse body content as JSON: %s", err)))
+							return
+						}
+						newRules[jr.Name] = jr
+					}
+
+					// we delete previous rule files
+					for wi := range fswalker.Walk(m.Config.RulesDir) {
+						for _, fi := range wi.Files {
+							fp := filepath.Join(m.Config.RulesDir, fi.Name())
+							if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
+								if err := os.Remove(fp); err != nil {
+									wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+									return
+								}
+							}
+						}
+					}
+
+					// we update the rule file
+					for _, name := range m.geneEng.GetRuleNames() {
+						// we write as is the rules not needing updates
+						if _, ok := newRules[name]; !ok {
+							if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(name))); err != nil {
+								wt.Write(admErrStr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
+								return
+							}
+						}
+					}
+					for _, rule := range newRules {
+						json, _ := rule.JSON()
+						if _, err := fd.WriteString(format("%s\n", json)); err != nil {
+							wt.Write(admErrStr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
+							return
+						}
+					}
+					// close file before renaming
+					fd.Close()
+					if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
+						wt.Write(admErrStr(format("Fail to rename temporary rule file, you must rename it manually: %s", err)))
+						return
+					}
+					wt.Write(admMsgStr("Rules updated succesfully, engine needs to be reloaded"))
+				} else {
+					// we return an error because we don't want to replace existing rules
+					wt.Write(admErrStr(format("Error loading rule: %s", err)))
+				}
+			} else {
+				wt.Write(admMsgStr("Rules added successfully, please save rules for persistence"))
+			}
+		}
+	}
+}
+
+func (m *Manager) admAPIRulesReload(wt http.ResponseWriter, rq *http.Request) {
+	m.Lock()
+	defer m.Unlock()
+	// Gene engine initialization
+	if err := m.LoadGeneEngine(); err != nil {
+		wt.Write(admErrStr(format("Failed to reload engine: %s", err)))
+	} else {
+		// Gene Reducer initialization (used to generate reports)
+		m.reducer = reducer.NewReducer(m.geneEng)
+	}
+	m.admAPIStats(wt, rq)
+}
+
+func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
+	rulesBasename := "compiled-updated.gen"
+	newRulesPath := filepath.Join(m.Config.RulesDir, rulesBasename)
+
+	// we want to be sure to be able to create the file before going on
+	fd, err := os.Create(format("%s.tmp", newRulesPath))
+	if err != nil {
+		wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+		return
+	}
+
+	// we delete previous rule files
+	for wi := range fswalker.Walk(m.Config.RulesDir) {
+		for _, fi := range wi.Files {
+			fp := filepath.Join(m.Config.RulesDir, fi.Name())
+			if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
+				if err := os.Remove(fp); err != nil {
+					wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+					return
+				}
+			}
+		}
+	}
+
+	// we update the rule file
+	for _, ruleName := range m.geneEng.GetRuleNames() {
+		// we write as is the rules not needing updates
+		if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(ruleName))); err != nil {
+			wt.Write(admErrStr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
+			return
+		}
+	}
+
+	// close file before renaming
+	fd.Close()
+	if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
+		wt.Write(admErrStr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
+		return
+	}
+	wt.Write(admMsgStr("Rules saved succesfully on disk"))
+	defer fd.Close()
+}
+
 func (m *Manager) runAdminAPI() {
 
 	go func() {
@@ -470,8 +695,11 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointAlertsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
+		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
+		rt.HandleFunc(AdmAPIRulesReloadPath, m.admAPIRulesReload).Methods("GET")
+		rt.HandleFunc(AdmAPIRulesSavePath, m.admAPIRulesSave).Methods("GET")
 
-		uri := fmt.Sprintf("%s:%d", m.Config.AdminAPI.Host, m.Config.AdminAPI.Port)
+		uri := format("%s:%d", m.Config.AdminAPI.Host, m.Config.AdminAPI.Port)
 		m.adminAPI = &http.Server{
 			Handler:      rt,
 			Addr:         uri,

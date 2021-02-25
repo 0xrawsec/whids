@@ -45,14 +45,23 @@ var (
 
 	dummyManagerConfig = api.ManagerConfig{
 		AdminAPI: api.AdminAPIConfig{
-			Host:  "localhost",
-			Port:  api.AdmAPIDefaultPort,
-			Users: []api.AdminUser{{"admin", api.KeyGen(api.DefaultKeySize)}},
+			Host: "localhost",
+			Port: api.AdmAPIDefaultPort,
+			Users: []api.AdminUser{
+				{
+					Identifier: "admin",
+					Key:        api.KeyGen(api.DefaultKeySize),
+				}},
 		},
 		EndpointAPI: api.EndpointAPIConfig{
-			Host:      "0.0.0.0",
-			Port:      api.EptAPIDefaultPort,
-			Endpoints: []api.EndpointConfig{{api.UUIDGen().String(), api.KeyGen(api.DefaultKeySize)}},
+			Host: "0.0.0.0",
+			Port: api.EptAPIDefaultPort,
+			Endpoints: []api.EndpointConfig{
+				{
+					UUID: api.UUIDGen().String(),
+					Key:  api.KeyGen(api.DefaultKeySize),
+				},
+			},
 		},
 		Logging: api.ManagerLogConfig{
 			Root:        "./data/logs",

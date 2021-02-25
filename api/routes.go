@@ -43,6 +43,9 @@ var (
 const (
 	uuidRe                  = "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}"
 	AdmAPIStatsPath         = "/stats"
+	AdmAPIRulesPath         = "/rules"
+	AdmAPIRulesReloadPath   = "/rules/reload"
+	AdmAPIRulesSavePath     = "/rules/save"
 	AdmAPIEndpointsPath     = "/endpoints"
 	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related

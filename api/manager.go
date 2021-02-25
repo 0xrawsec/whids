@@ -428,7 +428,7 @@ func (es *Endpoints) MutEndpoints() []*Endpoint {
 
 // Manager structure definition
 type Manager struct {
-	//Todo: sync.RWMutex
+	sync.RWMutex
 	Config      *ManagerConfig
 	logfile     logfile.LogFile
 	endpointAPI *http.Server

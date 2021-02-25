@@ -169,11 +169,15 @@ func (m *Manager) ServerKey(wt http.ResponseWriter, rq *http.Request) {
 
 // Rules HTTP handler used to serve the rules
 func (m *Manager) Rules(wt http.ResponseWriter, rq *http.Request) {
+	m.RLock()
+	defer m.RUnlock()
 	wt.Write([]byte(m.rules))
 }
 
 // RulesSha256 returns the sha256 of the latest set of rules loaded into the manager
 func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
+	m.RLock()
+	defer m.RUnlock()
 	wt.Write([]byte(m.rulesSha256))
 }
 
@@ -208,6 +212,8 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 
 // Container HTTP handler serves Gene containers to clients
 func (m *Manager) Container(wt http.ResponseWriter, rq *http.Request) {
+	m.RLock()
+	defer m.RUnlock()
 	vars := mux.Vars(rq)
 	if name, ok := vars["name"]; ok {
 		if cont, ok := m.containers[name]; ok {
@@ -226,6 +232,8 @@ func (m *Manager) Container(wt http.ResponseWriter, rq *http.Request) {
 
 // ContainerList HTTP handler to server the list of available containers
 func (m *Manager) ContainerList(wt http.ResponseWriter, rq *http.Request) {
+	m.RLock()
+	defer m.RUnlock()
 	list := make([]string, 0, len(m.containers))
 	for cn := range m.containers {
 		list = append(list, cn)
@@ -241,6 +249,8 @@ func (m *Manager) ContainerList(wt http.ResponseWriter, rq *http.Request) {
 
 // ContainerSha256 HTTP handler to server the Sha256 of a given container
 func (m *Manager) ContainerSha256(wt http.ResponseWriter, rq *http.Request) {
+	m.RLock()
+	defer m.RUnlock()
 	vars := mux.Vars(rq)
 	if name, ok := vars["name"]; ok {
 		if sha256, ok := m.containersSha256[name]; ok {
