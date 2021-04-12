@@ -107,6 +107,8 @@ Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/maste
 
 # Further Documentation
 
+[Endpoint Manager REST API documentation](doc/apis.md)
+
 [How to write rules](https://rawsec.lu/doc/gene/1.6/)
 
 [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
