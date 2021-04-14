@@ -474,9 +474,7 @@ jq . /tmp/command.json
 }
 ```
 
-### Pushing the command on the manager
-
-**Description:**
+### Pushing the command on the endpoint
 
 **Request:**
 ```bash
@@ -519,8 +517,6 @@ curl -skH "Api-key: admin" -d @/tmp/command.json "https://localhost:8001/endpoin
 
 ### Getting the result
 
-**Description:**
-
 **Request:**
 ```bash
 # GET
@@ -558,7 +554,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
   "error": ""
 }
 ```
-As stdout may countain binary data it is **base64 encoded**, after decoding we get
+As stdout may contain binary data it is **base64 encoded**, after decoding we get
 ```txt
  Volume in drive C has no label.
  Volume Serial Number is 9274-71C1
@@ -577,7 +573,9 @@ As stdout may countain binary data it is **base64 encoded**, after decoding we g
 
 ## Getting endpoint alerts
 
-**Description:**
+**Description:** API endpoint to use in order to retrieve alerts collected from a given endpoint.
+
+**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](doc/configuration.md#manager))
 
 **GET** `/endpoints/{ENDPOINT_UUID}/alerts`
 
@@ -674,7 +672,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Getting endpoint logs
 
-**Description:** used to retrieve logs of an endpoint. Logs includes logs filtered in by any filtering rule as well as alerts.
+**Description:** used to retrieve logs of an endpoint. Those logs includes filtered in events as well as alerts.
+
+**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](doc/configuration.md#manager))
 
 **GET** `/endpoints/{ENDPOINT_UUID}/logs`
 
@@ -684,7 +684,7 @@ Exact same behaviour as [endpoint alerts endpoint](#Getting-endpoint-alerts)
 
 ## All endpoint reports
 
-**Description:**
+**Description:** API endpoint to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
 
 **GET** `/endpoints/reports`
 
@@ -766,7 +766,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/reports"
 
 ## Getting a single endpoint report
 
-**Description:**
+**Description:** API endpoint to get an EDR report about a given endpoint.
 
 **GET** `/endpoints/{ENDPOINT_UUID}/reports`
 
@@ -838,7 +838,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Deleting an endpoint report
 
-**Description:**
+**Description:** API to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
 
 **DELETE** `/endpoints/{ENDPOINT_UUID}/reports`
 
