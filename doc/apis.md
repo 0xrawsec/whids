@@ -30,9 +30,9 @@
 
 # EDR statistics
 
-**Description:** Used to retrieve basic statistics about the EDR manager
+🟢 **GET** `/stats`
 
-**GET** `/stats`
+**Description:** Used to retrieve basic statistics about the EDR manager
 
 **Request:**
 ```bash
@@ -55,9 +55,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/stats"
 
 ## List rules loaded in the EDR
 
-**Description:** This endpoint is usde to retrive rules loaded in the EDR manager (also deployed on all the endpoints connected).
+🟢 **GET** `/rules?name=REGEXP`
 
-**GET** `/rules?name=REGEXP`
+**Description:** This endpoint is usde to retrive rules loaded in the EDR manager (also deployed on all the endpoints connected).
 
 **Request:**
 ```bash
@@ -106,9 +106,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/rules?name=HighlyPol.*"
 
 ## Deleting rule
 
-**Description:** Used to delete a rule from the EDR manager. The engine needs to be reloaded after deletion (c.f. [reloading rules](reloading-rules))
+🟢 **DELETE** `/rules?name=RULE_NAME`
 
-**DELETE** `/rules?name=RULE_NAME`
+**Description:** Used to delete a rule from the EDR manager. The engine needs to be reloaded after deletion (c.f. [reloading rules](reloading-rules))
 
 **Request:**
 ```bash
@@ -127,9 +127,9 @@ curl -skH "Api-key: admin" -X DELETE "https://localhost:8001/rules?name=HighlyPo
 
 ## Adding a new rule
 
-**Description:** Used to add a new rule to the manager or update an existing rule. In case of update the rule engine needs to be reloaded (c.f. [reloading rules](reloading-rules)).
+🟢 **POST** `/rules?update=[1|0|t|f|true|false]`
 
-**POST** `/rules?update=[1|0|t|f|true|false]`
+**Description:** Used to add a new rule to the manager or update an existing rule. In case of update the rule engine needs to be reloaded (c.f. [reloading rules](reloading-rules)).
 
 Params:
 * **update:** boolean value to force update if rule already exists
@@ -208,9 +208,9 @@ curl -d @/tmp/rule.gen -skH "Api-key: admin" "https://localhost:8001/rules?updat
 
 ## Save Rules
 
-**Description:** endpoint to use to save rules.
+🟢 **GET** `/rules/save`
 
-**GET** `/rules/save`
+**Description:** endpoint to use to save rules.
 
 **Request:**
 ```bash
@@ -228,9 +228,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/rules/save"
 
 ## Reloading rules
 
-**Description:** API endpoint used to reload the rule engine.
+🟢 **GET** `/rules/reload`
 
-**GET** `/rules/reload`
+**Description:** API endpoint used to reload the rule engine.
 
 ```bash
 curl -skH "Api-key: admin" "https://localhost:8001/rules/reload"
@@ -250,9 +250,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/rules/reload"
 
 ## List all endpoints
 
-**Description:** API endpoint to use to list all the available endpoints configured to communicate with the manager.
+🟢 **GET** `/endpoints`
 
-**GET** `/endpoints`
+**Description:** API endpoint to use to list all the available endpoints configured to communicate with the manager.
 
 **Request:**
 ```bash
@@ -278,9 +278,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints"
 
 ## Get a single endpoint
 
-**Description:** endpoint used to list information about a single endpoint.
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}`
 
-**GET** `/endpoints/{ENDPOINT_UUID}`
+**Description:** endpoint used to list information about a single endpoint.
 
 **Request:**
 ```bash
@@ -304,11 +304,11 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Adding a new endpoint
 
+🟢 **PUT** `/endpoints`
+
 **Description:** adds a **new endpoint** to the EDR. The endpoint will also be added to
 the configuration of the manager and committed to disk. You can now configure a new
 EDR agent on any endpoint.
-
-**PUT** `/endpoints`
 
 **Request:**
 ```bash
@@ -332,11 +332,11 @@ curl -skH "Api-key: admin" -X PUT "https://localhost:8001/endpoints"
 
 ## Deleting an endpoint
 
+🟢 **DELETE** `/endpoints/{ENDPOINT_UUID}`
+
 **Description:** deletes an endpoint from the EDR. This change is immediate
 and persistent. Thus if an EDR agent is still configured using these
 credentials it will not be able to communicate with the manager any longer.
-
-**DELETE** `/endpoints/{ENDPOINT_UUID}`
 
 **Request:**
 ```bash
@@ -361,11 +361,11 @@ curl -skH "Api-key: admin" -X DELETE "https://localhost:8001/endpoints/49e63832-
 
 ## Getting command information
 
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/command`
+
 **Description:** this API endpoint is used to get information about a pending or executed 
 command. In order to make sure the command has been ran, a specific flag in the response
 can be checked.
-
-**GET** `/endpoints/{ENDPOINT_UUID}/command`
 
 **Request:**
 ```bash
@@ -407,7 +407,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Getting a specific command field information
 
-**GET** `/endpoints/{ENDPOINT_UUID}/command/{FIELD}`
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/command/{FIELD}`
 
 **Description:** this endpoint is used to retrieve only one field of the command. This way it
 allows saving bandwith for polling patterns. Not all fields are accessible through that endpoint.
@@ -428,6 +428,8 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Executing a command on endpoint
 
+🟢 **POST** `/endpoints/{ENDPOINT_UUID}/command`
+
 **Description:** this endpoint can be used to ask the endpoint to **execute a command** or
 **fetch files from the endpoint**. Files can also be dropped prior to command execution, this
 way it is possible to execute binaries or scripts not initially present on the endpoint. Such
@@ -436,8 +438,6 @@ dropped files are removed post command execution.
 It is worth mentionning that it is the EDR agent installed on the endpoint which is 
 responsible for checking commands to execute. So no connection from the EDR manager 
 to the agent is made. 
-
-**POST** `/endpoints/{ENDPOINT_UUID}/command`
 
 **Post Data:**
 
@@ -573,11 +573,11 @@ As stdout may contain binary data it is **base64 encoded**, after decoding we ge
 
 ## Getting endpoint alerts
 
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/alerts`
+
 **Description:** API endpoint to use in order to retrieve alerts collected from a given endpoint.
 
 **Requirement:** endpoint logging must be configured on the manager (cf. [manager config](configuration.md#manager))
-
-**GET** `/endpoints/{ENDPOINT_UUID}/alerts`
 
 **Params:**
   * **start:** RFC 3339 formatted timestamp used as **starting point** for getting alerts
@@ -672,11 +672,11 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Getting endpoint logs
 
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/logs`
+
 **Description:** used to retrieve logs of an endpoint. Those logs includes filtered in events as well as alerts.
 
 **Requirement:** endpoint logging must be configured on the manager (cf. [manager config](configuration.md#manager))
-
-**GET** `/endpoints/{ENDPOINT_UUID}/logs`
 
 Exact same behaviour as [endpoint alerts endpoint](#Getting-endpoint-alerts)
 
@@ -684,9 +684,9 @@ Exact same behaviour as [endpoint alerts endpoint](#Getting-endpoint-alerts)
 
 ## All endpoint reports
 
-**Description:** API endpoint to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
+🟢 **GET** `/endpoints/reports`
 
-**GET** `/endpoints/reports`
+**Description:** API endpoint to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
 
 **Request:**
 ```bash
@@ -766,9 +766,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/reports"
 
 ## Getting a single endpoint report
 
-**Description:** API endpoint to get an EDR report about a given endpoint.
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/reports`
 
-**GET** `/endpoints/{ENDPOINT_UUID}/reports`
+**Description:** API endpoint to get an EDR report about a given endpoint.
 
 **Request:**
 ```bash
@@ -838,9 +838,9 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 ## Deleting an endpoint report
 
-**Description:** API to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
+🟢 **DELETE** `/endpoints/{ENDPOINT_UUID}/reports`
 
-**DELETE** `/endpoints/{ENDPOINT_UUID}/reports`
+**Description:** API to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
 
 **Request:**
 ```bash
