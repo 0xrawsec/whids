@@ -575,7 +575,7 @@ As stdout may contain binary data it is **base64 encoded**, after decoding we ge
 
 **Description:** API endpoint to use in order to retrieve alerts collected from a given endpoint.
 
-**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](doc/configuration.md#manager))
+**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](configuration.md#manager))
 
 **GET** `/endpoints/{ENDPOINT_UUID}/alerts`
 
@@ -674,7 +674,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 **Description:** used to retrieve logs of an endpoint. Those logs includes filtered in events as well as alerts.
 
-**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](doc/configuration.md#manager))
+**Requirement:** endpoint logging must be configured on the manager (cf. [manager config](configuration.md#manager))
 
 **GET** `/endpoints/{ENDPOINT_UUID}/logs`
 
