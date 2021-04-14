@@ -214,7 +214,7 @@ curl -d @/tmp/rule.gen -skH "Api-key: admin" "https://localhost:8001/rules?updat
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/rules/save
+curl -skH "Api-key: admin" "https://localhost:8001/rules/save"
 ```
 
 **Response:**
@@ -256,7 +256,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/rules/reload"
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/endpoints
+curl -skH "Api-key: admin" "https://localhost:8001/endpoints"
 ```
 
 **Response:**
@@ -284,7 +284,7 @@ curl -skH Api-key: admin https://localhost:8001/endpoints
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef
+curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef"
 ```
 
 **Response:**
@@ -592,7 +592,7 @@ As stdout may countain binary data it is **base64 encoded**, after decoding we g
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/alerts
+curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/alerts"
 ```
 
 **Response:**
@@ -690,7 +690,7 @@ Exact same behaviour as [endpoint alerts endpoint](#Getting-endpoint-alerts)
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/endpoints/reports
+curl -skH "Api-key: admin" "https://localhost:8001/endpoints/reports"
 ```
 
 **Response:**
@@ -772,7 +772,7 @@ curl -skH Api-key: admin https://localhost:8001/endpoints/reports
 
 **Request:**
 ```bash
-curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/report
+curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/report"
 ```
 
 **Response:**
