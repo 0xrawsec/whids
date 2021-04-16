@@ -8,11 +8,11 @@
 
  ### What do you mean by "artifact collection driven by detection" ?
 
- It means that an alert can directly triggers some artifact collection (file, registry, 
+ It means that an alert can directly trigger some artifact collection (file, registry, 
  process memory). This way you are sure you collected the artifacts as soon as you could 
  (near real time).
 
- All this work has been done on my free time in the hope it would help the **IT security community**, I hope you will enjoy it. Unless I get some founding to further develop this project, I will continue doing so. I will make all I can to fix the issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
+ All this work has been done on my free time in the hope it would help other people, I hope you will enjoy it. Unless I get some funding to further develop this project, I will continue doing so. I will make all I can to fix issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
 
 ## Why
 
@@ -27,7 +27,7 @@
   <img src="./doc/img/big-picture.png" alt="big-picture">
 </p>
 
-**NB:** the EDR can be ran standalone (without being connected to an **EDR manager**)
+**NB:** the EDR agent can be ran standalone (without being connected to an **EDR manager**)
 
 ## Strengths
 
@@ -107,13 +107,10 @@ Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/maste
 
 # Further Documentation
 
-[Endpoint Manager REST API documentation](doc/apis.md)
-
-[How to write rules](https://rawsec.lu/doc/gene/1.6/)
-
-[Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
-
-[Overview of events enrichment](https://github.com/0xrawsec/whids/blob/master/doc/events-table.md)
+* [Endpoint Manager REST API documentation](doc/apis.md)
+* [How to write rules](https://rawsec.lu/doc/gene/1.6/)
+* [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
+* [Overview of events enrichment](https://github.com/0xrawsec/whids/blob/master/doc/events-table.md)
 
 # Known Issues
 
