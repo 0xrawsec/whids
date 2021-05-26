@@ -143,3 +143,8 @@ Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/maste
 - Log filtering capabilities, allowing one to collect contextual events. Log filtering is achieved by creating Gene filtering rules (c.f. [Gene Documentation](https://github.com/0xrawsec/gene)).
 - Configuration files in TOML format for better readability
 - Better protection of the installation directory
+
+# Related Work
+
+- Sysmon Based EDR written in PowerShell: https://github.com/ion-storm/sysmon-edr
+- Comodo Open Source EDR with user and kernel components: https://github.com/ComodoSecurity/openedr
