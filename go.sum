@@ -12,6 +12,8 @@ github.com/0xrawsec/gene v1.6.9 h1:RKQa1JBKOfSHRRVfGbFiw3Ui6c0EVJfiR0ugAlFbp7E=
 github.com/0xrawsec/gene v1.6.9/go.mod h1:BpgWF+kapIgjKJW/ZLq66mIHRSde6FRpiwpcXSbmUas=
 github.com/0xrawsec/gene v1.6.10 h1:+VDQiktQuMTWoqYfu/hlDDI45zvOBdhg1zzKJrncoms=
 github.com/0xrawsec/gene v1.6.10/go.mod h1:BpgWF+kapIgjKJW/ZLq66mIHRSde6FRpiwpcXSbmUas=
+github.com/0xrawsec/gene v1.6.11 h1:E2A0tNIvbcGQfC9H52KXnI8GTUiJlcAdpt0bU74pwdk=
+github.com/0xrawsec/gene v1.6.11/go.mod h1:BpgWF+kapIgjKJW/ZLq66mIHRSde6FRpiwpcXSbmUas=
 github.com/0xrawsec/golang-evtx v1.2.4 h1:9ChVrqXWwZZ6NkN/xlWne32Qtkh23NSQYLJqH1DMMZ0=
 github.com/0xrawsec/golang-evtx v1.2.4/go.mod h1:RD+lv9ndoM/7XwvS5XViI51yAp5PDtVVJf8FM6Muro0=
 github.com/0xrawsec/golang-evtx v1.2.5 h1:PSri/6YSXlvcEZT1Ib6KNRauxpf74Bk94TJWpQbCE4Y=
@@ -52,6 +54,8 @@ github.com/gorilla/mux v1.8.0/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB7
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
 github.com/pelletier/go-toml v1.8.1 h1:1Nf83orprkJyknT6h7zbuEGUEjcyVlCxSUGTENmNCRM=
 github.com/pelletier/go-toml v1.8.1/go.mod h1:T2/BmBdy8dvIRq1a/8aqjN41wvWlN4lrapLU/GW4pbc=
+github.com/pelletier/go-toml v1.9.1 h1:a6qW1EVNZWH9WGI6CsYdD8WAylkoXBS5yv0XHlh17Tc=
+github.com/pelletier/go-toml v1.9.1/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/sftp v1.10.0/go.mod h1:NxmoDg/QLVWluQDUYG7XBZTLUpKeFa8e3aMf1BfjyHk=
 github.com/pkg/sftp v1.10.1/go.mod h1:lYOWFsE0bwd1+KfKJaKeuokY15vzFx25BLbzYYoAxZI=

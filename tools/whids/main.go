@@ -45,10 +45,11 @@ var (
 	flagDumpDefault bool
 	flagDryRun      bool
 	flagPrintAll    bool
-	debugFlag       bool
-	versionFlag     bool
+	flagDebug       bool
+	flagVersion     bool
 	flagService     bool
 	flagProfile     bool
+	flagRestore     bool
 
 	hids *HIDS
 
@@ -137,9 +138,10 @@ func main() {
 	flag.BoolVar(&flagDumpDefault, "dump-conf", flagDumpDefault, "Dumps default configuration")
 	flag.BoolVar(&flagDryRun, "dry", flagDryRun, "Dry run (do everything except listening on channels)")
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all events passing through HIDS")
-	flag.BoolVar(&versionFlag, "v", versionFlag, "Print version information and exit")
+	flag.BoolVar(&flagVersion, "v", flagVersion, "Print version information and exit")
 	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
-	flag.BoolVar(&debugFlag, "d", debugFlag, "Enable debugging messages")
+	flag.BoolVar(&flagDebug, "d", flagDebug, "Enable debugging messages")
+	flag.BoolVar(&flagRestore, "restore", flagRestore, "Restore Audit Policies and File System Audit ACLs according to configuration file")
 	flag.StringVar(&config, "c", config, "Configuration file")
 	flag.StringVar(&importRules, "import", importRules, "Import rules")
 
@@ -149,6 +151,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nAvailable Channel Aliases:\n%s\n", fmtAliases())
 		fmt.Fprintf(os.Stderr, "\nAvailable Dump modes: %s\n", strings.Join(dumpOptions, ", "))
 		flag.PrintDefaults()
+		os.Exit(exitSuccess)
 	}
 
 	flag.Parse()
@@ -182,7 +185,7 @@ func main() {
 	}
 
 	// Print version information and exit
-	if versionFlag {
+	if flagVersion {
 		printInfo(os.Stderr)
 		os.Exit(exitSuccess)
 	}
@@ -197,13 +200,23 @@ func main() {
 	}
 
 	// Enabling debug if needed
-	if debugFlag {
+	if flagDebug {
 		log.InitLogger(log.LDebug)
 	}
 
 	hidsConf, err := LoadsHIDSConfig(config)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
+	}
+
+	if flagRestore {
+		// Removing ACLs found in config
+		log.Infof("Restoring global File System Audit ACLs")
+		hidsConf.AuditConfig.Restore()
+
+		log.Infof("Restoring canary File System Audit ACLs")
+		hidsConf.CanariesConfig.RestoreACLs()
+		os.Exit(exitSuccess)
 	}
 
 	// has to be there so that we print logs to stdout

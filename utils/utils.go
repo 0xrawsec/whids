@@ -183,6 +183,44 @@ func CountFiles(directory string) (cnt int) {
 	return
 }
 
+// HideFile hides a file in Windows explorer
+// source: https://stackoverflow.com/questions/54139606/how-to-create-a-hidden-file-in-windows-mac-linux
+func HideFile(filename string) error {
+	filenameW, err := syscall.UTF16PtrFromString(filename)
+	if err != nil {
+		return err
+	}
+	err = syscall.SetFileAttributes(filenameW, syscall.FILE_ATTRIBUTE_HIDDEN)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ExpandEnvs expands several strings with environment variable
+// it is just a loop calling os.ExpandEnv for every element
+func ExpandEnvs(s ...string) (o []string) {
+	o = make([]string, len(s))
+	for i := range s {
+		o[i] = os.ExpandEnv(s[i])
+	}
+	return
+}
+
+func StdDir(dir string) string {
+	sep := string(os.PathSeparator)
+	return fmt.Sprintf("%s%s", strings.TrimSuffix(dir, sep), sep)
+}
+
+func StdDirs(directories ...string) (o []string) {
+	// make sure directories ends with \
+	o = make([]string, len(directories))
+	for i, d := range directories {
+		o[i] = StdDir(d)
+	}
+	return
+}
+
 /////////////////////////////// Windows Logger ////////////////////////////////
 
 const (

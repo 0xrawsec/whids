@@ -57,4 +57,7 @@ const (
 	// Reports related
 	AdmAPIEndpointsReportsPath = AdmAPIEndpointsPath + "/reports"
 	AdmAPIEndpointReportPath   = AdmAPIEndpointsByIDPath + "/report"
+	// Dumps related
+	AdmAPIEndpointDumps = AdmAPIEndpointsByIDPath + "/artifacts"
+	AdmAPIEndpointDump  = AdmAPIEndpointDumps + "/{pguid:" + uuidRe + "}/{ehash:[[:xdigit:]]{32}}/{fname:.*}"
 )

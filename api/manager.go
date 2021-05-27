@@ -148,7 +148,7 @@ func (f *FileUpload) Dump(dir string) (err error) {
 	dirpath := filepath.Join(dir, f.GUID, f.EventHash)
 	fullpath := filepath.Join(dirpath, f.Name)
 
-	// Create directory if don't exist
+	// Create directory if doesn't exist
 	if !fsutil.IsDir(dirpath) {
 		if err = os.MkdirAll(dirpath, DefaultDirPerm); err != nil {
 			return
@@ -377,6 +377,13 @@ func (es *Endpoints) DelByUUID(uuid string) {
 			es.endpoints = append(es.endpoints[:i], es.endpoints[i+1:]...)
 		}
 	}
+}
+
+func (es *Endpoints) HasByUUID(uuid string) bool {
+	es.RLock()
+	defer es.RUnlock()
+	_, ok := es.mapUUID[uuid]
+	return ok
 }
 
 // GetByUUID returns a reference to the copy of an Endpoint by its UUID

@@ -18,7 +18,7 @@ set RULES_IMPORT="%~dp0\rules"
 :choice
 echo [i]  Install WHIDS from scratch (removes older installation)
 echo [un] Uninstall previous installation
-echo [up] Update WHIDS binary (keeps current config)
+echo [up] Update WHIDS binary and rules (keeps current config)
 echo [st] Start services
 echo [sp] Stop services
 echo [r]  Restart services
@@ -51,6 +51,7 @@ FOR /F "tokens=1* delims=+" %%A IN (%_in_ch%) DO (
     IF "%%A"=="up" (
         call :StopSvcs
         call :CopyBin
+        call :ImportRules
         call :PromptStartSvcs
     )
     IF "%%A"=="st" (

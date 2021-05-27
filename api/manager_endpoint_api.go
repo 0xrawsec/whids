@@ -183,8 +183,6 @@ func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
 
 // UploadDump HTTP handler used to upload dump files from client to manager
 func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
-	uuid := rq.Header.Get("UUID")
-
 	defer rq.Body.Close()
 
 	if m.Config.DumpDir == "" {
@@ -196,17 +194,21 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 	fu := FileUpload{}
 	dec := json.NewDecoder(rq.Body)
 
-	if err := dec.Decode(&fu); err != nil {
-		log.Errorf("Upload handler failed to decode JSON")
-		http.Error(wt, "Failed to decode JSON", http.StatusInternalServerError)
-		return
-	}
+	if endpt := m.endpointFromRequest(rq); endpt != nil {
+		if err := dec.Decode(&fu); err != nil {
+			log.Errorf("Upload handler failed to decode JSON")
+			http.Error(wt, "Failed to decode JSON", http.StatusInternalServerError)
+			return
+		}
 
-	fullDumpDir := filepath.Join(m.Config.DumpDir, uuid)
-	if err := fu.Dump(fullDumpDir); err != nil {
-		log.Errorf("Upload handler failed to dump file (%s): %s", fu.Implode(), err)
-		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
-		return
+		endptDumpDir := filepath.Join(m.Config.DumpDir, endpt.UUID)
+		if err := fu.Dump(endptDumpDir); err != nil {
+			log.Errorf("Upload handler failed to dump file (%s): %s", fu.Implode(), err)
+			http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		log.Error("Failed to retrieve endpoint from request")
 	}
 }
 

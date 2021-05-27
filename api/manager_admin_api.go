@@ -104,6 +104,10 @@ func admErrStr(s string) []byte {
 	return NewAdminAPIRespErrorString(s).ToJSON()
 }
 
+func admJSONResp(data interface{}) []byte {
+	return NewAdminAPIResponse(data).ToJSON()
+}
+
 func admMsgStr(s string) []byte {
 	r := AdminAPIResponse{Message: s}
 	return r.ToJSON()
@@ -264,7 +268,7 @@ func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Re
 						wt.Write(NewAdminAPIResponse(endpt.Command.Error).ToJSON())
 					case "completed":
 						wt.Write(NewAdminAPIResponse(endpt.Command.Completed).ToJSON())
-					case "files":
+					case "files", "fetch":
 						wt.Write(NewAdminAPIResponse(endpt.Command.Fetch).ToJSON())
 					default:
 						wt.Write(admErrStr(format("Field %s not handled", field)))
@@ -437,6 +441,129 @@ func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Reques
 		out[e.UUID] = m.reducer.ReduceCopy(e.UUID)
 	}
 	wt.Write(NewAdminAPIResponse(out).ToJSON())
+}
+
+type EndpointDumps struct {
+	ProcessGUID string   `json:"process-guid"`
+	EventHash   string   `json:"event-hash"`
+	BaseURL     string   `json:"base-url"`
+	Files       []string `json:"files"`
+}
+
+func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Request) {
+	var euuid string
+	var err error
+	resp := make([]EndpointDumps, 0)
+	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
+		wt.Write(NewAdminAPIRespError(err).ToJSON())
+	} else {
+		if m.endpoints.HasByUUID(euuid) {
+			root := filepath.Join(m.Config.DumpDir, euuid)
+			if procGUIDs, err := ioutil.ReadDir(root); err == nil {
+				for _, pfi := range procGUIDs {
+					if pfi.IsDir() {
+						evtHashDir := filepath.Join(root, pfi.Name())
+						if eventHashes, err := ioutil.ReadDir(evtHashDir); err == nil {
+							for _, efi := range eventHashes {
+								// we remove the curly brackets of the process GUID as gorilla
+								// has issue handling those. Important for API retrieving dump file
+								pguid := strings.Trim(pfi.Name(), "{}")
+								ehash := efi.Name()
+								baseURL := format("%s/%s/%s/", rq.URL, pguid, ehash)
+								ed := EndpointDumps{ProcessGUID: pguid, EventHash: ehash, BaseURL: baseURL, Files: make([]string, 0)}
+								if efi.IsDir() {
+									evtDumpDir := filepath.Join(evtHashDir, ehash)
+									if eventDumps, err := ioutil.ReadDir(evtDumpDir); err == nil {
+										for _, dfi := range eventDumps {
+											ed.Files = append(ed.Files, dfi.Name())
+										}
+									} else {
+										wt.Write(admErrStr(format("Failed to list dump (event dump) directory: %s", err)))
+										return
+									}
+								}
+								resp = append(resp, ed)
+							}
+						} else {
+							wt.Write(admErrStr(format("Failed to list dump (event hash) directory: %s", err)))
+							return
+						}
+					}
+				}
+				// successfull execution path
+				wt.Write(admJSONResp(resp))
+			} else {
+				wt.Write(admErrStr(format("Failed to list dump (process GUID) directory: %s", err)))
+			}
+		} else {
+			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+		}
+	}
+}
+
+func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Request) {
+
+	raw, _ := strconv.ParseBool(rq.URL.Query().Get("raw"))
+	gunzip, _ := strconv.ParseBool(rq.URL.Query().Get("gunzip"))
+
+	if euuid, err := muxGetVar(rq, "euuid"); err == nil {
+		if pguid, err := muxGetVar(rq, "pguid"); err == nil {
+			if ehash, err := muxGetVar(rq, "ehash"); err == nil {
+				if fname, err := muxGetVar(rq, "fname"); err == nil {
+					// sanitize pguid
+					pguid = format("{%s}", strings.Trim(pguid, "{}"))
+					dumpDir := filepath.Join(m.Config.DumpDir, euuid, pguid, ehash)
+					if dumpFiles, err := ioutil.ReadDir(dumpDir); err == nil {
+						for _, dfi := range dumpFiles {
+							exists := filepath.Join(dumpDir, dfi.Name())
+							fetch := filepath.Join(dumpDir, fname)
+							if exists == fetch {
+								var r io.ReadCloser
+								if fd, err := os.Open(fetch); err == nil {
+									r = fd
+									if gunzip {
+										if r, err = gzip.NewReader(fd); err != nil {
+											wt.Write(admErrStr(format("Failed to gunzip file: %s", err)))
+											return
+										}
+									}
+
+									// defer closing of the reader
+									defer r.Close()
+
+									if data, err := ioutil.ReadAll(r); err == nil {
+										// if we want the raw file
+										if raw {
+											wt.Write(data)
+										} else {
+											wt.Write(admJSONResp(data))
+										}
+									} else {
+										wt.Write(admErrStr(format("Cannot read file: %s", err)))
+									}
+								} else {
+									wt.Write(admErrStr(format("Cannot open file: %s", err)))
+								}
+								// we have to return here as we successed or failed to read file
+								return
+							}
+						}
+						wt.Write(admErrStr("File not found"))
+					} else {
+						wt.Write(admErrStr(format("Failed at listing dump directory: %s", err)))
+					}
+				} else {
+					wt.Write(admErrStr(err.Error()))
+				}
+			} else {
+				wt.Write(admErrStr(err.Error()))
+			}
+		} else {
+			wt.Write(admErrStr(err.Error()))
+		}
+	} else {
+		wt.Write(admErrStr(err.Error()))
+	}
 }
 
 type stats struct {
@@ -694,6 +821,8 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointAlertsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointDumps, m.admAPIEndpointArtifacts).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointDump, m.admAPIEndpointArtifact).Methods("GET")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesReloadPath, m.admAPIRulesReload).Methods("GET")

@@ -52,6 +52,23 @@ func (p *Powershell) ExecuteString(script string) {
 	p.execute(bytes.NewReader([]byte(script)))
 }
 
+// HitReturn sends a new line to stdin
+func (p *Powershell) HitReturn() {
+	p.ExecuteString("\n")
+}
+
+// ImportFunction imports a function into running shell
+func (p *Powershell) ImportFunction(code string) {
+	p.ExecuteString(code)
+	p.HitReturn()
+}
+
+// Exit exits the powershell console
+func (p *Powershell) Exit() error {
+	p.ExecuteString("Exit")
+	return p.handle.Wait()
+}
+
 // Kill kills the current shell struct
 func (p *Powershell) Kill() error {
 	p.cancel()

@@ -248,21 +248,10 @@ func main() {
 		os.Exit(0)
 	}
 
-	fd, err := os.Open(config)
+	managerConf, err := api.LoadManagerConfig(config)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to open configuration file: %s", err))
+		log.LogErrorAndExit(fmt.Errorf("Failed to load manager configuration: %s", err))
 	}
-
-	b, err := ioutil.ReadAll(fd)
-	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to read configuration file: %s", err))
-	}
-	err = toml.Unmarshal(b, &managerConf)
-	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to parse configuration data: %s", err))
-	}
-	// Closing configuration file
-	fd.Close()
 
 	if certgen {
 		err = generateCert([]string{managerConf.EndpointAPI.Host, managerConf.AdminAPI.Host})
@@ -273,7 +262,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	manager, err = api.NewManager(&managerConf)
+	manager, err = api.NewManager(managerConf)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to create manager: %s", err))
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-utils/crypto/file"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -29,13 +31,41 @@ import (
 	"github.com/0xrawsec/whids/utils"
 )
 
+func terminate(pid int) error {
+	// prevents from terminating our own process
+	if os.Getpid() != pid {
+		pHandle, err := kernel32.OpenProcess(kernel32.PROCESS_ALL_ACCESS, win32.FALSE, win32.DWORD(pid))
+		if err != nil {
+			return err
+		}
+		err = syscall.TerminateProcess(syscall.Handle(pHandle), 0)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 /////////////////////////// ProcessTracker ////////////////////////////////
 
 type stats struct {
 	CountProcessCreated    int64
 	CountNetConn           int64
 	CountFilesCreated      int64
-	CountFilesCreatedByExt map[string]*int64
+	CountFilesCreatedByExt map[string]int64
+	TimeFirstFileCreated   time.Time
+	TimeLastFileCreated    time.Time
+	CountFilesDeleted      int64
+	CountFilesDeletedByExt map[string]int64
+	TimeFirstFileDeleted   time.Time
+	TimeLastFileDeleted    time.Time
+}
+
+func NewStats() stats {
+	return stats{
+		CountFilesCreatedByExt: make(map[string]int64),
+		CountFilesDeletedByExt: make(map[string]int64),
+	}
 }
 
 type processTrack struct {
@@ -55,6 +85,9 @@ type processTrack struct {
 	Services               string
 	ParentServices         string
 	Hashes                 string
+	Signature              string
+	SignatureStatus        string
+	Signed                 bool
 	History                []string
 	Integrity              float64
 	IntegrityTimeout       bool
@@ -65,18 +98,41 @@ type processTrack struct {
 	TimeTerminated         time.Time
 }
 
+func NewProcessTrack() *processTrack {
+	return &processTrack{
+		Signature:       "?",
+		SignatureStatus: "?",
+		History:         make([]string, 0),
+		Integrity:       -1.0,
+		Stats:           NewStats(),
+	}
+}
+
+func (t *processTrack) IsTerminated() bool {
+	return !t.TimeTerminated.IsZero()
+}
+
+func (t *processTrack) TerminateProcess() error {
+	if !t.IsTerminated() {
+		return terminate(int(t.PID))
+	}
+	return nil
+}
+
 type ProcessTracker struct {
 	sync.RWMutex
-	guids map[string]*processTrack
-	pids  map[int64]*processTrack
-	free  *datastructs.Fifo
+	guids       map[string]*processTrack
+	pids        map[int64]*processTrack
+	blacklisted datastructs.SyncedSet
+	free        *datastructs.Fifo
 }
 
 func NewProcessTracker() *ProcessTracker {
 	pt := &ProcessTracker{
-		guids: make(map[string]*processTrack),
-		pids:  make(map[int64]*processTrack),
-		free:  &datastructs.Fifo{},
+		guids:       make(map[string]*processTrack),
+		pids:        make(map[int64]*processTrack),
+		blacklisted: datastructs.NewSyncedSet(),
+		free:        &datastructs.Fifo{},
 	}
 	// startup the routine to free resources
 	pt.freeRtn()
@@ -127,6 +183,14 @@ func (pt *ProcessTracker) Add(t *processTrack) {
 	pt.pids[t.PID] = t
 }
 
+func (pt *ProcessTracker) Blacklist(cmdLine string) {
+	pt.blacklisted.Add(cmdLine)
+}
+
+func (pt *ProcessTracker) IsBlacklisted(cmdLine string) bool {
+	return pt.blacklisted.Contains(cmdLine)
+}
+
 func (pt *ProcessTracker) GetParentByGuid(guid string) *processTrack {
 	pt.RLock()
 	defer pt.RUnlock()
@@ -162,10 +226,25 @@ func (pt *ProcessTracker) ContainsPID(pid int64) bool {
 	return ok
 }
 
+func (pt *ProcessTracker) IsTerminated(guid string) bool {
+	if t := pt.GetByGuid(guid); t != nil {
+		return t.IsTerminated()
+	}
+	return true
+}
+
 func (pt *ProcessTracker) Terminate(guid string) error {
 	if t := pt.GetByGuid(guid); t != nil {
 		t.TimeTerminated = time.Now()
 		pt.free.Push(t)
+	}
+	return nil
+}
+
+func (pt *ProcessTracker) TerminateProcess(guid string) error {
+	if t := pt.GetByGuid(guid); t != nil {
+		// We terminate process only if not already terminated
+		t.TerminateProcess()
 	}
 	return nil
 }
@@ -215,6 +294,17 @@ const (
 	IDFileDelete
 	IDClipboardChange
 	IDProcessTampering
+	IDFileDeleteDetected
+
+	// Empty GUID
+	nullGUID = "{00000000-0000-0000-0000-000000000000}"
+)
+
+const (
+	// Actions
+	ActionMemdump  = "memdump"
+	ActionFiledump = "filedump"
+	ActionRegdump  = "regdump"
 )
 
 var (
@@ -242,6 +332,7 @@ var (
 	SecurityChannel = "Security"
 
 	// Filters definitions
+	fltAnyEvent        = hooks.NewFilter([]int64{}, "")
 	fltAnySysmon       = hooks.NewFilter([]int64{}, SysmonChannel)
 	fltProcessCreate   = hooks.NewFilter([]int64{1}, SysmonChannel)
 	fltNetworkConnect  = hooks.NewFilter([]int64{3}, SysmonChannel)
@@ -251,7 +342,7 @@ var (
 	fltRegSetValue     = hooks.NewFilter([]int64{13}, SysmonChannel)
 	fltNetwork         = hooks.NewFilter([]int64{3, 22}, SysmonChannel)
 	fltImageSize       = hooks.NewFilter([]int64{1, 6, 7}, SysmonChannel)
-	fltStats           = hooks.NewFilter([]int64{1, 3, 11}, SysmonChannel)
+	fltStats           = hooks.NewFilter([]int64{1, 3, 11, 23, 26}, SysmonChannel)
 	fltDNS             = hooks.NewFilter([]int64{22}, SysmonChannel)
 	fltClipboard       = hooks.NewFilter([]int64{24}, SysmonChannel)
 	fltImageTampering  = hooks.NewFilter([]int64{25}, SysmonChannel)
@@ -279,10 +370,13 @@ var (
 	pathSysmonParentCommandLine = evtx.Path("/Event/EventData/ParentCommandLine")
 	pathSysmonParentImage       = evtx.Path("/Event/EventData/ParentImage")
 	pathSysmonImageLoaded       = evtx.Path("/Event/EventData/ImageLoaded")
+	pathSysmonSignature         = evtx.Path("/Event/EventData/Signature")
+	pathSysmonSigned            = evtx.Path("/Event/EventData/Signed")
+	pathSysmonSignatureStatus   = evtx.Path("/Event/EventData/SignatureStatus")
 
 	// EventID 8: CreateRemoteThread
-	pathCRTSourceProcessGuid = evtx.Path("/Event/EventData/SourceProcessGuid")
-	pathCRTTargetProcessGuid = evtx.Path("/Event/EventData/TargetProcessGuid")
+	pathSysmonCRTSourceProcessGuid = evtx.Path("/Event/EventData/SourceProcessGuid")
+	pathSysmonCRTTargetProcessGuid = evtx.Path("/Event/EventData/TargetProcessGuid")
 
 	// EventID 10: ProcessAccess
 	pathSysmonSourceProcessGUID = evtx.Path("/Event/EventData/SourceProcessGUID")
@@ -358,8 +452,18 @@ var (
 	pathSourceHashes = evtx.Path("/Event/EventData/SourceHashes")
 	pathTargetHashes = evtx.Path("/Event/EventData/TargetHashes")
 
+	// Used to store image signature related information
+	pathImageSignature       = evtx.Path("/Event/EventData/ImageSignature")
+	pathImageSigned          = evtx.Path("/Event/EventData/ImageSigned")
+	pathImageSignatureStatus = evtx.Path("/Event/EventData/ImageSignatureStatus")
+
 	// Use to enrich Clipboard events
 	pathSysmonClipboardData = evtx.Path("/Event/EventData/ClipboardData")
+
+	pathFileCount      = evtx.Path("/Event/EventData/Count")
+	pathFileCountByExt = evtx.Path("/Event/EventData/CountByExt")
+	pathFileExtension  = evtx.Path("/Event/EventData/Extension")
+	pathFileFrequency  = evtx.Path("/Event/EventData/FrequencyEPS")
 )
 
 var (
@@ -367,14 +471,10 @@ var (
 
 	dnsResolution = make(map[string]string)
 
-	blacklistedImages = datastructs.NewSyncedSet()
+	memdumped = datastructs.NewSyncedSet()
+	dumping   = datastructs.NewSyncedSet()
 
-	terminated = datastructs.NewSyncedSet()
-
-	memdumped  = datastructs.NewSyncedSet()
-	memdumping = datastructs.NewSyncedSet()
-
-	fileDumped = datastructs.NewSyncedSet()
+	filedumped = datastructs.NewSyncedSet()
 
 	parallelHooks = semaphore.New(4)
 
@@ -438,6 +538,21 @@ func hookImageLoad(e *evtx.GoEvtxMap) {
 	e.Set(&pathImageLoadParentCommandLine, "?")
 	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
 		if track := processTracker.GetByGuid(guid); track != nil {
+			if image, err := e.GetString(&pathSysmonImage); err == nil {
+				// make sure that we are taking signature of the image and not
+				// one of its DLL
+				if image == track.Image {
+					if signed, err := e.GetBool(&pathSysmonSigned); err == nil {
+						track.Signed = signed
+					}
+					if signature, err := e.GetString(&pathSysmonSignature); err == nil {
+						track.Signature = signature
+					}
+					if sigStatus, err := e.GetString(&pathSysmonSignatureStatus); err == nil {
+						track.SignatureStatus = sigStatus
+					}
+				}
+			}
 			e.Set(&pathImageLoadParentImage, track.ParentImage)
 			e.Set(&pathImageLoadParentCommandLine, track.ParentCommandLine)
 		}
@@ -488,22 +603,20 @@ func hookTrack(e *evtx.GoEvtxMap) {
 										if il, err := e.GetString(&pathSysmonIntegrityLevel); err == nil {
 											if cd, err := e.GetString(&pathSysmonCurrentDirectory); err == nil {
 												if hashes, err := e.GetString(&pathSysmonHashes); err == nil {
-													track := &processTrack{
-														Image:             image,
-														ParentImage:       pImage,
-														CommandLine:       commandLine,
-														ParentCommandLine: pCommandLine,
-														CurrentDirectory:  cd,
-														PID:               pid,
-														User:              user,
-														IntegrityLevel:    il,
-														ProcessGUID:       guid,
-														ParentProcessGUID: pguid,
-														Hashes:            hashes,
-														History:           make([]string, 0),
-														Integrity:         -1.0,
-														Stats:             stats{0, 0, 0, make(map[string]*int64)},
-													}
+
+													track := NewProcessTrack()
+													track.Image = image
+													track.ParentImage = pImage
+													track.CommandLine = commandLine
+													track.ParentCommandLine = pCommandLine
+													track.CurrentDirectory = cd
+													track.PID = pid
+													track.User = user
+													track.IntegrityLevel = il
+													track.ProcessGUID = guid
+													track.ParentProcessGUID = pguid
+													track.Hashes = hashes
+
 													if parent := processTracker.GetByGuid(pguid); parent != nil {
 														track.History = append(parent.History, parent.Image)
 														track.ParentUser = parent.User
@@ -541,86 +654,203 @@ func hookTrack(e *evtx.GoEvtxMap) {
 	}
 }
 
-// hook making statistics about process created
+// hook managing statistics about some events
 func hookStats(e *evtx.GoEvtxMap) {
 	// We do not store stats if process termination is not enabled
 	if flagProcTermEn {
 		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
-			//v, ok := processTracker.Get(guid)
-			//if ok {
 			if pt := processTracker.GetByGuid(guid); pt != nil {
-				//pt := v.(*processTrack)
 				switch e.EventID() {
 				case IDProcessCreate:
 					pt.Stats.CountProcessCreated++
 				case IDNetworkConnect:
 					pt.Stats.CountNetConn++
 				case IDFileCreate:
+					now := time.Now()
+
+					// Set new fields
+					e.Set(&pathFileCount, "?")
+					e.Set(&pathFileCountByExt, "?")
+					e.Set(&pathFileExtension, "?")
+
+					if pt.Stats.TimeFirstFileCreated.IsZero() {
+						pt.Stats.TimeFirstFileCreated = now
+					}
+
 					if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
 						ext := filepath.Ext(target)
-						if pt.Stats.CountFilesCreatedByExt[ext] == nil {
-							i := int64(0)
-							pt.Stats.CountFilesCreatedByExt[ext] = &i
-						}
-						*(pt.Stats.CountFilesCreatedByExt[ext])++
+						pt.Stats.CountFilesCreatedByExt[ext]++
+						// Setting file count by extension
+						e.Set(&pathFileCountByExt, toString(pt.Stats.CountFilesCreatedByExt[ext]))
+						// Setting file extension
+						e.Set(&pathFileExtension, ext)
 					}
 					pt.Stats.CountFilesCreated++
+					// Setting total file count
+					e.Set(&pathFileCount, toString(pt.Stats.CountFilesCreated))
+					// Setting frequency
+					freq := now.Sub(pt.Stats.TimeFirstFileCreated)
+					if freq != 0 {
+						eps := pt.Stats.CountFilesCreated * int64(math.Pow10(9)) / freq.Nanoseconds()
+						e.Set(&pathFileFrequency, toString(int64(eps)))
+					} else {
+						e.Set(&pathFileFrequency, toString(0))
+					}
+					// Finally set last event timestamp
+					pt.Stats.TimeLastFileCreated = now
+
+				case IDFileDelete, IDFileDeleteDetected:
+					now := time.Now()
+
+					// Set new fields
+					e.Set(&pathFileCount, "?")
+					e.Set(&pathFileCountByExt, "?")
+					e.Set(&pathFileExtension, "?")
+
+					if pt.Stats.TimeFirstFileDeleted.IsZero() {
+						pt.Stats.TimeFirstFileDeleted = now
+					}
+
+					if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
+						ext := filepath.Ext(target)
+						pt.Stats.CountFilesDeletedByExt[ext]++
+						// Setting file count by extension
+						e.Set(&pathFileCountByExt, toString(pt.Stats.CountFilesDeletedByExt[ext]))
+						// Setting file extension
+						e.Set(&pathFileExtension, ext)
+					}
+					pt.Stats.CountFilesDeleted++
+					// Setting total file count
+					e.Set(&pathFileCount, toString(pt.Stats.CountFilesDeleted))
+
+					// Setting frequency
+					freq := now.Sub(pt.Stats.TimeFirstFileDeleted)
+					if freq != 0 {
+						eps := pt.Stats.CountFilesDeleted * int64(math.Pow10(9)) / freq.Nanoseconds()
+						e.Set(&pathFileFrequency, toString(int64(eps)))
+					} else {
+						e.Set(&pathFileFrequency, toString(0))
+					}
+
+					// Finally set last event timestamp
+					pt.Stats.TimeLastFileDeleted = time.Now()
 				}
 			}
 		}
 	}
 }
 
-func terminator(pid int) error {
-	pHandle, err := kernel32.OpenProcess(kernel32.PROCESS_ALL_ACCESS, win32.FALSE, win32.DWORD(pid))
-	if err != nil {
-		return err
+func guidFromEvent(e *evtx.GoEvtxMap) string {
+	if uuid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
+		return uuid
 	}
-	err = syscall.TerminateProcess(syscall.Handle(pHandle), 0)
-	if err != nil {
-		return err
+	if uuid, err := e.GetString(&pathSysmonSourceProcessGUID); err == nil {
+		return uuid
+	}
+	if uuid, err := e.GetString(&pathSysmonCRTSourceProcessGuid); err == nil {
+		return uuid
+	}
+	return ""
+}
+
+func processTrackFromEvent(e *evtx.GoEvtxMap) *processTrack {
+	if uuid := guidFromEvent(e); uuid != "" {
+		return processTracker.GetByGuid(uuid)
 	}
 	return nil
 }
 
-// hook implementing protection against cryptolockers
-/*func hookCryptoProtect(e *evtx.GoEvtxMap) {
-	if e.EventID() == 11 {
-		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
-			v, ok := processTracker.Get(guid)
-			if ok && !terminated.Contains(guid) {
-				pt := v.(*processTrack)
-				if target, err := e.GetString(&pathSysmonTargetFilename); err == nil {
-					ext := filepath.Ext(target)
-					cnt := pt.Stats.CountFilesCreatedByExt[ext]
-					if cnt != nil && !isWhitelistedExt(ext) {
-						if *cnt > cryptoLockerFilecreateLimit {
-							if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
-								log.Warnf("Crypto-Locker prevention triggered, process is being terminated: PID=%d Image=\"%s\" Ext=\"%s\"",
-									pt.PID, pt.Image, ext)
-								if err := terminator(int(pid)); err != nil {
-									log.Errorf("Failed to terminate process PID=%d: %s", pt.PID, err)
-								} else {
-									blacklistedImages.Add(pt.CommandLine)
-									terminated.Add(guid)
-								}
-							}
-						}
-					}
+func hasAction(e *evtx.GoEvtxMap, action string) bool {
+	if i, err := e.Get(&engine.ActionsPath); err == nil {
+		if actions, ok := (*i).([]string); ok {
+			for _, a := range actions {
+				if a == action {
+					return true
 				}
 			}
 		}
 	}
-}*/
+	return false
+}
+
+func hookHandleActions(e *evtx.GoEvtxMap) {
+	var kill, memdump bool
+
+	// We have to check that if we are handling one of
+	// our event and we don't want to kill ourself
+	if isSelf(e) {
+		return
+	}
+
+	// the only requirement to be able to handle action
+	// is to have a process guuid
+	if uuid := guidFromEvent(e); uuid != "" {
+		if i, err := e.Get(&engine.ActionsPath); err == nil {
+			if actions, ok := (*i).([]string); ok {
+				for _, action := range actions {
+					switch action {
+					case "kill":
+						kill = true
+						if pt := processTrackFromEvent(e); pt != nil {
+							// additional check not to suspend agent
+							if int(pt.PID) != os.Getpid() {
+								// before we kill we suspend the process
+								kernel32.SuspendProcess(int(pt.PID))
+							}
+						}
+					case "blacklist":
+						if pt := processTrackFromEvent(e); pt != nil {
+							// additional check not to blacklist agent
+							if int(pt.PID) != os.Getpid() {
+								processTracker.Blacklist(pt.CommandLine)
+							}
+						}
+					case ActionMemdump:
+						memdump = true
+						dumpProcessRtn(e)
+					case ActionRegdump:
+						dumpRegistryRtn(e)
+					case ActionFiledump:
+						dumpFilesRtn(e)
+					default:
+						log.Errorf("Cannot handle %s action as it is unknown", action)
+					}
+				}
+			}
+
+			// handle kill operation after the other actions
+			if kill {
+				if pt := processTrackFromEvent(e); pt != nil {
+					if memdump {
+						// Wait we finish dumping before killing the process
+						go func() {
+							guid := pt.ProcessGUID
+							for i := 0; i < 60 && !memdumped.Contains(guid); i++ {
+								time.Sleep(1 * time.Second)
+							}
+							if err := pt.TerminateProcess(); err != nil {
+								log.Errorf("Failed to terminate process PID=%d GUID=%s", pt.PID, pt.ProcessGUID)
+							}
+						}()
+					} else if err := pt.TerminateProcess(); err != nil {
+						log.Errorf("Failed to terminate process PID=%d GUID=%s", pt.PID, pt.ProcessGUID)
+					}
+				}
+			}
+		}
+	} else {
+		log.Errorf("Failed to handle actions for event (channel: %s, id: %d): no process GUID available", e.Channel(), e.EventID())
+	}
+}
 
 // hook terminating previously blacklisted processes (according to their CommandLine)
 func hookTerminator(e *evtx.GoEvtxMap) {
 	if e.EventID() == IDProcessCreate {
 		if commandLine, err := e.GetString(&pathSysmonCommandLine); err == nil {
 			if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
-				if blacklistedImages.Contains(commandLine) {
+				if processTracker.IsBlacklisted(commandLine) {
 					log.Warnf("Terminating blacklisted  process PID=%d CommandLine=\"%s\"", pid, commandLine)
-					if err := terminator(int(pid)); err != nil {
+					if err := terminate(int(pid)); err != nil {
 						log.Errorf("Failed to terminate process PID=%d: %s", pid, err)
 					}
 				}
@@ -637,7 +867,6 @@ func hookProcTerm(e *evtx.GoEvtxMap) {
 	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
 		// Releasing resources
 		processTracker.Terminate(guid)
-		terminated.Del(guid)
 		memdumped.Del(guid)
 	}
 }
@@ -679,7 +908,7 @@ func isIntegrityComputed(pt *processTrack) bool {
 
 func hookFileSystemAudit(e *evtx.GoEvtxMap) {
 	e.Set(&pathSysmonCommandLine, "?")
-	e.Set(&pathSysmonProcessGUID, "?")
+	e.Set(&pathSysmonProcessGUID, nullGUID)
 	e.Set(&pathImageHashes, "?")
 	if pid, err := e.GetInt(&pathFSAuditProcessId); err == nil {
 		if pt := processTracker.GetByPID(pid); pt != nil {
@@ -752,115 +981,6 @@ func hookProcessIntegrityProcTamp(e *evtx.GoEvtxMap) {
 	}
 }
 
-func hookProcessIntegrityProcCreate(e *evtx.GoEvtxMap) {
-	// Default values
-	e.Set(&pathParentIntegrity, toString(-1.0))
-	e.Set(&pathProcessIntegrity, toString(-1.0))
-	e.Set(&pathIntegrityTimeout, toString(false))
-
-	// Sysmon Create Process
-	if bootCompleted && e.EventID() == IDProcessCreate {
-		if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
-			// parent processTrack
-			ppt := processTracker.GetByGuid(pguid)
-			// we first check if we already computed process integrity
-			if isIntegrityComputed(ppt) {
-				e.Set(&pathParentIntegrity, toString(ppt.Integrity))
-			} else {
-				// if integrity is not yet computed, we do it
-				if ppid, err := e.GetInt(&pathSysmonParentProcessId); err == nil {
-					if kernel32.IsPIDRunning(int(ppid)) {
-						da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
-						hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(ppid))
-						if err != nil {
-							log.Errorf("Cannot open parent process to check integrity PPID=%d: %s", ppid, err)
-						} else {
-							defer kernel32.CloseHandle(hProcess)
-							bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
-							if err != nil {
-								log.Errorf("Cannot check integrity of parent PPID=%d: %s", ppid, err)
-							} else {
-								if slen != 0 {
-									integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
-									if ppt != nil {
-										ppt.Integrity = integrity
-										ppt.IntegrityComputed = true
-									}
-									e.Set(&pathParentIntegrity, toString(integrity))
-								}
-							}
-						}
-					} else {
-						log.Debugf("Cannot check integrity of parent PPID=%d: process terminated", ppid)
-					}
-				}
-			}
-		}
-
-		if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
-			pt := processTracker.GetByGuid(guid)
-			if isIntegrityComputed(pt) {
-				if pt.IntegrityComputed {
-					e.Set(&pathProcessIntegrity, toString(pt.Integrity))
-					e.Set(&pathIntegrityTimeout, toString(pt.IntegrityTimeout))
-				}
-			} else {
-				if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
-					if kernel32.IsPIDRunning(int(pid)) {
-						// we first need to wait main process thread
-						mainTid := kernel32.GetFirstTidOfPid(int(pid))
-						// if we found the main thread of pid
-						if mainTid > 0 {
-							hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-							if err != nil {
-								log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
-							} else {
-								defer kernel32.CloseHandle(hThread)
-								if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
-									// We check whether the thread still exists
-									checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-									if err == nil {
-										log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
-										if pt != nil {
-											pt.IntegrityTimeout = true
-										}
-										e.Set(&pathIntegrityTimeout, toString(true))
-									}
-									kernel32.CloseHandle(checkThread)
-								} else {
-									da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
-									hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
-
-									if err != nil {
-										log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
-									} else {
-										defer kernel32.CloseHandle(hProcess)
-										bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
-										if err != nil {
-											log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
-										} else {
-											if slen != 0 {
-												integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
-												if pt != nil {
-													pt.Integrity = integrity
-													pt.IntegrityComputed = true
-												}
-												e.Set(&pathProcessIntegrity, toString(integrity))
-											}
-										}
-									}
-								}
-							}
-						}
-					} else {
-						log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
-					}
-				}
-			}
-		}
-	}
-}
-
 // too big to be put in hookEnrichAnySysmon
 func hookEnrichServices(e *evtx.GoEvtxMap) {
 	// We do this only if we can cleanup resources
@@ -878,8 +998,8 @@ func hookEnrichServices(e *evtx.GoEvtxMap) {
 			tguidPath := &pathSysmonTargetProcessGUID
 
 			if eventID == 8 {
-				sguidPath = &pathCRTSourceProcessGuid
-				tguidPath = &pathCRTTargetProcessGuid
+				sguidPath = &pathSysmonCRTSourceProcessGuid
+				tguidPath = &pathSysmonCRTTargetProcessGuid
 			}
 
 			if sguid, err := e.GetString(sguidPath); err == nil {
@@ -922,12 +1042,10 @@ func hookEnrichServices(e *evtx.GoEvtxMap) {
 						track := processTracker.GetByGuid(guid)
 						// we missed process creation so we create a minimal track
 						if track == nil {
-							track = &processTrack{
-								Image:       image,
-								ProcessGUID: guid,
-								PID:         pid,
-								Stats:       stats{0, 0, 0, make(map[string]*int64)},
-							}
+							track = NewProcessTrack()
+							track.Image = image
+							track.ProcessGUID = guid
+							track.PID = pid
 							processTracker.Add(track)
 						}
 
@@ -996,8 +1114,8 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 		tguidPath := &pathSysmonTargetProcessGUID
 
 		if eventID == IDCreateRemoteThread {
-			sguidPath = &pathCRTSourceProcessGuid
-			tguidPath = &pathCRTTargetProcessGuid
+			sguidPath = &pathSysmonCRTSourceProcessGuid
+			tguidPath = &pathSysmonCRTTargetProcessGuid
 		}
 
 		if sguid, err := e.GetString(sguidPath); err == nil {
@@ -1042,6 +1160,7 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 						e.Set(&pathSysmonCommandLine, track.CommandLine)
 					}
 				}
+
 				// if event does not have User field
 				if !eventHas(e, &pathSysmonUser) {
 					e.Set(&pathSysmonUser, "?")
@@ -1071,6 +1190,11 @@ func hookEnrichAnySysmon(e *evtx.GoEvtxMap) {
 				if track.Hashes != "" {
 					e.Set(&pathImageHashes, track.Hashes)
 				}
+
+				// Signature information
+				e.Set(&pathImageSigned, toString(track.Signed))
+				e.Set(&pathImageSignature, track.Signature)
+				e.Set(&pathImageSignatureStatus, track.SignatureStatus)
 			}
 		}
 	}
@@ -1128,12 +1252,12 @@ func compress(path string) {
 
 func dumpPidAndCompress(pid int, guid, id string) {
 	// prevent stopping ourself (><)
-	if kernel32.IsPIDRunning(pid) && pid != selfPid && !memdumped.Contains(guid) && !memdumping.Contains(guid) {
+	if kernel32.IsPIDRunning(pid) && pid != selfPid && !memdumped.Contains(guid) && !dumping.Contains(guid) {
 
 		// To avoid dumping the same process twice, possible if two alerts
 		// comes from the same GUID in a short period of time
-		memdumping.Add(guid)
-		defer memdumping.Del(guid)
+		dumping.Add(guid)
+		defer dumping.Del(guid)
 
 		tmpDumpDir := filepath.Join(dumpDirectory, guid, id)
 		os.MkdirAll(tmpDumpDir, defaultPerms)
@@ -1171,11 +1295,11 @@ func dumpFileAndCompress(src, path string) error {
 	dst := filepath.Join(path, fmt.Sprintf("%d_%s.bin", time.Now().UnixNano(), base))
 	// dump sha256 of file anyway
 	ioutil.WriteFile(fmt.Sprintf("%s.sha256", dst), []byte(sha256), 600)
-	if !fileDumped.Contains(sha256) {
+	if !filedumped.Contains(sha256) {
 		log.Debugf("Dumping file: %s->%s", src, dst)
 		if err = fsutil.CopyFile(src, dst); err == nil {
 			compress(dst)
-			fileDumped.Add(sha256)
+			filedumped.Add(sha256)
 		}
 	}
 	return err
@@ -1192,13 +1316,22 @@ func dumpEventAndCompress(e *evtx.GoEvtxMap, guid string) (err error) {
 	tmpDumpDir := filepath.Join(dumpDirectory, guid, id)
 	os.MkdirAll(tmpDumpDir, defaultPerms)
 	dumpPath := filepath.Join(tmpDumpDir, fmt.Sprintf("%s_event.json", id))
-	f, err := os.Create(dumpPath)
-	if err != nil {
-		return
+
+	if !dumping.Contains(id) && !filedumped.Contains(id) {
+		dumping.Add(id)
+		defer dumping.Del(id)
+
+		var f *os.File
+
+		f, err = os.Create(dumpPath)
+		if err != nil {
+			return
+		}
+		f.Write(evtx.ToJSON(e))
+		f.Close()
+		compress(dumpPath)
+		filedumped.Add(id)
 	}
-	f.Write(evtx.ToJSON(e))
-	f.Close()
-	compress(dumpPath)
 	return
 }
 
@@ -1209,12 +1342,28 @@ var (
 	sysmonArcFileRe = regexp.MustCompile("(((SHA1|MD5|SHA256|IMPHASH)=)|,)")
 )
 
-// this hook can run async
 func hookDumpProcess(e *evtx.GoEvtxMap) {
+	// We have to check that if we are handling one of
+	// our event and we don't want to dump ourself
+	if isSelf(e) {
+		return
+	}
+
 	// we dump only if alert is relevant
 	if getCriticality(e) < dumpTresh {
 		return
 	}
+
+	// if memory got already dumped
+	if hasAction(e, ActionMemdump) {
+		return
+	}
+
+	dumpProcessRtn(e)
+}
+
+// this hook can run async
+func dumpProcessRtn(e *evtx.GoEvtxMap) {
 
 	parallelHooks.Acquire()
 	go func() {
@@ -1248,13 +1397,28 @@ func hookDumpProcess(e *evtx.GoEvtxMap) {
 	}()
 }
 
-// ToDo: test this function
 func hookDumpRegistry(e *evtx.GoEvtxMap) {
+	// We have to check that if we are handling one of
+	// our event and we don't want to dump ourself
+	if isSelf(e) {
+		return
+	}
+
 	// we dump only if alert is relevant
 	if getCriticality(e) < dumpTresh {
 		return
 	}
 
+	// if registry got already dumped
+	if hasAction(e, ActionRegdump) {
+		return
+	}
+
+	dumpRegistryRtn(e)
+}
+
+// ToDo: test this function
+func dumpRegistryRtn(e *evtx.GoEvtxMap) {
 	parallelHooks.Acquire()
 	go func() {
 		defer parallelHooks.Release()
@@ -1346,16 +1510,31 @@ func dumpParentCommandLine(e *evtx.GoEvtxMap, dumpPath string) {
 	}
 }
 
-func hookDumpFile(e *evtx.GoEvtxMap) {
+func hookDumpFiles(e *evtx.GoEvtxMap) {
+	// We have to check that if we are handling one of
+	// our event and we don't want to dump ourself
+	if isSelf(e) {
+		return
+	}
+
 	// we dump only if alert is relevant
 	if getCriticality(e) < dumpTresh {
 		return
 	}
 
+	// if file got already dumped
+	if hasAction(e, ActionFiledump) {
+		return
+	}
+
+	dumpFilesRtn(e)
+}
+
+func dumpFilesRtn(e *evtx.GoEvtxMap) {
 	parallelHooks.Acquire()
 	go func() {
 		defer parallelHooks.Release()
-		guid := "{00000000-0000-0000-0000-000000000000}"
+		guid := nullGUID
 		tmpGUID, err := e.GetString(&pathSysmonProcessGUID)
 		if err != nil {
 			if tmpGUID, err = e.GetString(&pathSysmonSourceProcessGUID); err == nil {

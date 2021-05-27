@@ -1,7 +1,7 @@
 module github.com/0xrawsec/whids
 
 require (
-	github.com/0xrawsec/gene v1.6.10
+	github.com/0xrawsec/gene v1.6.11
 	github.com/0xrawsec/golang-evtx v1.2.7
 	github.com/0xrawsec/golang-misp v1.0.3
 	github.com/0xrawsec/golang-utils v1.1.8
@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
-	github.com/pelletier/go-toml v1.8.1
+	github.com/pelletier/go-toml v1.9.1
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 )
 

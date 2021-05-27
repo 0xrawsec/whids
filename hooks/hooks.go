@@ -8,18 +8,21 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 )
 
+type FilterDefinition struct {
+	EventIDs []int
+	Channel  string
+}
+
 // Filter structure
 type Filter struct {
 	EventIDs datastructs.SyncedSet
-	//Channels datastructs.SyncedSet
-	Channel string
+	Channel  string
 }
 
 // NewFilter creates a new Filter structure
 func NewFilter(eids []int64, channel string) *Filter {
 	f := &Filter{}
 	f.EventIDs = datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(eids)...)
-	//f.Channels = datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(chans)...)
 	f.Channel = channel
 	return f
 }
@@ -29,8 +32,8 @@ func (f *Filter) Match(e *evtx.GoEvtxMap) bool {
 	if !f.EventIDs.Contains(e.EventID()) && f.EventIDs.Len() > 0 {
 		return false
 	}
-	//if !f.Channels.Contains(e.Channel()) && f.Channels.Len() > 0 {
-	if f.Channel != e.Channel() {
+	// Don't check channel if empty string
+	if f.Channel != "" && f.Channel != e.Channel() {
 		return false
 	}
 	return true
