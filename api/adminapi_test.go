@@ -182,7 +182,7 @@ func TestAdminAPIPostCommand(t *testing.T) {
 	}
 	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
-	if err := c.ExecuteCommand(); err != nil {
+	if _, err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Failed to execute command: %s", err)
 		t.FailNow()
 	}
@@ -214,7 +214,7 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
 
-	if err := c.ExecuteCommand(); err != nil {
+	if _, err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Failed to execute command: %s", err)
 		t.FailNow()
 	}
@@ -289,7 +289,7 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
 		}
-		mc.httpClient.Do(r)
+		mc.HTTPClient.Do(r)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -340,7 +340,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
 		}
-		mc.httpClient.Do(r)
+		mc.HTTPClient.Do(r)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -439,7 +439,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
 		}
-		mc.httpClient.Do(r)
+		mc.HTTPClient.Do(r)
 	}
 
 	time.Sleep(1 * time.Second)

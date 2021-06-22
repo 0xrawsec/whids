@@ -1,4 +1,4 @@
-package main
+package hids
 
 import (
 	"compress/gzip"
@@ -9,13 +9,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
-	"github.com/pelletier/go-toml"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
@@ -24,13 +24,11 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/golang-utils/sync/semaphore"
 	"github.com/0xrawsec/golang-win32/win32/wevtapi"
 	"github.com/0xrawsec/whids/api"
-	"github.com/0xrawsec/whids/hooks"
 	"github.com/0xrawsec/whids/utils"
 )
-
-/////////////////////////////////// Main ///////////////////////////////////////
 
 // XMLEventToGoEvtxMap converts an XMLEvent as returned by wevtapi to a GoEvtxMap
 // object that Gene can use
@@ -48,28 +46,31 @@ func XMLEventToGoEvtxMap(xe *wevtapi.XMLEvent) (*evtx.GoEvtxMap, error) {
 	return &ge, nil
 }
 
-/////////////////////////////////// Main ///////////////////////////////////////
-
 const (
-	// Default permissions for output files
-	defaultPerms = 0640
+	/** Private const **/
 
 	// Container extension
 	containerExt = ".cont.gz"
 )
 
 var (
-	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
+	/** Public vars **/
 
-	dumpOptions = []string{"registry", "memory", "file", "all"}
+	DumpOptions = []string{"registry", "memory", "file", "all"}
 
-	channelAliases = map[string]string{
+	ChannelAliases = map[string]string{
 		"sysmon":   "Microsoft-Windows-Sysmon/Operational",
 		"security": "Security",
 		"ps":       "Microsoft-Windows-PowerShell/Operational",
 		"defender": "Microsoft-Windows-Windows Defender/Operational",
 		"all":      "All aliased channels",
 	}
+
+	ContainRuleName = "EDR containment"
+
+	/** Private vars **/
+
+	emptyForwarderConfig = api.ForwarderConfig{}
 
 	// extensions of files to upload to manager
 	uploadExts = datastructs.NewInitSyncedSet(".gz", ".sha256")
@@ -78,8 +79,8 @@ var (
 )
 
 func allChannels() []string {
-	channels := make([]string, 0, len(channelAliases))
-	for alias, channel := range channelAliases {
+	channels := make([]string, 0, len(ChannelAliases))
+	for alias, channel := range ChannelAliases {
 		if alias != "all" {
 			channels = append(channels, channel)
 		}
@@ -87,233 +88,36 @@ func allChannels() []string {
 	return channels
 }
 
-var (
-	emptyForwarderConfig = api.ForwarderConfig{}
-	logDir               = filepath.Join(abs, "Logs")
-
-	// DefaultHIDSConfig is the default HIDS configuration
-	DefaultHIDSConfig = HIDSConfig{
-		RulesConfig: &RulesConfig{
-			RulesDB:        filepath.Join(abs, "Database", "Rules"),
-			ContainersDB:   filepath.Join(abs, "Database", "Containers"),
-			UpdateInterval: 60 * time.Second,
-		},
-
-		FwdConfig: &api.ForwarderConfig{
-			Local: true,
-			Client: api.ClientConfig{
-				MaxUploadSize: api.DefaultMaxUploadSize,
-			},
-			Logging: api.LoggingConfig{
-				Dir:              filepath.Join(logDir, "Alerts"),
-				RotationInterval: time.Hour * 5,
-			},
-		},
-		Channels: []string{"all"},
-		Sysmon: &SysmonConfig{
-			Bin:              "C:\\Windows\\Sysmon64.exe",
-			ArchiveDirectory: "C:\\Sysmon\\",
-			CleanArchived:    true,
-		},
-		Dump: &DumpConfig{
-			Mode:          "file|registry",
-			Dir:           filepath.Join(abs, "Dumps"),
-			Compression:   true,
-			MaxDumps:      4,
-			Treshold:      8,
-			DumpUntracked: false,
-		},
-		AuditConfig: &AuditConfig{
-			AuditPolicies: []string{"File System"},
-		},
-		CanariesConfig: &CanariesConfig{
-			Enable: false,
-			Canaries: []*Canary{
-				{
-					Directories: []string{"$SYSTEMDRIVE", "$SYSTEMROOT"},
-					Files:       []string{"readme.pdf", "readme.docx", "readme.txt"},
-					Delete:      true,
-				},
-			},
-			Actions:   []string{"kill", "memdump", "filedump", "blacklist"},
-			Whitelist: []string{"C:\\Windows\\explorer.exe"},
-		},
-		CritTresh:       5,
-		Logfile:         filepath.Join(logDir, "whids.log"),
-		EnableHooks:     true,
-		EnableFiltering: true,
-		Endpoint:        true,
-		LogAll:          false}
-)
-
-// DumpConfig structure definition
-type DumpConfig struct {
-	Mode          string `toml:"mode" comment:"Dump mode (choices: file, registry, memory)\n Modes can be combined together, separated by |"`
-	Dir           string `toml:"dir" comment:"Directory used to store dumps"`
-	Treshold      int    `toml:"treshold" comment:"Dumps only when event criticality is above this threshold"`
-	MaxDumps      int    `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
-	Compression   bool   `toml:"compression" comment:"Enable dumps compression"`
-	DumpUntracked bool   `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
-}
-
-// IsModeEnabled checks if dump mode is enabled
-func (d *DumpConfig) IsModeEnabled(mode string) bool {
-	if strings.Index(d.Mode, "all") != -1 {
-		return true
-	}
-	return strings.Index(d.Mode, mode) != -1
-}
-
-type SysmonConfig struct {
-	Bin              string `toml:"bin" comment:"Path to Sysmon binary"`
-	ArchiveDirectory string `toml:"archive-directory" comment:"Path to Sysmon Archive directory"`
-	CleanArchived    bool   `toml:"clean-archived" comment:"Delete files older than 5min archived by Sysmon"`
-}
-
-type RulesConfig struct {
-	RulesDB        string        `toml:"rules-db" comment:"Path to Gene rules database"`
-	ContainersDB   string        `toml:"containers-db" comment:"Path to Gene rules containers\n (c.f. Gene documentation)"`
-	UpdateInterval time.Duration `toml:"update-interval" comment:"Update interval at which rules should be pulled from manager\n NB: only applies if a manager server is configured"`
-}
-
-type AuditConfig struct {
-	Enable        bool     `toml:"enable" comment:"Enable following Audit Policies or not"`
-	AuditPolicies []string `toml:"audit-policies" comment:"Audit Policies to enable (c.f. auditpol /get /category:* /r)"`
-	AuditDirs     []string `toml:"audit-dirs" comment:"Set Audit ACL to directories, sub-directories and files to generate File System audit events\n https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/audit-file-system)"`
-}
-
-func (c *AuditConfig) Initialize() {
-
-	if c.Enable {
-		for _, ap := range c.AuditPolicies {
-			if err := utils.EnableAuditPolicy(ap); err != nil {
-				log.Errorf("Failed to enable audit policy %s: %s", ap, err)
-			} else {
-				log.Infof("Enabled Audit Policy: %s", ap)
-			}
-		}
-	}
-
-	// run this function async as it might take a little bit of time
-	go func() {
-		dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-		log.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
-		if err := utils.SetEDRAuditACL(dirs...); err != nil {
-			log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
-		}
-		log.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
-	}()
-}
-
-func (c *AuditConfig) Restore() {
-	for _, ap := range c.AuditPolicies {
-		if err := utils.DisableAuditPolicy(ap); err != nil {
-			log.Errorf("Failed to disable audit policy %s: %s", ap, err)
-		}
-	}
-
-	dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
-		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
-	}
-}
-
-// HIDSConfig structure
-type HIDSConfig struct {
-	Channels        []string             `toml:"channels" comment:"Windows log channels to listen to. Either channel names\n can be used (i.e. Microsoft-Windows-Sysmon/Operational) or aliases"`
-	CritTresh       int                  `toml:"criticality-treshold" comment:"Dumps/forward only events above criticality threshold\n or filtered events (i.e. Gene filtering rules)"`
-	EnableHooks     bool                 `toml:"en-hooks" comment:"Enable enrichment hooks and dump hooks"`
-	EnableFiltering bool                 `toml:"en-filters" comment:"Enable event filtering (log filtered events, not only alerts)\n See documentation: https://github.com/0xrawsec/gene"`
-	Logfile         string               `toml:"logfile" comment:"Logfile used to log messages generated by the engine"` // for WHIDS log messages (not alerts)
-	LogAll          bool                 `toml:"log-all" comment:"Log any incoming event passing through the engine"`    // log all events to logfile (used for debugging)
-	Endpoint        bool                 `toml:"endpoint" comment:"True if current host is the endpoint on which logs are generated\n Example: turn this off if running on a WEC"`
-	FwdConfig       *api.ForwarderConfig `toml:"forwarder" comment:"Forwarder configuration"`
-	Sysmon          *SysmonConfig        `toml:"sysmon" comment:"Sysmon related settings"`
-	Dump            *DumpConfig          `toml:"dump" comment:"Dump related settings"`
-	RulesConfig     *RulesConfig         `toml:"rules" comment:"Gene rules related settings\n Gene repo: https://github.com/0xrawsec/gene\n Gene rules repo: https://github.com/0xrawsec/gene-rules"`
-	AuditConfig     *AuditConfig         `toml:"audit-config" comment:"Windows auditing configuration"`
-	CanariesConfig  *CanariesConfig      `toml:"canary-config" comment:"Canary files configuration"`
-}
-
-// LoadsHIDSConfig loads a HIDS configuration from a file
-func LoadsHIDSConfig(path string) (c HIDSConfig, err error) {
-	fd, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer fd.Close()
-	dec := toml.NewDecoder(fd)
-	err = dec.Decode(&c)
-	return
-}
-
-// SetHooksGlobals sets the global variables used by hooks
-func (c *HIDSConfig) SetHooksGlobals() {
-	dumpDirectory = c.Dump.Dir
-	dumpTresh = c.Dump.Treshold
-	flagDumpCompress = c.Dump.Compression
-	flagDumpUntracked = c.Dump.DumpUntracked
-	maxDumps = c.Dump.MaxDumps
-	sysmonArchiveDirectory = c.Sysmon.ArchiveDirectory
-}
-
-// IsDumpEnabled returns true if any kind of dump is enabled
-func (c *HIDSConfig) IsDumpEnabled() bool {
-	// Dump can be enabled only in endpoint mode
-	return c.Endpoint && (c.Dump.IsModeEnabled("file") || c.Dump.IsModeEnabled("registry") || c.Dump.IsModeEnabled("memory"))
-}
-
-// IsForwardingEnabled returns true if a forwarder is actually configured to forward logs
-func (c *HIDSConfig) IsForwardingEnabled() bool {
-	return *c.FwdConfig != emptyForwarderConfig && !c.FwdConfig.Local
-}
-
-// Prepare creates directory used in the config if not existing
-func (c *HIDSConfig) Prepare() {
-	if !fsutil.Exists(c.RulesConfig.RulesDB) {
-		os.MkdirAll(c.RulesConfig.RulesDB, 0600)
-	}
-	if !fsutil.Exists(c.RulesConfig.ContainersDB) {
-		os.MkdirAll(c.RulesConfig.ContainersDB, 0600)
-	}
-	if !fsutil.Exists(c.Dump.Dir) {
-		os.MkdirAll(c.Dump.Dir, 0600)
-	}
-	if !fsutil.Exists(filepath.Dir(c.FwdConfig.Logging.Dir)) {
-		os.MkdirAll(filepath.Dir(c.FwdConfig.Logging.Dir), 0600)
-	}
-	if !fsutil.Exists(filepath.Dir(c.Logfile)) {
-		os.MkdirAll(filepath.Dir(c.Logfile), 0600)
-	}
-}
-
-// Verify validate HIDS configuration object
-func (c *HIDSConfig) Verify() error {
-	if !fsutil.IsDir(c.RulesConfig.RulesDB) {
-		return fmt.Errorf("Rules database must be a directory")
-	}
-	if !fsutil.IsDir(c.RulesConfig.ContainersDB) {
-		return fmt.Errorf("Containers database must be a directory")
-	}
-	return nil
-}
-
 // HIDS structure
 type HIDS struct {
 	sync.RWMutex    // Mutex to lock the IDS when updating rules
 	eventProvider   wevtapi.EventProvider
-	engine          engine.Engine
-	preHooks        *hooks.HookManager
-	postHooks       *hooks.HookManager
+	preHooks        *HookManager
+	postHooks       *HookManager
 	forwarder       *api.Forwarder
-	channels        datastructs.SyncedSet // Windows log channels to listen to
+	channels        *datastructs.SyncedSet // Windows log channels to listen to
 	channelsSignals chan bool
-	config          *HIDSConfig
+	config          *Config
 	eventScanned    uint64
 	alertReported   uint64
 	startTime       time.Time
 	waitGroup       sync.WaitGroup
 
+	flagProcTermEn bool
+	bootCompleted  bool
+	// Sysmon GUID of HIDS process
+	guid           string
+	processTracker *ActivityTracker
+	memdumped      *datastructs.SyncedSet
+	dumping        *datastructs.SyncedSet
+	filedumped     *datastructs.SyncedSet
+	hookSemaphore  semaphore.Semaphore
+
+	// Compression management
+	compressionIsRunning bool
+	compressionChannel   chan string
+
+	Engine   engine.Engine
 	DryRun   bool
 	PrintAll bool
 }
@@ -325,16 +129,23 @@ func newActionnableEngine() (e engine.Engine) {
 }
 
 // NewHIDS creates a new HIDS object from configuration
-func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
+func NewHIDS(c *Config) (h *HIDS, err error) {
 	h = &HIDS{
 		// PushEventProvider seems not to retrieve all the events (observed this at boot)
-		eventProvider:   wevtapi.NewPullEventProvider(),
-		preHooks:        hooks.NewHookMan(),
-		postHooks:       hooks.NewHookMan(),
-		channels:        datastructs.NewSyncedSet(),
-		channelsSignals: make(chan bool),
-		config:          c,
-		waitGroup:       sync.WaitGroup{}}
+		eventProvider:      wevtapi.NewPullEventProvider(),
+		preHooks:           NewHookMan(),
+		postHooks:          NewHookMan(),
+		channels:           datastructs.NewSyncedSet(),
+		channelsSignals:    make(chan bool),
+		config:             c,
+		waitGroup:          sync.WaitGroup{},
+		processTracker:     NewActivityTracker(),
+		memdumped:          datastructs.NewSyncedSet(),
+		dumping:            datastructs.NewSyncedSet(),
+		filedumped:         datastructs.NewSyncedSet(),
+		hookSemaphore:      semaphore.New(4),
+		compressionChannel: make(chan string),
+	}
 
 	// Creates missing directories
 	c.Prepare()
@@ -343,9 +154,6 @@ func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
 	if c.Logfile != "" {
 		log.SetLogfile(c.Logfile, 0600)
 	}
-
-	// Set the globals used by the Hooks
-	c.SetHooksGlobals()
 
 	// Verify configuration
 	if err = c.Verify(); err != nil {
@@ -364,9 +172,9 @@ func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
 	h.initChannels(c.Channels)
 	h.initHooks(c.EnableHooks)
 	// initializing canaries
-	h.config.CanariesConfig.Initialize()
+	h.config.CanariesConfig.Configure()
 	// fixing local audit policies if necessary
-	h.config.AuditConfig.Initialize()
+	h.config.AuditConfig.Configure()
 
 	// tries to update the engine
 	if err := h.updateEngine(true); err != nil {
@@ -375,13 +183,15 @@ func NewHIDS(c *HIDSConfig) (h *HIDS, err error) {
 	return h, nil
 }
 
+/** Private Methods **/
+
 func (h *HIDS) initChannels(channels []string) {
 	for _, c := range channels {
 		if c == "all" {
 			h.channels.Add(datastructs.ToInterfaceSlice(allChannels())...)
 			continue
 		}
-		if rc, ok := channelAliases[c]; ok {
+		if rc, ok := ChannelAliases[c]; ok {
 			h.channels.Add(rc)
 		} else {
 			h.channels.Add(c)
@@ -395,13 +205,12 @@ func (h *HIDS) initHooks(advanced bool) {
 	h.preHooks.Hook(hookSelfGUID, fltImageSize)
 	h.preHooks.Hook(hookProcTerm, fltProcTermination)
 	h.preHooks.Hook(hookStats, fltStats)
-	h.preHooks.Hook(hookTrack, fltProcessCreate)
+	h.preHooks.Hook(hookTrack, fltTrack)
 	if advanced {
 		// Process terminator hook, terminating blacklisted (by action) processes
 		h.preHooks.Hook(hookTerminator, fltProcessCreate)
 		h.preHooks.Hook(hookImageLoad, fltImageLoad)
 		h.preHooks.Hook(hookSetImageSize, fltImageSize)
-		//h.preHooks.Hook(hookProcessIntegrity, fltImageSize)
 		h.preHooks.Hook(hookProcessIntegrityProcTamp, fltImageTampering)
 		h.preHooks.Hook(hookEnrichServices, fltAnySysmon)
 		h.preHooks.Hook(hookClipboardEvents, fltClipboard)
@@ -409,8 +218,8 @@ func (h *HIDS) initHooks(advanced bool) {
 		// Must be run the last as it depends on other filters
 		h.preHooks.Hook(hookEnrichAnySysmon, fltAnySysmon)
 		// Not sastifying results with Sysmon 11.11 we should try enabling this on newer versions
-		// h.preHooks.Hook(hookDNS, fltDNS)
-		// h.preHooks.Hook(hookEnrichDNSSysmon, fltNetworkConnect)
+		//h.preHooks.Hook(HookDNS, fltDNS)
+		//h.preHooks.Hook(hookEnrichDNSSysmon, fltNetworkConnect)
 		// Experimental
 		//h.preHooks.Hook(hookSetValueSize, fltRegSetValue)
 
@@ -428,9 +237,295 @@ func (h *HIDS) initHooks(advanced bool) {
 			}
 		}
 
+		// This hook must run before action handling as we want
+		// the gene score to be set before an eventual reporting
+		h.postHooks.Hook(hookUpdateGeneScore, fltAnyEvent)
 		// Handles actions defined in rules for any Sysmon event
 		h.postHooks.Hook(hookHandleActions, fltAnyEvent)
 	}
+}
+
+func (h *HIDS) updateEngine(force bool) error {
+	h.Lock()
+	defer h.Unlock()
+
+	reloadRules := true
+	reloadContainers := true
+
+	// check if we need rule update
+	if h.needsRulesUpdate() {
+		log.Info("Updating WHIDS rules")
+		if err := h.fetchRulesFromManager(); err != nil {
+			log.Errorf("Failed to fetch rules from manager: %s", err)
+			reloadRules = false
+		}
+	}
+
+	if h.needsContainersUpdate() {
+		log.Info("Updating WHIDS containers")
+		if err := h.fetchContainersFromManager(); err != nil {
+			log.Errorf("Failed to fetch containers from manager: %s", err)
+			reloadContainers = false
+		}
+	}
+
+	if reloadRules || reloadContainers || force {
+		// We need to create a new engine if we received a rule/containers update
+		h.Engine = newActionnableEngine()
+
+		// containers must be loaded before the rules anyway
+		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.RulesConfig.ContainersDB)
+		if err := h.loadContainers(); err != nil {
+			return fmt.Errorf("error loading containers: %s", err)
+		}
+
+		if reloadRules || force {
+			// Loading canary rules
+			if h.config.CanariesConfig.Enable {
+				log.Infof("Loading canary rules")
+				// Sysmon rule
+				sr := h.config.CanariesConfig.GenRuleSysmon()
+				if scr, err := sr.Compile(nil); err != nil {
+					log.Errorf("Failed to compile canary rule: %s", err)
+				} else {
+					h.Engine.AddRule(scr)
+				}
+
+				// File System Audit Rule
+				fsr := h.config.CanariesConfig.GenRuleFSAudit()
+				if fscr, err := fsr.Compile(nil); err != nil {
+					log.Errorf("Failed to compile canary rule: %s", err)
+				} else {
+					h.Engine.AddRule(fscr)
+				}
+			}
+
+			log.Infof("Loading HIDS rules from: %s", h.config.RulesConfig.RulesDB)
+			if err := h.Engine.LoadDirectory(h.config.RulesConfig.RulesDB); err != nil {
+				return fmt.Errorf("failed to load rules: %s", err)
+			}
+			log.Infof("Number of rules loaded in engine: %d", h.Engine.Count())
+		}
+	} else {
+		log.Debug("Neither rules nor containers need to be updated")
+	}
+
+	return nil
+}
+
+// rules needs to be updated with the new ones available in manager
+func (h *HIDS) needsRulesUpdate() bool {
+	var err error
+	var oldSha256, sha256 string
+	_, rulesSha256Path := h.RulesPaths()
+
+	if h.forwarder.Local {
+		return false
+	}
+
+	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
+		return false
+	}
+	oldSha256, _ = utils.ReadFileString(rulesSha256Path)
+
+	log.Debugf("Rules: remote=%s local=%s", sha256, oldSha256)
+	return oldSha256 != sha256
+}
+
+// at least one container needs to be updated
+func (h *HIDS) needsContainersUpdate() bool {
+	var containers []string
+	var err error
+
+	cl := h.forwarder.Client
+
+	if h.forwarder.Local {
+		return false
+	}
+
+	if containers, err = cl.GetContainersList(); err != nil {
+		return false
+	}
+
+	for _, cont := range containers {
+		if h.needsContainerUpdate(cont) {
+			return true
+		}
+	}
+	return false
+}
+
+// returns true if a container needs to be updated
+func (h *HIDS) needsContainerUpdate(remoteCont string) bool {
+	var localSha256, remoteSha256 string
+	_, locContSha256Path := h.containerPaths(remoteCont)
+	// means that remoteCont is also a local container
+	remoteSha256, _ = h.forwarder.Client.GetContainerSha256(remoteCont)
+	localSha256, _ = utils.ReadFileString(locContSha256Path)
+	log.Infof("container %s: remote=%s local=%s", remoteCont, remoteSha256, localSha256)
+	return localSha256 != remoteSha256
+}
+
+func (h *HIDS) fetchRulesFromManager() (err error) {
+	var rules, sha256 string
+
+	rulePath, sha256Path := h.RulesPaths()
+
+	// if we are not connected to a manager we return
+	if h.config.FwdConfig.Local {
+		return
+	}
+
+	log.Infof("Fetching new rules available in manager")
+	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
+		return err
+	}
+
+	if rules, err = h.forwarder.Client.GetRules(); err != nil {
+		return err
+	}
+
+	if sha256 != data.Sha256([]byte(rules)) {
+		return fmt.Errorf("failed to verify rules integrity")
+	}
+
+	ioutil.WriteFile(sha256Path, []byte(sha256), 0600)
+	return ioutil.WriteFile(rulePath, []byte(rules), 0600)
+}
+
+// containerPaths returns the path to the container and the path to its sha256 file
+func (h *HIDS) containerPaths(container string) (path, sha256Path string) {
+	path = filepath.Join(h.config.RulesConfig.ContainersDB, fmt.Sprintf("%s%s", container, containerExt))
+	sha256Path = fmt.Sprintf("%s.sha256", path)
+	return
+}
+
+func (h *HIDS) fetchContainersFromManager() (err error) {
+	var containers []string
+	cl := h.forwarder.Client
+
+	// if we are not connected to a manager we return
+	if h.config.FwdConfig.Local {
+		return
+	}
+
+	if containers, err = cl.GetContainersList(); err != nil {
+		return
+	}
+
+	for _, contName := range containers {
+		// if container needs to be updated
+		if h.needsContainerUpdate(contName) {
+			cont, err := cl.GetContainer(contName)
+			if err != nil {
+				return err
+			}
+
+			// we compare the integrity of the container received
+			compSha256 := utils.Sha256StringArray(cont)
+			sha256, _ := cl.GetContainerSha256(contName)
+			if compSha256 != sha256 {
+				return fmt.Errorf("failed to verify container \"%s\" integrity", contName)
+			}
+
+			// we dump the container
+			contPath, contSha256Path := h.containerPaths(contName)
+			fd, err := os.Create(contPath)
+			if err != nil {
+				return err
+			}
+			w := gzip.NewWriter(fd)
+			for _, e := range cont {
+				w.Write([]byte(fmt.Sprintln(e)))
+			}
+			w.Flush()
+			w.Close()
+			fd.Close()
+			// Dump current container sha256 to a file
+			ioutil.WriteFile(contSha256Path, []byte(compSha256), 0600)
+		}
+	}
+	return nil
+}
+
+// loads containers found in container database directory
+func (h *HIDS) loadContainers() (lastErr error) {
+	for wi := range fswalker.Walk(h.config.RulesConfig.ContainersDB) {
+		for _, fi := range wi.Files {
+			path := filepath.Join(wi.Dirpath, fi.Name())
+			// we take only files with good extension
+			if strings.HasSuffix(fi.Name(), containerExt) {
+				cont := strings.SplitN(fi.Name(), ".", 2)[0]
+				fd, err := os.Open(path)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				r, err := gzip.NewReader(fd)
+				if err != nil {
+					lastErr = err
+					// we close file descriptor
+					fd.Close()
+					continue
+				}
+				log.Infof("Loading container: %s", cont)
+				h.Engine.LoadContainer(cont, r)
+				r.Close()
+				fd.Close()
+			}
+		}
+	}
+	return
+}
+
+func (h *HIDS) cleanup() {
+	// Cleaning up empty dump directories if needed
+	fis, _ := ioutil.ReadDir(h.config.Dump.Dir)
+	for _, fi := range fis {
+		if fi.IsDir() {
+			fp := filepath.Join(h.config.Dump.Dir, fi.Name())
+			if utils.CountFiles(fp) == 0 {
+				os.RemoveAll(fp)
+			}
+		}
+	}
+}
+
+////////////////// Routines
+
+// schedules the different routines to be ran
+func (h *HIDS) cronRoutine() {
+	now := time.Now()
+	// timestamps
+	lastUpdateTs := now
+	lastUploadTs := now
+	lastArchDelTs := now
+	lastCmdRunTs := now
+
+	go func() {
+		for {
+			now = time.Now()
+			switch {
+			// handle updates
+			case now.Sub(lastUpdateTs) >= h.config.RulesConfig.UpdateInterval:
+				// put here function to update
+				lastUpdateTs = now
+			// handle uploads
+			case now.Sub(lastUploadTs) >= time.Minute:
+				lastUploadTs = now
+			// handle sysmon archive cleaning
+			case now.Sub(lastArchDelTs) >= time.Minute:
+				// put here code to delete archived files
+				lastArchDelTs = now
+			// handle command to run
+			case now.Sub(lastCmdRunTs) >= 5*time.Second:
+				// put here code to run commands
+				lastCmdRunTs = now
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+	}()
 }
 
 func (h *HIDS) cleanArchivedRoutine() bool {
@@ -496,270 +591,10 @@ func (h *HIDS) updateRoutine() bool {
 	return false
 }
 
-func (h *HIDS) updateEngine(force bool) error {
-	h.Lock()
-	defer h.Unlock()
-
-	reloadRules := true
-	reloadContainers := true
-
-	// check if we need rule update
-	if h.needsRulesUpdate() {
-		log.Info("Updating WHIDS rules")
-		if err := h.fetchRulesFromManager(); err != nil {
-			log.Errorf("Failed to fetch rules from manager: %s", err)
-			reloadRules = false
-		}
-	}
-
-	if h.needsContainersUpdate() {
-		log.Info("Updating WHIDS containers")
-		if err := h.fetchContainersFromManager(); err != nil {
-			log.Errorf("Failed to fetch containers from manager: %s", err)
-			reloadContainers = false
-		}
-	}
-
-	if reloadRules || reloadContainers || force {
-		// We need to create a new engine if we received a rule/containers update
-		h.engine = newActionnableEngine()
-
-		// containers must be loaded before the rules anyway
-		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.RulesConfig.ContainersDB)
-		if err := h.loadContainers(); err != nil {
-			return fmt.Errorf("Error loading containers: %s", err)
-		}
-
-		if reloadRules || force {
-			// Loading canary rules
-			if h.config.CanariesConfig.Enable {
-				log.Infof("Loading canary rules")
-				// Sysmon rule
-				sr := h.config.CanariesConfig.GenRuleSysmon()
-				log.Info(utils.PrettyJSON(sr))
-				if scr, err := sr.Compile(nil); err != nil {
-					log.Errorf("Failed to compile canary rule: %s", err)
-				} else {
-					h.engine.AddRule(scr)
-				}
-
-				// File System Audit Rule
-				fsr := h.config.CanariesConfig.GenRuleFSAudit()
-				log.Info(utils.PrettyJSON(fsr))
-				if fscr, err := fsr.Compile(nil); err != nil {
-					log.Errorf("Failed to compile canary rule: %s", err)
-				} else {
-					h.engine.AddRule(fscr)
-				}
-			}
-
-			log.Infof("Loading HIDS rules from: %s", h.config.RulesConfig.RulesDB)
-			if err := h.engine.LoadDirectory(h.config.RulesConfig.RulesDB); err != nil {
-				return fmt.Errorf("Failed to load rules: %s", err)
-			}
-			log.Infof("Number of rules loaded in engine: %d", h.engine.Count())
-		}
-	} else {
-		log.Debug("Neither rules nor containers need to be updated")
-	}
-
-	return nil
-}
-
-// rules needs to be updated with the new ones available in manager
-func (h *HIDS) needsRulesUpdate() bool {
-	var err error
-	var oldSha256, sha256 string
-	_, rulesSha256Path := h.rulesPaths()
-
-	if h.forwarder.Local {
-		return false
-	}
-
-	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
-		return false
-	}
-	oldSha256, _ = utils.ReadFileString(rulesSha256Path)
-
-	log.Debugf("Rules: remote=%s local=%s", sha256, oldSha256)
-	if oldSha256 != sha256 {
-		return true
-	}
-	return false
-}
-
-// at least one container needs to be updated
-func (h *HIDS) needsContainersUpdate() bool {
-	var containers []string
-	var err error
-
-	cl := h.forwarder.Client
-
-	if h.forwarder.Local {
-		return false
-	}
-
-	if containers, err = cl.GetContainersList(); err != nil {
-		return false
-	}
-
-	for _, cont := range containers {
-		if h.needsContainerUpdate(cont) {
-			return true
-		}
-	}
-	return false
-}
-
-// returns true if a container needs to be updated
-func (h *HIDS) needsContainerUpdate(remoteCont string) bool {
-	var localSha256, remoteSha256 string
-	_, locContSha256Path := h.containerPaths(remoteCont)
-	// means that remoteCont is also a local container
-	remoteSha256, _ = h.forwarder.Client.GetContainerSha256(remoteCont)
-	localSha256, _ = utils.ReadFileString(locContSha256Path)
-	log.Infof("container %s: remote=%s local=%s", remoteCont, remoteSha256, localSha256)
-	if localSha256 != remoteSha256 {
-		return true
-	}
-	return false
-}
-
-func (h *HIDS) fetchRulesFromManager() (err error) {
-	var rules, sha256 string
-
-	rulePath, sha256Path := h.rulesPaths()
-
-	// if we are not connected to a manager we return
-	if h.config.FwdConfig.Local {
-		return
-	}
-
-	log.Infof("Fetching new rules available in manager")
-	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
-		return err
-	}
-
-	if rules, err = h.forwarder.Client.GetRules(); err != nil {
-		return err
-	}
-
-	if sha256 != data.Sha256([]byte(rules)) {
-		return fmt.Errorf("Failed to verify rules integrity")
-	}
-
-	ioutil.WriteFile(sha256Path, []byte(sha256), 600)
-	return ioutil.WriteFile(rulePath, []byte(rules), 600)
-}
-
-// containerPaths returns the path to the container and the path to its sha256 file
-func (h *HIDS) containerPaths(container string) (path, sha256Path string) {
-	path = filepath.Join(h.config.RulesConfig.ContainersDB, fmt.Sprintf("%s%s", container, containerExt))
-	sha256Path = fmt.Sprintf("%s.sha256", path)
-	return
-}
-
-// rulesPaths returns the path used by WHIDS to save gene rules
-func (h *HIDS) rulesPaths() (path, sha256Path string) {
-	path = filepath.Join(h.config.RulesConfig.RulesDB, "database.gen")
-	sha256Path = fmt.Sprintf("%s.sha256", path)
-	return
-}
-
-func (h *HIDS) fetchContainersFromManager() (err error) {
-	var containers []string
-	cl := h.forwarder.Client
-
-	// if we are not connected to a manager we return
-	if h.config.FwdConfig.Local {
-		return
-	}
-
-	if containers, err = cl.GetContainersList(); err != nil {
-		return
-	}
-
-	for _, contName := range containers {
-		// if container needs to be updated
-		if h.needsContainerUpdate(contName) {
-			cont, err := cl.GetContainer(contName)
-			if err != nil {
-				return err
-			}
-
-			// we compare the integrity of the container received
-			compSha256 := api.Sha256StringArray(cont)
-			sha256, _ := cl.GetContainerSha256(contName)
-			if compSha256 != sha256 {
-				return fmt.Errorf("Failed to verify container \"%s\" integrity", contName)
-			}
-
-			// we dump the container
-			contPath, contSha256Path := h.containerPaths(contName)
-			fd, err := os.Create(contPath)
-			if err != nil {
-				return err
-			}
-			w := gzip.NewWriter(fd)
-			for _, e := range cont {
-				w.Write([]byte(fmt.Sprintln(e)))
-			}
-			w.Flush()
-			w.Close()
-			fd.Close()
-			// Dump current container sha256 to a file
-			ioutil.WriteFile(contSha256Path, []byte(compSha256), 600)
-		}
-	}
-	return nil
-}
-
-// loads containers found in container database directory
-func (h *HIDS) loadContainers() (lastErr error) {
-	for wi := range fswalker.Walk(h.config.RulesConfig.ContainersDB) {
-		for _, fi := range wi.Files {
-			path := filepath.Join(wi.Dirpath, fi.Name())
-			// we take only files with good extension
-			if strings.HasSuffix(fi.Name(), containerExt) {
-				cont := strings.SplitN(fi.Name(), ".", 2)[0]
-				fd, err := os.Open(path)
-				if err != nil {
-					lastErr = err
-					continue
-				}
-				defer fd.Close()
-				r, err := gzip.NewReader(fd)
-				if err != nil {
-					lastErr = err
-					continue
-				}
-				log.Infof("Loading container: %s", cont)
-				h.engine.LoadContainer(cont, r)
-				r.Close()
-				fd.Close()
-			}
-		}
-	}
-	return
-}
-
-func (h *HIDS) cleanup() {
-	// Cleaning up empty dump directories if needed
-	fis, _ := ioutil.ReadDir(h.config.Dump.Dir)
-	for _, fi := range fis {
-		if fi.IsDir() {
-			fp := filepath.Join(h.config.Dump.Dir, fi.Name())
-			if utils.CountFiles(fp) == 0 {
-				os.RemoveAll(fp)
-			}
-		}
-	}
-}
-
 func (h *HIDS) uploadRoutine() bool {
 	if h.config.IsDumpEnabled() && h.config.IsForwardingEnabled() {
 		// force compression in this case
-		flagDumpCompress = true
+		h.config.Dump.Compression = true
 		go func() {
 			for {
 				// Sending dump files over to the manager
@@ -796,19 +631,253 @@ func (h *HIDS) uploadRoutine() bool {
 	return false
 }
 
+func (h *HIDS) containCmd() *exec.Cmd {
+	ip := h.forwarder.Client.ManagerIP
+	// only allow connection to the manager configured
+	return exec.Command("netsh.exe",
+		"advfirewall",
+		"firewall",
+		"add",
+		"rule",
+		fmt.Sprintf("name=%s", ContainRuleName),
+		"dir=out",
+		fmt.Sprintf("remoteip=0.0.0.0-%s,%s-255.255.255.255", utils.PrevIP(ip), utils.NextIP(ip)),
+		"action=block")
+}
+
+func (h *HIDS) uncontainCmd() *exec.Cmd {
+	return exec.Command("netsh.exe", "advfirewall",
+		"firewall",
+		"delete",
+		"rule",
+		fmt.Sprintf("name=%s", ContainRuleName),
+	)
+}
+
+func (h *HIDS) handleManagerCommand(cmd *api.Command) {
+
+	// Switch processing the commands
+	switch cmd.Name {
+	// Aliases
+	case "contain":
+		cmd.FromExecCmd(h.containCmd())
+	case "uncontain":
+		cmd.FromExecCmd(h.uncontainCmd())
+	case "osquery":
+		if fsutil.IsFile(h.config.Report.OSQuery.Bin) {
+			cmd.Name = h.config.Report.OSQuery.Bin
+			cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
+			cmd.ExpectJSON = true
+		} else {
+			cmd.Unrunnable()
+			cmd.Error = fmt.Sprintf("OSQuery binary file configured does not exist: %s", h.config.Report.OSQuery.Bin)
+		}
+	// HIDs internal commands
+	case "terminate":
+		cmd.Unrunnable()
+		if len(cmd.Args) > 0 {
+			spid := cmd.Args[0]
+			if pid, err := strconv.Atoi(spid); err != nil {
+				cmd.Error = fmt.Sprintf("failed to parse pid: %s", err)
+			} else if err := terminate(pid); err != nil {
+				cmd.Error = err.Error()
+			}
+		}
+	case "hash":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) > 0 {
+			if out, err := cmdHash(cmd.Args[0]); err != nil {
+				cmd.Error = err.Error()
+			} else {
+				cmd.Stdout = out
+			}
+		}
+	case "stat":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) > 0 {
+			if out, err := cmdStat(cmd.Args[0]); err != nil {
+				cmd.Error = err.Error()
+			} else {
+				cmd.Stdout = out
+			}
+		}
+	case "dir":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) > 0 {
+			if out, err := cmdDir(cmd.Args[0]); err != nil {
+				cmd.Error = err.Error()
+			} else {
+				cmd.Stdout = out
+			}
+		}
+	case "walk":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) > 0 {
+			cmd.Stdout = cmdWalk(cmd.Args[0])
+		}
+	case "find":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) == 2 {
+			if out, err := cmdFind(cmd.Args[0], cmd.Args[1]); err != nil {
+				cmd.Error = err.Error()
+			} else {
+				cmd.Stdout = out
+			}
+		}
+	case "report":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		cmd.Stdout = h.Report()
+	case "processes":
+		h.processTracker.RLock()
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		cmd.Stdout = h.processTracker.PS()
+		h.processTracker.RUnlock()
+	case "drivers":
+		h.processTracker.RLock()
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		cmd.Stdout = h.processTracker.Drivers
+		h.processTracker.RUnlock()
+	}
+
+	// we finally run the command
+	if err := cmd.Run(); err != nil {
+		log.Errorf("failed to run command sent by manager \"%s\": %s", cmd.String(), err)
+	}
+}
+
+// routine which manages command to be executed on the endpoint
+// it is made in such a way that we can send burst of commands
 func (h *HIDS) commandRunnerRoutine() bool {
 	if h.config.IsForwardingEnabled() {
 		go func() {
+
+			defaultSleep := time.Second * 5
+			sleep := defaultSleep
+
+			burstDur := time.Duration(0)
+			tgtBurstDur := time.Second * 30
+			burstSleep := time.Millisecond * 500
+
 			for {
-				if err := h.forwarder.Client.ExecuteCommand(); err != nil {
+				if cmd, err := h.forwarder.Client.FetchCommand(); err != nil && err != api.ErrNothingToDo {
 					log.Error(err)
+				} else if err == nil {
+					// reduce sleeping time if a command was received
+					sleep = burstSleep
+					burstDur = 0
+					log.Infof("Handling command: %s", cmd.String())
+					h.handleManagerCommand(cmd)
+					if err := h.forwarder.Client.PostCommand(cmd); err != nil {
+						log.Error(err)
+					}
 				}
-				time.Sleep(5 * time.Second)
+
+				// if we reached the targetted burst duration
+				if burstDur >= tgtBurstDur {
+					sleep = defaultSleep
+				}
+
+				if sleep == burstSleep {
+					burstDur += sleep
+				}
+
+				time.Sleep(sleep)
 			}
 		}()
 		return true
 	}
 	return false
+}
+
+func (h *HIDS) compress(path string) {
+	if h.config.Dump.Compression {
+		if !h.compressionIsRunning {
+			// start compression routine
+			go func() {
+				h.compressionIsRunning = true
+				for path := range compressionChannel {
+					log.Infof("Compressing %s", path)
+					if err := utils.GzipFileBestSpeed(path); err != nil {
+						log.Errorf("Cannot compress %s: %s", path, err)
+					}
+				}
+				h.compressionIsRunning = false
+			}()
+		}
+		compressionChannel <- path
+	}
+}
+
+/** Public Methods **/
+
+// IsHIDSEvent returns true if the event is generated by IDS activity
+func (h *HIDS) IsHIDSEvent(e *evtx.GoEvtxMap) bool {
+	if pguid, err := e.GetString(&pathSysmonParentProcessGUID); err == nil {
+		if pguid == h.guid {
+			return true
+		}
+	}
+
+	if guid, err := e.GetString(&pathSysmonProcessGUID); err == nil {
+		if guid == h.guid {
+			return true
+		}
+		// search for parent in processTracker
+		if pt := h.processTracker.GetByGuid(guid); pt != nil {
+			if pt.ParentProcessGUID == h.guid {
+				return true
+			}
+		}
+	}
+	if sguid, err := e.GetString(&pathSysmonSourceProcessGUID); err == nil {
+		if sguid == h.guid {
+			return true
+		}
+		// search for parent in processTracker
+		if pt := h.processTracker.GetByGuid(sguid); pt != nil {
+			if pt.ParentProcessGUID == h.guid {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Report generate a forensic ready report (meant to be dumped)
+// this method is blocking as it runs commands and wait after those
+func (h *HIDS) Report() (r Report) {
+	r.StartTime = time.Now()
+
+	// generate a report for running processes or those terminated still having one child or more
+	// do this step first not to polute report with commands to run
+	r.Processes = h.processTracker.PS()
+
+	// Drivers loaded
+	r.Drivers = h.processTracker.Drivers
+
+	// run all the commands configured to inculde in the report
+	r.Commands = h.config.Report.PrepareCommands()
+	for i := range r.Commands {
+		r.Commands[i].Run()
+	}
+
+	r.StopTime = time.Now()
+	return
+}
+
+// RulesPaths returns the path used by WHIDS to save gene rules
+func (h *HIDS) RulesPaths() (path, sha256Path string) {
+	path = filepath.Join(h.config.RulesConfig.RulesDB, "database.gen")
+	sha256Path = fmt.Sprintf("%s.sha256", path)
+	return
 }
 
 // Run starts the WHIDS engine and waits channel listening is stopped
@@ -860,26 +929,28 @@ func (h *HIDS) Run() {
 			}
 
 			// Warning message in certain circumstances
-			if h.config.EnableHooks && !flagProcTermEn && h.eventScanned > 0 && h.eventScanned%1000 == 0 {
+			if h.config.EnableHooks && !h.flagProcTermEn && h.eventScanned > 0 && h.eventScanned%1000 == 0 {
 				log.Warn("Sysmon process termination events seem to be missing. WHIDS won't work as expected.")
 			}
 
+			h.RLock()
+
+			// Runs pre detection hooks
+			// putting this before next condition makes the processTracker registering
+			// HIDS events and allows detecting ProcessAccess events from HIDS childs
+			h.preHooks.RunHooksOn(h, event)
+
 			// We skip if it is one of IDS event
-			// we keep process termination event because it is used to control wether process termination is enabled
-			if isSelf(event) && !isSysmonProcessTerminate(event) {
+			// we keep process termination event because it is used to control if process termination is enabled
+			if h.IsHIDSEvent(event) && !isSysmonProcessTerminate(event) {
 				if h.PrintAll {
 					fmt.Println(utils.JSON(event))
 				}
-				continue
+				goto LoopTail
 			}
 
-			// Runs pre detection hooks
-			h.preHooks.RunHooksOn(event)
-
-			h.RLock()
-
 			// if the event has matched at least one signature or is filtered
-			if n, crit, filtered := h.engine.MatchOrFilter(event); len(n) > 0 || filtered {
+			if n, crit, filtered := h.Engine.MatchOrFilter(event); len(n) > 0 || filtered {
 				switch {
 				case crit >= h.config.CritTresh:
 					if !h.PrintAll && !h.config.LogAll {
@@ -887,7 +958,7 @@ func (h *HIDS) Run() {
 					}
 					// Pipe the event to be sent to the forwarder
 					// Run hooks post detection
-					h.postHooks.RunHooksOn(event)
+					h.postHooks.RunHooksOn(h, event)
 					h.alertReported++
 				case filtered && h.config.EnableFiltering && !h.PrintAll && !h.config.LogAll:
 					event.Del(&engine.GeneInfoPath)
@@ -906,9 +977,12 @@ func (h *HIDS) Run() {
 				h.forwarder.PipeEvent(event)
 			}
 
-			h.RUnlock()
 			h.eventScanned++
+
+		LoopTail:
+			h.RUnlock()
 		}
+		log.Infof("HIDS main loop terminated")
 	}()
 
 	// Run bogus command so that at least one Process Terminate
@@ -923,7 +997,7 @@ func (h *HIDS) LogStats() {
 	log.Infof("Count Event Scanned: %d", h.eventScanned)
 	log.Infof("Average Event Rate: %.2f EPS", float64(h.eventScanned)/(stop.Sub(h.startTime).Seconds()))
 	log.Infof("Alerts Reported: %d", h.alertReported)
-	log.Infof("Count Rules Used (loaded + generated): %d", h.engine.Count())
+	log.Infof("Count Rules Used (loaded + generated): %d", h.Engine.Count())
 }
 
 // Stop stops the IDS
@@ -946,4 +1020,14 @@ func (h *HIDS) Stop() {
 // Wait waits the IDS to finish
 func (h *HIDS) Wait() {
 	h.waitGroup.Wait()
+}
+
+// WaitWithTimeout waits the IDS to finish
+func (h *HIDS) WaitWithTimeout(timeout time.Duration) {
+	t := time.NewTimer(timeout)
+	go func() {
+		h.waitGroup.Wait()
+		t.Stop()
+	}()
+	<-t.C
 }

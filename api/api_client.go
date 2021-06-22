@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,7 +79,7 @@ func (cc *ClientConfig) Transport() http.RoundTripper {
 					return c, err
 				}
 			}
-			return c, fmt.Errorf("Server fingerprint not verified")
+			return c, fmt.Errorf("server fingerprint not verified")
 		},
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -92,9 +90,10 @@ func (cc *ClientConfig) Transport() http.RoundTripper {
 
 // ManagerClient structure definition
 type ManagerClient struct {
-	httpClient http.Client
-	config     ClientConfig
-	managerIP  net.IP
+	config    ClientConfig
+	ManagerIP net.IP
+
+	HTTPClient http.Client
 }
 
 const (
@@ -102,8 +101,6 @@ const (
 	UserAgent = "Whids-API-Client/1.0"
 	// Mega byte size
 	Mega = 1 << 20
-	// DefaultMaxUploadSize default maximum upload size
-	DefaultMaxUploadSize = 100 * Mega
 )
 
 var (
@@ -115,18 +112,9 @@ func init() {
 	var err error
 	Hostname, err = os.Hostname()
 	if err != nil {
-		id := data.Md5([]byte(fmt.Sprintf("%s", time.Now().Format(time.RFC3339Nano))))
+		id := data.Md5([]byte(time.Now().Format(time.RFC3339Nano)))
 		Hostname = fmt.Sprintf("HOST-%s", id)
 	}
-}
-
-// Sha256StringArray utility
-func Sha256StringArray(array []string) string {
-	sha256 := sha256.New()
-	for _, e := range array {
-		sha256.Write([]byte(e))
-	}
-	return hex.EncodeToString(sha256.Sum(nil))
 }
 
 // NewManagerClient creates a new Client to interface with the manager
@@ -135,14 +123,14 @@ func NewManagerClient(c *ClientConfig) (*ManagerClient, error) {
 	tpt := c.Transport()
 
 	mc := &ManagerClient{
-		httpClient: http.Client{Transport: tpt},
+		HTTPClient: http.Client{Transport: tpt},
 		config:     *c,
-		managerIP:  c.ManagerIP(),
+		ManagerIP:  c.ManagerIP(),
 	}
 
 	// host
 	if mc.config.Host == "" {
-		return nil, fmt.Errorf("Field \"host\" is missing from configuration")
+		return nil, fmt.Errorf("field \"host\" is missing from configuration")
 	}
 	// protocol
 	if mc.config.Proto == "" {
@@ -152,12 +140,12 @@ func NewManagerClient(c *ClientConfig) (*ManagerClient, error) {
 	switch mc.config.Proto {
 	case "http", "https":
 	default:
-		return nil, fmt.Errorf("Protocol not supported (only http(s))")
+		return nil, fmt.Errorf("protocol not supported (only http(s))")
 	}
 
 	// key
 	if mc.config.Key == "" {
-		return nil, fmt.Errorf("Field \"key\" is missing from configuration")
+		return nil, fmt.Errorf("field \"key\" is missing from configuration")
 	}
 
 	return mc, nil
@@ -208,7 +196,7 @@ func (m *ManagerClient) IsServerUp() bool {
 		log.Errorf("IsServerUp cannot create server key request: %s", err)
 		return false
 	}
-	resp, err := m.httpClient.Do(get)
+	resp, err := m.HTTPClient.Do(get)
 	if err != nil {
 		log.Errorf("IsServerUp cannot issue server key request: %s", err)
 		return false
@@ -229,7 +217,7 @@ func (m *ManagerClient) IsServerAuthenticated() (auth bool, up bool) {
 			log.Errorf("IsServerAuthenticated cannot create server key request: %s", err)
 			return false, false
 		}
-		resp, err := m.httpClient.Do(get)
+		resp, err := m.HTTPClient.Do(get)
 		if err != nil {
 			log.Errorf("IsServerAuthenticated cannot issue server key request: %s", err)
 			return false, false
@@ -266,15 +254,15 @@ func (m *ManagerClient) GetRulesSha256() (string, error) {
 			return "", fmt.Errorf("GetRulesSha256 failed to prepare request: %s", err)
 		}
 
-		resp, err := m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
-			return "", fmt.Errorf("GetRulesSha256 failed to issue HTTP request: %s", err)
+			return "", fmt.Errorf("SetRulesSha256 failed to issue HTTP request: %s", err)
 		}
 
 		if resp != nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				return "", fmt.Errorf("Failed to retrieve rules sha256, unexpected HTTP status code %d", resp.StatusCode)
+				return "", fmt.Errorf("failed to retrieve rules sha256, unexpected HTTP status code %d", resp.StatusCode)
 			}
 			sha256, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
@@ -296,7 +284,7 @@ func (m *ManagerClient) GetContainer(name string) ([]string, error) {
 			return ctn, fmt.Errorf("GetContainer failed to prepare request: %s", err)
 		}
 
-		resp, err := m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
 			return ctn, fmt.Errorf("GetContainer failed to issue HTTP request: %s", err)
 		}
@@ -304,7 +292,7 @@ func (m *ManagerClient) GetContainer(name string) ([]string, error) {
 		if resp != nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				return ctn, fmt.Errorf("Failed to retrieve container, unexpected HTTP status code %d", resp.StatusCode)
+				return ctn, fmt.Errorf("failed to retrieve container, unexpected HTTP status code %d", resp.StatusCode)
 			}
 			dec := json.NewDecoder(resp.Body)
 			if err = dec.Decode(&ctn); err != nil {
@@ -325,7 +313,7 @@ func (m *ManagerClient) GetContainersList() ([]string, error) {
 			return ctn, fmt.Errorf("GetContainersList failed to prepare request: %s", err)
 		}
 
-		resp, err := m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
 			return ctn, fmt.Errorf("GetContainersList failed to issue HTTP request: %s", err)
 		}
@@ -333,7 +321,7 @@ func (m *ManagerClient) GetContainersList() ([]string, error) {
 		if resp != nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				return ctn, fmt.Errorf("Failed to retrieve containers list, unexpected HTTP status code %d", resp.StatusCode)
+				return ctn, fmt.Errorf("failed to retrieve containers list, unexpected HTTP status code %d", resp.StatusCode)
 			}
 			dec := json.NewDecoder(resp.Body)
 			if err = dec.Decode(&ctn); err != nil {
@@ -353,7 +341,7 @@ func (m *ManagerClient) GetContainerSha256(name string) (string, error) {
 			return "", fmt.Errorf("GetContainerSha256 failed to prepare request: %s", err)
 		}
 
-		resp, err := m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("GetContainerSha256 failed to issue HTTP request: %s", err)
 		}
@@ -361,7 +349,7 @@ func (m *ManagerClient) GetContainerSha256(name string) (string, error) {
 		if resp != nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				return "", fmt.Errorf("Failed to retrieve container sha256, unexpected HTTP status code %d", resp.StatusCode)
+				return "", fmt.Errorf("failed to retrieve container sha256, unexpected HTTP status code %d", resp.StatusCode)
 			}
 			sha256, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
@@ -381,7 +369,7 @@ func (m *ManagerClient) GetRules() (string, error) {
 			return "", fmt.Errorf("GetRules failed to prepare request: %s", err)
 		}
 
-		resp, err := m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("GetRules failed to issue HTTP request: %s", err)
 		}
@@ -416,7 +404,7 @@ func (m *ManagerClient) PrepareFileUpload(path, guid, evthash, filename string) 
 			}
 			return &fu, nil
 		}
-		return &fu, fmt.Errorf("Dump size above limit")
+		return &fu, fmt.Errorf("dump size above limit")
 	}
 	return &fu, os.ErrNotExist
 }
@@ -446,7 +434,7 @@ func (m *ManagerClient) PostDump(f *FileUpload) error {
 				return fmt.Errorf("PostDump failed to prepare request: %s", err)
 			}
 
-			resp, err := m.httpClient.Do(req)
+			resp, err := m.HTTPClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("PostDump failed to issue HTTP request: %s", err)
 			}
@@ -475,7 +463,7 @@ func (m *ManagerClient) PostLogs(r io.Reader) error {
 				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
 			}
 
-			resp, err := m.httpClient.Do(req)
+			resp, err := m.HTTPClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("PostLogs failed to issue HTTP request: %s", err)
 			}
@@ -494,79 +482,80 @@ func (m *ManagerClient) PostLogs(r io.Reader) error {
 	return fmt.Errorf("PostLogs failed, server cannot be authenticated")
 }
 
-// ExecuteCommand executes a Command on the endpoint and return the result
-// to the manager. NB: this method is blocking due to Command.Run function call
-func (m *ManagerClient) ExecuteCommand() error {
+var (
+	ErrNothingToDo = fmt.Errorf("nothing to do")
+)
+
+func (m *ManagerClient) PostCommand(command *Command) error {
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		env := AliasEnv{m.managerIP}
-		command := NewCommandWithEnv(&env)
-
-		// getting command to be executed
-		req, err := m.Prepare("GET", EptAPICommandPath, nil)
-		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to prepare request: %s", err)
-		}
-
-		resp, err := m.httpClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to issue HTTP request: %s", err)
-		}
-
-		// if there is no command to execute, the server replies with this status code
-		if resp.StatusCode == http.StatusNoContent {
-			// nothing else to do
-			return nil
-		}
-
-		jsonCommand, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to read HTTP response body: %s", err)
-		}
-
-		// unmarshal command to be executed
-		if err := json.Unmarshal(jsonCommand, &command); err != nil {
-			return fmt.Errorf("ExecuteCommand failed to unmarshal command: %s", err)
-		}
-
-		// running the command, this is a blocking function, it waits the command to finish
-		if err := command.Run(); err != nil {
-			log.Errorf("ExecuteCommand failed to run command \"%s\": %s", command, err)
-		}
-
 		// stripping unecessary content to send back the command
 		command.Strip()
-		for fn, ff := range command.Fetch {
-			log.Infof("file: %s len: %d error: %s", fn, len(ff.Data), ff.Error)
-		}
+
 		// command should now contain stdout and stderr
-		jsonCommand, err = json.Marshal(command)
+		jsonCommand, err := json.Marshal(command)
 		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to marshal command")
+			return fmt.Errorf("PostCommand failed to marshal command")
 		}
 
 		// send back the response
-		req, err = m.PrepareGzip("POST", EptAPICommandPath, bytes.NewBuffer(jsonCommand))
+		req, err := m.PrepareGzip("POST", EptAPICommandPath, bytes.NewBuffer(jsonCommand))
 		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to prepare POST request")
+			return fmt.Errorf("PostCommand failed to prepare POST request")
 		}
 
-		resp, err = m.httpClient.Do(req)
+		resp, err := m.HTTPClient.Do(req)
 		if err != nil {
-			return fmt.Errorf("ExecuteCommand failed to issue HTTP request: %s", err)
+			return fmt.Errorf("PostCommand failed to issue HTTP request: %s", err)
 		}
 
 		if resp != nil {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				return fmt.Errorf("ExecuteCommand failed to send command results, unexpected HTTP status code %d", resp.StatusCode)
+				return fmt.Errorf("PostCommand failed to send command results, unexpected HTTP status code %d", resp.StatusCode)
 			}
 		}
 		return nil
 	}
-	return fmt.Errorf("ExecuteCommand failed, server cannot be authenticated")
+	return fmt.Errorf("PostCommand failed, server cannot be authenticated")
+
+}
+
+func (m *ManagerClient) FetchCommand() (*Command, error) {
+	command := NewCommand()
+	if auth, _ := m.IsServerAuthenticated(); auth {
+		// getting command to be executed
+		req, err := m.Prepare("GET", EptAPICommandPath, nil)
+		if err != nil {
+			return command, fmt.Errorf("FetchCommand failed to prepare request: %s", err)
+		}
+
+		resp, err := m.HTTPClient.Do(req)
+		if err != nil {
+			return command, fmt.Errorf("FetchCommand failed to issue HTTP request: %s", err)
+		}
+
+		// if there is no command to execute, the server replies with this status code
+		if resp.StatusCode == http.StatusNoContent {
+			// nothing else to do
+			return command, ErrNothingToDo
+		}
+
+		jsonCommand, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return command, fmt.Errorf("FetchCommand failed to read HTTP response body: %s", err)
+		}
+
+		// unmarshal command to be executed
+		if err := json.Unmarshal(jsonCommand, &command); err != nil {
+			return command, fmt.Errorf("FetchCommand failed to unmarshal command: %s", err)
+		}
+
+		return command, nil
+	}
+	return command, fmt.Errorf("FetchCommand failed, server cannot be authenticated")
 }
 
 // Close closes idle connections from underlying transport
 func (m *ManagerClient) Close() {
-	m.httpClient.CloseIdleConnections()
+	m.HTTPClient.CloseIdleConnections()
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/mux"
@@ -148,13 +149,13 @@ func (m *Manager) runEndpointAPI() {
 
 		if m.Config.TLS.Empty() {
 			// Bind to a port and pass our router in
-			log.Infof("Running HTTP server on: %s", uri)
+			log.Infof("Running endpoint HTTP API server on: %s", uri)
 			if err := m.endpointAPI.ListenAndServe(); err != http.ErrServerClosed {
 				log.Panic(err)
 			}
 		} else {
 			// Bind to a port and pass our router in
-			log.Infof("Running HTTPS server on: %s", uri)
+			log.Infof("Running endpoint HTTPS API server on: %s", uri)
 			if err := m.endpointAPI.ListenAndServeTLS(m.Config.TLS.Cert, m.Config.TLS.Key); err != http.ErrServerClosed {
 				log.Panic(err)
 			}
@@ -299,7 +300,7 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 				}
 				for _, path := range logPaths {
 					if _, ok := paths[path]; !ok {
-						if err := os.MkdirAll(filepath.Dir(path), DefaultDirPerm); err != nil {
+						if err := os.MkdirAll(filepath.Dir(path), utils.DefaultPerms); err != nil {
 							log.Errorf("Failed to create endpoint log directory %s: %s", path, err)
 						} else {
 							fd, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, DefaultLogPerm)

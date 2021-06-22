@@ -1,49 +1,19 @@
-package hooks
+package hids
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
 	"sync"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/golang-utils/datastructs"
 )
-
-type FilterDefinition struct {
-	EventIDs []int
-	Channel  string
-}
-
-// Filter structure
-type Filter struct {
-	EventIDs datastructs.SyncedSet
-	Channel  string
-}
-
-// NewFilter creates a new Filter structure
-func NewFilter(eids []int64, channel string) *Filter {
-	f := &Filter{}
-	f.EventIDs = datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(eids)...)
-	f.Channel = channel
-	return f
-}
-
-// Match checks if an event matches the filter
-func (f *Filter) Match(e *evtx.GoEvtxMap) bool {
-	if !f.EventIDs.Contains(e.EventID()) && f.EventIDs.Len() > 0 {
-		return false
-	}
-	// Don't check channel if empty string
-	if f.Channel != "" && f.Channel != e.Channel() {
-		return false
-	}
-	return true
-}
 
 // Hook structure definition
 // hooking functions are supposed to run quickly since it is
 // run synchronously with the Gene scanner. Likewise, the
 // hooking functions should never panic the program.
-type Hook func(*evtx.GoEvtxMap)
+type Hook func(*HIDS, *evtx.GoEvtxMap)
 
 // HookManager structure definition to easier handle hooks
 type HookManager struct {
@@ -71,7 +41,7 @@ func eventIdentifier(e *evtx.GoEvtxMap) string {
 }
 
 // RunHooksOn runs the hook on a given event
-func (hm *HookManager) RunHooksOn(e *evtx.GoEvtxMap) (ret bool) {
+func (hm *HookManager) RunHooksOn(h *HIDS, e *evtx.GoEvtxMap) (ret bool) {
 	// Don't waste resources if nothing to do
 	if len(hm.Filters) == 0 {
 		return
@@ -96,10 +66,16 @@ func (hm *HookManager) RunHooksOn(e *evtx.GoEvtxMap) (ret bool) {
 	// hi: hook index
 	for _, hi := range hm.memory[key] {
 		hook := hm.Hooks[hi]
-		hook(e)
+		// debug hooks
+		//log.Infof("Running hook: %s", getFunctionName(hook))
+		hook(h, e)
 		// We set return value to true if a hook has been applied
 		ret = true
 	}
 	hm.RUnlock()
 	return
+}
+
+func getFunctionName(i interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }

@@ -1,4 +1,4 @@
-package main
+package hids
 
 import (
 	"encoding/json"
@@ -8,17 +8,16 @@ import (
 	"testing"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/whids/hooks"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/readers"
 )
 
 var (
 	// DNSFilter filters any Windows-DNS-Client log
-	DNSFilter = hooks.NewFilter([]int64{}, "Microsoft-Windows-DNS-Client/Operational")
+	DNSFilter = NewFilter([]int64{}, "Microsoft-Windows-DNS-Client/Operational")
 	// SysmonNetConnFilter filters any Sysmon network connection
-	SysmonNetConnFilter = hooks.NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
-	eventSource         = "new-events.json"
+	SysmonNetConnFilter = NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
+	eventSource         = "test/new-events.json"
 	queryValue          = evtx.Path("/Event/EventData/QueryName")
 	queryType           = evtx.Path("/Event/EventData/QueryType")
 	queryResults        = evtx.Path("/Event/EventData/QueryResults")
@@ -27,7 +26,7 @@ var (
 	dnsResolution       = make(map[string]string)
 )
 
-func hookDNS(e *evtx.GoEvtxMap) {
+func hookDNS(h *HIDS, e *evtx.GoEvtxMap) {
 	if qtype, err := e.GetInt(&queryType); err == nil {
 		// request for A or AAAA records
 		if qtype == 1 || qtype == 28 {
@@ -47,7 +46,7 @@ func hookDNS(e *evtx.GoEvtxMap) {
 	}
 }
 
-func hookNetConn(e *evtx.GoEvtxMap) {
+func hookNetConn(h *HIDS, e *evtx.GoEvtxMap) {
 	if ip, err := e.GetString(&destIP); err == nil {
 		if dom, ok := dnsResolution[ip]; ok {
 			e.Set(&destHostname, dom)
@@ -56,7 +55,7 @@ func hookNetConn(e *evtx.GoEvtxMap) {
 }
 
 func TestHook(t *testing.T) {
-	hm := hooks.NewHookMan()
+	hm := NewHookMan()
 	hm.Hook(hookDNS, DNSFilter)
 	hm.Hook(hookNetConn, SysmonNetConnFilter)
 	f, err := os.Open(eventSource)
@@ -72,7 +71,7 @@ func TestHook(t *testing.T) {
 			t.Logf("JSON deserialization issue")
 			t.Fail()
 		}
-		if hm.RunHooksOn(&e) {
+		if hm.RunHooksOn(nil, &e) {
 			t.Log(string(evtx.ToJSON(e)))
 		}
 	}

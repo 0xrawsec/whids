@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 
 	"github.com/0xrawsec/gene/reducer"
@@ -42,13 +43,15 @@ const (
 	// DefaultLogPerm default logfile permission for Manager
 	DefaultLogPerm = 0600
 	// DefaultManagerLogSize  default size for Manager's logfiles
-	DefaultManagerLogSize = logfile.MB * 100
+	DefaultManagerLogSize = utils.Mega * 100
 	// DefaultKeySize default size for API key generation
 	DefaultKeySize = 64
 	// EptAPIDefaultPort default port used by manager's endpoint API
 	EptAPIDefaultPort = 1519
 	// AdmAPIDefaultPort default port used by manager's admin API
 	AdmAPIDefaultPort = 1520
+	// DefaultMaxUploadSize default maximum upload size
+	DefaultMaxUploadSize = 100 * utils.Mega
 )
 
 var (
@@ -150,7 +153,7 @@ func (f *FileUpload) Dump(dir string) (err error) {
 
 	// Create directory if doesn't exist
 	if !fsutil.IsDir(dirpath) {
-		if err = os.MkdirAll(dirpath, DefaultDirPerm); err != nil {
+		if err = os.MkdirAll(dirpath, utils.DefaultPerms); err != nil {
 			return
 		}
 	}
@@ -441,7 +444,7 @@ type Manager struct {
 	endpointAPI *http.Server
 	endpoints   Endpoints
 	adminAPI    *http.Server
-	admins      datastructs.SyncedMap
+	admins      *datastructs.SyncedMap
 	stop        chan bool
 	done        bool
 	// Gene related members
@@ -468,7 +471,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 		return nil, fmt.Errorf("Manager Admin API Error: invalid port to listen to %d", c.EndpointAPI.Port)
 	}
 
-	if err := os.MkdirAll(c.Logging.Root, DefaultDirPerm); err != nil {
+	if err := os.MkdirAll(c.Logging.Root, utils.DefaultPerms); err != nil {
 		return nil, fmt.Errorf("Failed at creating log directory: %s", err)
 	}
 
@@ -506,7 +509,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 
 	// Dump Directory initialization
 	if m.Config.DumpDir != "" && !fsutil.IsDir(m.Config.DumpDir) {
-		if err := os.MkdirAll(m.Config.DumpDir, DefaultDirPerm); err != nil {
+		if err := os.MkdirAll(m.Config.DumpDir, utils.DefaultPerms); err != nil {
 			return &m, fmt.Errorf("Failed to created dump directory (%s): %s", m.Config.DumpDir, err)
 		}
 	}
@@ -581,7 +584,7 @@ func (m *Manager) updateMispContainer() {
 	}
 	// Update the MISP container
 	m.containers[mispContName] = mispContainer
-	m.containersSha256[mispContName] = Sha256StringArray(mispContainer)
+	m.containersSha256[mispContName] = utils.Sha256StringArray(mispContainer)
 }
 
 // AddEndpoint adds new endpoint to the manager

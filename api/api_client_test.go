@@ -10,6 +10,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/file"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
+	"github.com/0xrawsec/whids/utils"
 )
 
 var (
@@ -121,7 +122,7 @@ func TestClientContainer(t *testing.T) {
 			t.Error(err)
 		}
 
-		if sha256, err := c.GetContainerSha256(cont); sha256 != Sha256StringArray(bl) || err != nil {
+		if sha256, err := c.GetContainerSha256(cont); sha256 != utils.Sha256StringArray(bl) || err != nil {
 			if err != nil {
 				t.Error(err)
 			} else {
@@ -164,7 +165,7 @@ func TestClientExecuteCommand(t *testing.T) {
 		t.Fail()
 	}
 
-	if err := c.ExecuteCommand(); err != nil {
+	if _, err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Client failed to execute command")
 		t.Fail()
 	}
@@ -231,7 +232,7 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 		t.FailNow()
 	}
 
-	if err := c.ExecuteCommand(); err != nil {
+	if _, err := c.ExecuteCommand(); err != nil {
 		t.Errorf("Client failed to execute command")
 		t.FailNow()
 	}

@@ -6,6 +6,7 @@ set UNINSTALL_SCRIPT=%INSTALL_DIR%\Uninstall.bat
 set BINPATH=%INSTALL_DIR%\%BASENAME%
 set CONFIG=%INSTALL_DIR%\config.toml
 REM default during installation used to clean
+set LOGS=%INSTALL_DIR%\Logs
 set ALERTS=%INSTALL_DIR%\Logs\Alerts
 set DUMPS=%INSTALL_DIR%\Dumps
 set VERSION="REPLACED BY MAKEFILE"
@@ -16,16 +17,17 @@ set SYSMON=Sysmon64
 set RULES_IMPORT="%~dp0\rules"
 
 :choice
-echo [i]  Install WHIDS from scratch (removes older installation)
-echo [un] Uninstall previous installation
-echo [up] Update WHIDS binary and rules (keeps current config)
-echo [st] Start services
-echo [sp] Stop services
-echo [r]  Restart services
-echo [g]  Remove alerts logs and dumps
-echo [e]  Edit WHIDS configuration
-echo [c]  Clear screen
-echo [q]  Quit
+echo  [i]  Install WHIDS from scratch (removes older installation)
+echo [un]  Uninstall previous installation
+echo [up]  Update WHIDS binary and rules (keeps current config)
+echo [st]  Start services
+echo [sp]  Stop services
+echo  [r]  Restart services
+echo  [g]  Remove alerts logs and dumps
+echo  [e]  Edit WHIDS configuration with a registered application
+echo [en]  Edit WHIDS configuration with notepad
+echo  [c]  Clear screen
+echo  [q]  Quit
 echo.
 
 echo Whids version: %VERSION% (commit: %COMMITID%)
@@ -68,6 +70,10 @@ FOR /F "tokens=1* delims=+" %%A IN (%_in_ch%) DO (
         call :Groom
     )
     IF "%%A"=="e" (
+        start "" "%CONFIG%"
+        cls
+    )
+    IF "%%A"=="en" (
         notepad "%CONFIG%"
         cls
     )
@@ -87,11 +93,12 @@ echo.
 GOTO :choice
 
 :Groom
-IF exist "%ALERTS%" (
+IF exist "%LOGS%" (
     echo.
-    echo [+] Removing directory: "%ALERTS%"
-    rmdir /S /Q "%ALERTS%"
+    echo [+] Removing directory: "%LOGS%"
+    rmdir /S /Q "%LOGS%"
 )
+
 IF exist "%DUMPS%" (
     echo [+] Removing directory: "%DUMPS%"
     rmdir /S /Q "%DUMPS%"

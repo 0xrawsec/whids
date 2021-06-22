@@ -1,4 +1,4 @@
-package main
+package hids
 
 import (
 	"fmt"
@@ -16,26 +16,29 @@ import (
 	"github.com/0xrawsec/whids/utils"
 )
 
+// Canary configuration
 type Canary struct {
 	HideFiles       bool     `toml:"hide-files" comment:"Flag to set to hide files"`
 	HideDirectories bool     `toml:"hide-dirs" comment:"Flag to set to hide directories"`
 	SetAuditACL     bool     `toml:"set-audit-acl" comment:"Set Audit ACL to the canary directories, sub-directories and files to generate File System audit events\n https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/audit-file-system"`
-	Directories     []string `toml:"directories" comment:"Directory where canary files will be located"`
+	Directories     []string `toml:"directories" comment:"Directories where canary files will be created"`
 	Files           []string `toml:"files" comment:"Canary files to monitor. Files will be created if not existing"`
 	Delete          bool     `toml:"delete" comment:"Whether to delete or not the canary files when service stops"`
-	createdDir      datastructs.SyncedSet
+	createdDir      *datastructs.SyncedSet
 }
 
-func (c *Canary) ExpandedDir() (dirs []string) {
+// expands environment variables found in directories
+func (c *Canary) expandDir() (dirs []string) {
 	return utils.ExpandEnvs(c.Directories...)
 }
 
-func (c *Canary) Create() (err error) {
+// create the canary files and directories
+func (c *Canary) create() (err error) {
 	c.createdDir = datastructs.NewSyncedSet()
 
-	for _, dir := range c.ExpandedDir() {
+	for _, dir := range c.expandDir() {
 		if !fsutil.Exists(dir) {
-			if err := os.MkdirAll(dir, 777); err != nil {
+			if err := os.MkdirAll(dir, 0777); err != nil {
 				return err
 			}
 			if c.HideDirectories {
@@ -47,7 +50,7 @@ func (c *Canary) Create() (err error) {
 		}
 	}
 
-	for _, fp := range c.Paths() {
+	for _, fp := range c.paths() {
 		if !fsutil.Exists(fp) {
 			var fd *os.File
 
@@ -57,7 +60,7 @@ func (c *Canary) Create() (err error) {
 			defer fd.Close()
 			rand.Seed(time.Now().Unix())
 			buf := [1024]byte{}
-			size := rand.Int() % 50 * Mega
+			size := rand.Int() % 50 * utils.Mega
 			written, n := 0, 0
 			for written < size && err == nil {
 				if _, err = rand.Read(buf[:]); err != nil {
@@ -79,29 +82,31 @@ func (c *Canary) Create() (err error) {
 	return nil
 }
 
-func (c *Canary) Clean() {
+// clean the canary files
+func (c *Canary) clean() {
 	if c.Delete {
 		// we remove canary files
-		for _, fp := range c.Paths() {
+		for _, fp := range c.paths() {
 			os.Remove(fp)
 		}
 
 		// we remove only empty directories
-		for _, dir := range c.ExpandedDir() {
+		for _, dir := range c.expandDir() {
 			os.Remove(dir)
 		}
 
 		// we remove directory which have been created
-		for _, i := range *(c.createdDir.List()) {
+		for _, i := range c.createdDir.List() {
 			dir := i.(string)
 			os.RemoveAll(dir)
 		}
 	}
 }
 
-func (c *Canary) Paths() (files []string) {
+// return a list containing the full paths of the canary files
+func (c *Canary) paths() (files []string) {
 	files = make([]string, 0, len(c.Files)*len(c.Directories))
-	for _, dir := range c.ExpandedDir() {
+	for _, dir := range c.expandDir() {
 		for _, fn := range c.Files {
 			files = append(files, filepath.Join(dir, fn))
 		}
@@ -109,23 +114,53 @@ func (c *Canary) Paths() (files []string) {
 	return
 }
 
+// CanariesConfig structure holding canary configuration
 type CanariesConfig struct {
 	Enable    bool      `toml:"enable" comment:"Enable canary files management"`
 	Actions   []string  `toml:"actions" comment:"Actions to apply when a canary file is touched"`
 	Whitelist []string  `toml:"whitelist" comment:"Process images being allowed to touch the canaries"`
-	Canaries  []*Canary `toml:"canaries" comment:"Canary files to create at every run"`
+	Canaries  []*Canary `toml:"group" comment:"Canary files to create at every run"`
 }
 
-func (c *CanariesConfig) Initialize() {
+func (c *CanariesConfig) canaryRegexp() string {
+	repaths := make([]string, 0)
+	for _, c := range c.Canaries {
+
+		// adding list of created dir
+		for _, i := range c.createdDir.List() {
+			dir := fmt.Sprintf("%s%c", i.(string), os.PathSeparator)
+			repaths = append(repaths, regexp.QuoteMeta(dir))
+		}
+
+		for _, fp := range c.paths() {
+			dir := filepath.Dir(fp)
+			if !c.createdDir.Contains(dir) {
+				repaths = append(repaths, regexp.QuoteMeta(fp))
+			}
+		}
+	}
+	return fmt.Sprintf("(?i:(%s))", strings.Join(repaths, "|"))
+}
+
+func (c *CanariesConfig) whitelistRegexp() string {
+	wl := make([]string, 0, len(c.Whitelist))
+	for _, im := range c.Whitelist {
+		wl = append(wl, regexp.QuoteMeta(im))
+	}
+	return fmt.Sprintf("(?i:(%s))", strings.Join(wl, "|"))
+}
+
+// Configure creates canaries and set ACLs if needed
+func (c *CanariesConfig) Configure() {
 	auditDirs := make([]string, 0)
 	if c.Enable {
 		for _, cf := range c.Canaries {
 			// add the list of directories to audit
 			if cf.SetAuditACL {
-				auditDirs = append(auditDirs, cf.ExpandedDir()...)
+				auditDirs = append(auditDirs, cf.expandDir()...)
 			}
 
-			if err := cf.Create(); err != nil {
+			if err := cf.create(); err != nil {
 				log.Errorf("Failed at creating canary: %s", err)
 			}
 		}
@@ -139,12 +174,13 @@ func (c *CanariesConfig) Initialize() {
 	}
 }
 
+// RestoreACLs restore EDR configured ACLs
 func (c *CanariesConfig) RestoreACLs() {
 	auditDirs := make([]string, 0)
 	for _, cf := range c.Canaries {
 		// add the list of directories to audit
 		if cf.SetAuditACL {
-			auditDirs = append(auditDirs, cf.ExpandedDir()...)
+			auditDirs = append(auditDirs, cf.expandDir()...)
 		}
 	}
 	if err := utils.RemoveEDRAuditACL(auditDirs...); err != nil {
@@ -152,42 +188,7 @@ func (c *CanariesConfig) RestoreACLs() {
 	}
 }
 
-func (c *CanariesConfig) Clean() {
-	if c.Enable {
-		for _, cf := range c.Canaries {
-			cf.Clean()
-		}
-	}
-}
-
-func (c *CanariesConfig) CanaryRegexp() string {
-	repaths := make([]string, 0)
-	for _, c := range c.Canaries {
-
-		// adding list of created dir
-		for _, i := range *(c.createdDir.List()) {
-			dir := fmt.Sprintf("%s%c", i.(string), os.PathSeparator)
-			repaths = append(repaths, regexp.QuoteMeta(dir))
-		}
-
-		for _, fp := range c.Paths() {
-			dir := filepath.Dir(fp)
-			if !c.createdDir.Contains(dir) {
-				repaths = append(repaths, regexp.QuoteMeta(fp))
-			}
-		}
-	}
-	return fmt.Sprintf("(?i:(%s))", strings.Join(repaths, "|"))
-}
-
-func (c *CanariesConfig) WhitelistRegexp() string {
-	wl := make([]string, 0, len(c.Whitelist))
-	for _, im := range c.Whitelist {
-		wl = append(wl, regexp.QuoteMeta(im))
-	}
-	return fmt.Sprintf("(?i:(%s))", strings.Join(wl, "|"))
-}
-
+// GenRuleFSAudit generate a rule matching FS Audit events for the configured canaries
 func (c *CanariesConfig) GenRuleFSAudit() (r rules.Rule) {
 	r = rules.NewRule()
 	r.Name = "Builtin:CanaryAccessed"
@@ -197,15 +198,18 @@ func (c *CanariesConfig) GenRuleFSAudit() (r rules.Rule) {
 	}
 	r.Meta.Criticality = 10
 	r.Matches = []string{
-		"$access: AccessMask &= '0x1'",
-		fmt.Sprintf("$wl_images: ProcessName ~= '%s'", c.WhitelistRegexp()),
-		fmt.Sprintf("$canary: ObjectName ~= '%s'", c.CanaryRegexp()),
+		"$read: AccessMask &= '0x1'",
+		"$write: AccessMask &= '0x2'",
+		"$append: AccessMask &= '0x4'",
+		fmt.Sprintf("$wl_images: ProcessName ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: ObjectName ~= '%s'", c.canaryRegexp()),
 	}
-	r.Condition = "!$wl_images and $access and $canary"
+	r.Condition = "!$wl_images and ($read or $write or $append) and $canary"
 	r.Actions = append(r.Actions, c.Actions...)
 	return
 }
 
+// GenRuleSysmon generate a rule matching sysmon events for the configured canaries
 func (c *CanariesConfig) GenRuleSysmon() (r rules.Rule) {
 	r = rules.NewRule()
 	r.Name = "Builtin:CanaryModified"
@@ -216,10 +220,19 @@ func (c *CanariesConfig) GenRuleSysmon() (r rules.Rule) {
 	}
 	r.Meta.Criticality = 10
 	r.Matches = []string{
-		fmt.Sprintf("$wl_images: Image ~= '%s'", c.WhitelistRegexp()),
-		fmt.Sprintf("$canary: TargetFilename ~= '%s'", c.CanaryRegexp()),
+		fmt.Sprintf("$wl_images: Image ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: TargetFilename ~= '%s'", c.canaryRegexp()),
 	}
 	r.Condition = "!$wl_images and $canary"
 	r.Actions = append(r.Actions, c.Actions...)
 	return
+}
+
+// Clean cleans up the canaries
+func (c *CanariesConfig) Clean() {
+	if c.Enable {
+		for _, cf := range c.Canaries {
+			cf.clean()
+		}
+	}
 }

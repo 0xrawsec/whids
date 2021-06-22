@@ -2,9 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,35 +57,26 @@ type Command struct {
 	Drop []*EndpointFile `json:"drop"`
 	// used to fetch files from the endpoint
 	Fetch      map[string]*EndpointFile `json:"fetch"`
-	Stdout     []byte                   `json:"stdout"`
+	Stdout     interface{}              `json:"stdout"`
 	Stderr     []byte                   `json:"stderr"`
 	Error      string                   `json:"error"`
 	Sent       bool                     `json:"sent"`
 	Background bool                     `json:"background"`
 	Completed  bool                     `json:"completed"`
+	ExpectJSON bool                     `json:"expect-json"`
 	Timeout    time.Duration            `json:"timeout"`
 	SentTime   time.Time                `json:"sent-time"`
-	aliasEnv   *AliasEnv
+	runnable   bool
 }
 
 // NewCommand creates a new Command to run on an endpoint
 func NewCommand() *Command {
 	id := UUIDGen()
 	cmd := &Command{
-		UUID:  id.String(),
-		Drop:  make([]*EndpointFile, 0),
-		Fetch: make(map[string]*EndpointFile)}
-	return cmd
-}
-
-// NewCommandWithEnv creates a new Command to run on an endpoint
-func NewCommandWithEnv(env *AliasEnv) *Command {
-	id := UUIDGen()
-	cmd := &Command{
 		UUID:     id.String(),
 		Drop:     make([]*EndpointFile, 0),
 		Fetch:    make(map[string]*EndpointFile),
-		aliasEnv: env}
+		runnable: true}
 	return cmd
 }
 
@@ -133,24 +124,34 @@ func (c *Command) AddFetchFile(filepath string) {
 	c.Fetch[filepath] = &EndpointFile{UUID: UUIDGen().String()}
 }
 
+func (c *Command) FromExecCmd(cmd *exec.Cmd) {
+	if cmd.Args != nil {
+		if len(cmd.Args) > 0 {
+			c.Name = cmd.Args[0]
+			if len(cmd.Args) > 1 {
+				c.Args = make([]string, len(cmd.Args[1:]))
+				copy(c.Args, cmd.Args[1:])
+			}
+		} else {
+			c.Name = cmd.Path
+		}
+	} else {
+		c.Name = cmd.Path
+	}
+}
+
 // BuildCmd builds up an exec.Cmd from Command
 func (c *Command) BuildCmd() (*exec.Cmd, error) {
-	switch c.Name {
-	case "contain":
-		if cmd := ContainAlias(c.aliasEnv.ManagerIP); cmd != nil {
-			return cmd, nil
-		}
-		return nil, fmt.Errorf("Bad manager IP")
-	case "uncontain":
-		return UncontainAlias(), nil
-	default:
-		if c.Timeout > 0 {
-			// we create a command with a timeout context if needed
-			ctx, _ := context.WithTimeout(context.Background(), c.Timeout)
-			return exec.CommandContext(ctx, c.Name, c.Args...), nil
-		}
-		return exec.Command(c.Name, c.Args...), nil
+	if c.Timeout > 0 {
+		// we create a command with a timeout context if needed
+		ctx, _ := context.WithTimeout(context.Background(), c.Timeout)
+		return exec.CommandContext(ctx, c.Name, c.Args...), nil
 	}
+	return exec.Command(c.Name, c.Args...), nil
+}
+
+func (c *Command) Unrunnable() {
+	c.runnable = false
 }
 
 // Run runs the command according to the specified settings
@@ -192,7 +193,7 @@ func (c *Command) Run() (err error) {
 	}
 
 	// we have something to run
-	if c.Name != "" {
+	if c.Name != "" && c.runnable {
 		cmd, err = c.BuildCmd()
 		if err == nil {
 			c.Name = cmd.Path
@@ -210,7 +211,16 @@ func (c *Command) Run() (err error) {
 				}
 				c.Error = fmt.Sprintf("%s", err)
 			}
-			c.Stdout = stdout
+
+			// if we expect JSON output
+			if c.ExpectJSON {
+				if err := json.Unmarshal(stdout, &c.Stdout); err != nil {
+					c.Stdout = stdout
+				}
+			} else {
+				c.Stdout = stdout
+			}
+
 		} else {
 			// if we failed to build the command we set error field
 			c.Error = fmt.Sprintf("Failed to build command: %s", err)
@@ -253,79 +263,9 @@ func (c *Command) Complete(other *Command) error {
 		c.Error = other.Error
 		c.Drop = other.Drop
 		c.Fetch = other.Fetch
+		c.ExpectJSON = other.ExpectJSON
 		c.Completed = true
 		return nil
 	}
-	return fmt.Errorf("Commands do not have the same ID")
-}
-
-////////////// Builtin commands
-
-// derived from: https://gist.github.com/kotakanbe/d3059af990252ba89a82
-func next(ip net.IP) net.IP {
-	nip := net.IP(make(net.IP, len(ip)))
-	copy(nip, ip)
-	for j := len(nip) - 1; j >= 0; j-- {
-		nip[j]++
-		if nip[j] > 0 {
-			break
-		}
-	}
-	return nip
-}
-
-// derived from: https://gist.github.com/kotakanbe/d3059af990252ba89a82
-func prev(ip net.IP) net.IP {
-	nip := net.IP(make(net.IP, len(ip)))
-	copy(nip, ip)
-	for j := len(nip) - 1; j >= 0; j-- {
-		nip[j]--
-		if nip[j] < 255 {
-			break
-		}
-	}
-	return nip
-}
-
-const (
-	// ContainRuleName is the name of the Windows firewall rule used to contain endpoint
-	ContainRuleName = "EDR containment"
-)
-
-// AliasEnv is a structure to hold variables needed by aliases
-type AliasEnv struct {
-	ManagerIP net.IP
-}
-
-// ContainAlias is an alias to contain an endpoint
-func ContainAlias(ip net.IP) *exec.Cmd {
-	if ip != nil {
-		ip = ip.To4()
-		// building up netsh.exe arguments
-		args := []string{
-			"advfirewall",
-			"firewall",
-			"add",
-			"rule",
-			fmt.Sprintf("name=%s", ContainRuleName),
-			"dir=out",
-			fmt.Sprintf("remoteip=0.0.0.0-%s,%s-255.255.255.255", prev(ip), next(ip)),
-			"action=block",
-		}
-		return exec.Command("netsh.exe", args...)
-	}
-	return nil
-}
-
-// UncontainAlias builds a command to uncontain an endpoint
-// NB: implementation must be in line with what is done in ContainAlias
-func UncontainAlias() *exec.Cmd {
-	// building up netsh.exe arguments
-	args := []string{"advfirewall",
-		"firewall",
-		"delete",
-		"rule",
-		fmt.Sprintf("name=%s", ContainRuleName),
-	}
-	return exec.Command("netsh.exe", args...)
+	return fmt.Errorf("Command does not have the same ID")
 }

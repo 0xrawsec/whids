@@ -16,11 +16,10 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/fsutil/logfile"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/whids/utils"
 )
 
 const (
-	// DefaultDirPerm default log directory permissions for forwarder
-	DefaultDirPerm = 0700
 	// DefaultLogfileSize default forwarder logfile size
 	DefaultLogfileSize = logfile.MB * 5
 	// DiskSpaceThreshold allow 1GB of queued events
@@ -28,14 +27,6 @@ const (
 	// MinRotationInterval is the minimum rotation interval allowed
 	MinRotationInterval = time.Minute
 )
-
-var ()
-
-func buildURI(proto, host, port, url string) string {
-	url = strings.Trim(url, "/")
-	return fmt.Sprintf("%s://%s:%s/%s", proto, host, port, url)
-
-}
 
 // LoggingConfig structure to encode Logging configuration of the forwarder
 type LoggingConfig struct {
@@ -85,20 +76,20 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 
 	if !co.Local {
 		if co.Client, err = NewManagerClient(&c.Client); err != nil {
-			return nil, fmt.Errorf("Field to initialize manager client: %s", err)
+			return nil, fmt.Errorf("field to initialize manager client: %s", err)
 		}
 	}
 
 	// queue directory
 	if c.Logging.Dir == "" {
-		return nil, fmt.Errorf("Field \"logs-dir\" is missing from configuration")
+		return nil, fmt.Errorf("field \"logs-dir\" is missing from configuration")
 	}
 
 	// creating the queue directory
 	if !fsutil.Exists(c.Logging.Dir) && !fsutil.IsDir(c.Logging.Dir) {
 		// TOCTU may happen here so we double check error code
-		if err = os.Mkdir(c.Logging.Dir, DefaultDirPerm); err != nil && !os.IsExist(err) {
-			return nil, fmt.Errorf("Cannot create queue directory : %s", err)
+		if err = os.Mkdir(c.Logging.Dir, utils.DefaultPerms); err != nil && !os.IsExist(err) {
+			return nil, fmt.Errorf("cannot create queue directory : %s", err)
 		}
 	}
 
@@ -158,7 +149,7 @@ func (f *Forwarder) Save() (err error) {
 		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts.log")
 		ri := f.fwdConfig.Logging.RotationInterval
 		log.Infof("Rotating logfile every %s", ri)
-		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, DefaultLogPerm, ri); err != nil {
+		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, utils.DefaultPerms, ri); err != nil {
 			return
 		}
 	}
@@ -270,8 +261,9 @@ func (f *Forwarder) ProcessQueue() {
 		}
 		switch {
 		case strings.HasSuffix(fp, ".gz"):
+			var gzr *gzip.Reader
 			// the file is gzip so we have to pass a gzip reader to prepCollectReq
-			gzr, err := gzip.NewReader(fd)
+			gzr, err = gzip.NewReader(fd)
 			if err != nil {
 				log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
 				// close file

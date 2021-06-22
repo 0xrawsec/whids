@@ -26,9 +26,9 @@ loop:
 				changes <- c.CurrentStatus
 			case svc.Stop:
 				// Stop WHIDS there
-				hids.Stop()
-				hids.Wait()
-				hids.LogStats()
+				hostIDS.Stop()
+				hostIDS.Wait()
+				hostIDS.LogStats()
 				break loop
 			}
 		}

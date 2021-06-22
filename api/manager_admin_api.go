@@ -213,10 +213,16 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 
 	switch rq.Method {
 	case "GET":
+		wait, _ := strconv.ParseBool(rq.URL.Query().Get("wait"))
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(NewAdminAPIRespError(err).ToJSON())
 		} else {
 			if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+				if endpt.Command != nil {
+					for wait && !endpt.Command.Completed {
+						time.Sleep(time.Millisecond * 50)
+					}
+				}
 				wt.Write(NewAdminAPIResponse(endpt.Command).ToJSON())
 			} else {
 				wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
@@ -342,10 +348,10 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	// Default settings last 24h
+	// Default settings last hour
 	if pStart == "" && pStop == "" && pPivot == "" && pDelta == "" {
 		stop = time.Now()
-		start = stop.Add(-24 * time.Hour)
+		start = stop.Add(-1 * time.Hour)
 	}
 
 	// 10 min delta if delta is not provided
@@ -838,13 +844,13 @@ func (m *Manager) runAdminAPI() {
 
 		if m.Config.TLS.Empty() {
 			// Bind to a port and pass our router in
-			log.Infof("Running HTTP server on: %s", uri)
+			log.Infof("Running admin HTTP API server on: %s", uri)
 			if err := m.adminAPI.ListenAndServe(); err != http.ErrServerClosed {
 				log.Panic(err)
 			}
 		} else {
 			// Bind to a port and pass our router in
-			log.Infof("Running HTTPS server on: %s", uri)
+			log.Infof("Running admin HTTPS API server on: %s", uri)
 			if err := m.adminAPI.ListenAndServeTLS(m.Config.TLS.Cert, m.Config.TLS.Key); err != http.ErrServerClosed {
 				log.Panic(err)
 			}

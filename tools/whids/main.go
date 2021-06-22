@@ -12,8 +12,12 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"strings"
+	"time"
 
 	"github.com/0xrawsec/gene/engine"
+	"github.com/0xrawsec/whids/api"
+	"github.com/0xrawsec/whids/hids"
+	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 	"golang.org/x/sys/windows/svc"
 
@@ -42,6 +46,79 @@ const (
 )
 
 var (
+	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
+
+	logDir = filepath.Join(abs, "Logs")
+
+	// DefaultHIDSConfig is the default HIDS configuration
+	DefaultHIDSConfig = hids.Config{
+		RulesConfig: &hids.RulesConfig{
+			RulesDB:        filepath.Join(abs, "Database", "Rules"),
+			ContainersDB:   filepath.Join(abs, "Database", "Containers"),
+			UpdateInterval: 60 * time.Second,
+		},
+
+		FwdConfig: &api.ForwarderConfig{
+			Local: true,
+			Client: api.ClientConfig{
+				MaxUploadSize: api.DefaultMaxUploadSize,
+			},
+			Logging: api.LoggingConfig{
+				Dir:              filepath.Join(logDir, "Alerts"),
+				RotationInterval: time.Hour * 5,
+			},
+		},
+		Channels: []string{"all"},
+		Sysmon: &hids.SysmonConfig{
+			Bin:              "C:\\Windows\\Sysmon64.exe",
+			ArchiveDirectory: "C:\\Sysmon\\",
+			CleanArchived:    true,
+		},
+		Dump: &hids.DumpConfig{
+			Mode:          "file|registry",
+			Dir:           filepath.Join(abs, "Dumps"),
+			Compression:   true,
+			MaxDumps:      4,
+			Treshold:      8,
+			DumpUntracked: false,
+		},
+		Report: &hids.ReportConfig{
+			EnableReporting: false,
+			OSQuery: hids.OSQueryConfig{
+				Bin:    "C:\\Program Files\\osquery\\osqueryi.exe",
+				Tables: []string{"processes", "services", "scheduled_tasks", "drivers", "startup_items", "process_open_sockets"}},
+			Commands: []hids.ReportCommand{{
+				Description: "Example command",
+				Name:        "osqueryi.exe",
+				Args:        []string{"--json", "-A", "processes"},
+				ExpectJSON:  true,
+			}},
+			CommandTimeout: 60 * time.Second,
+		},
+		AuditConfig: &hids.AuditConfig{
+			AuditPolicies: []string{"File System"},
+		},
+		CanariesConfig: &hids.CanariesConfig{
+			Enable: false,
+			Canaries: []*hids.Canary{
+				{
+					Directories: []string{"$SYSTEMDRIVE", "$SYSTEMROOT"},
+					Files:       []string{"readme.pdf", "readme.docx", "readme.txt"},
+					Delete:      true,
+				},
+			},
+			Actions:   []string{"kill", "memdump", "filedump", "blacklist", "report"},
+			Whitelist: []string{"C:\\Windows\\explorer.exe"},
+		},
+		CritTresh:       5,
+		Logfile:         filepath.Join(logDir, "whids.log"),
+		EnableHooks:     true,
+		EnableFiltering: true,
+		Endpoint:        true,
+		LogAll:          false}
+)
+
+var (
 	flagDumpDefault bool
 	flagDryRun      bool
 	flagPrintAll    bool
@@ -51,7 +128,7 @@ var (
 	flagProfile     bool
 	flagRestore     bool
 
-	hids *HIDS
+	hostIDS *hids.HIDS
 
 	importRules string
 
@@ -65,8 +142,8 @@ func printInfo(writer io.Writer) {
 }
 
 func fmtAliases() string {
-	aliases := make([]string, 0, len(channelAliases))
-	for alias, channel := range channelAliases {
+	aliases := make([]string, 0, len(hids.ChannelAliases))
+	for alias, channel := range hids.ChannelAliases {
 		aliases = append(aliases, fmt.Sprintf("\t\t%s : %s", alias, channel))
 	}
 	return strings.Join(aliases, "\n")
@@ -74,22 +151,22 @@ func fmtAliases() string {
 
 func runHids(service bool) {
 	var err error
-	var hidsConf HIDSConfig
+	var hidsConf hids.Config
 
 	log.Infof("Running HIDS as Windows service: %t", service)
 
-	hidsConf, err = LoadsHIDSConfig(config)
+	hidsConf, err = hids.LoadsHIDSConfig(config)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
 	}
 
-	hids, err = NewHIDS(&hidsConf)
+	hostIDS, err = hids.NewHIDS(&hidsConf)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to create HIDS: %s", err))
 	}
 
-	hids.DryRun = flagDryRun
-	hids.PrintAll = flagPrintAll
+	hostIDS.DryRun = flagDryRun
+	hostIDS.PrintAll = flagPrintAll
 
 	// If not a service we need to be able to stop the HIDS
 	if !service {
@@ -99,14 +176,14 @@ func runHids(service bool) {
 			<-osSignals
 			log.Infof("Received SIGINT")
 			// runs stop on sigint
-			hids.Stop()
+			hostIDS.Stop()
 		}()
 	}
 
 	// Runs HIDS and wait for the output
-	hids.Run()
+	hostIDS.Run()
 	if !service {
-		hids.Wait()
+		hostIDS.Wait()
 	}
 }
 
@@ -149,7 +226,7 @@ func main() {
 		printInfo(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", filepath.Base(os.Args[0]))
 		fmt.Fprintf(os.Stderr, "\nAvailable Channel Aliases:\n%s\n", fmtAliases())
-		fmt.Fprintf(os.Stderr, "\nAvailable Dump modes: %s\n", strings.Join(dumpOptions, ", "))
+		fmt.Fprintf(os.Stderr, "\nAvailable Dump modes: %s\n", strings.Join(hids.DumpOptions, ", "))
 		flag.PrintDefaults()
 		os.Exit(exitSuccess)
 	}
@@ -204,7 +281,7 @@ func main() {
 		log.InitLogger(log.LDebug)
 	}
 
-	hidsConf, err := LoadsHIDSConfig(config)
+	hidsConf, err := hids.LoadsHIDSConfig(config)
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
 	}
@@ -224,31 +301,31 @@ func main() {
 		// in order not to write logs into file
 		// TODO: add a stream handler to log facility
 		hidsConf.Logfile = ""
-		hids, err = NewHIDS(&hidsConf)
+		hostIDS, err = hids.NewHIDS(&hidsConf)
 		if err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
 		}
 		log.Infof("Importing rules from %s", importRules)
-		hids.engine = engine.NewEngine(false)
-		hids.engine.SetDumpRaw(true)
+		hostIDS.Engine = engine.NewEngine(false)
+		hostIDS.Engine.SetDumpRaw(true)
 
-		if err := hids.engine.LoadDirectory(importRules); err != nil {
+		if err := hostIDS.Engine.LoadDirectory(importRules); err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
 		}
 
-		prules, psha256 := hids.rulesPaths()
+		prules, psha256 := hostIDS.RulesPaths()
 		rules := new(bytes.Buffer)
-		for rule := range hids.engine.GetRawRule(".*") {
+		for rule := range hostIDS.Engine.GetRawRule(".*") {
 			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
 				log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
 			}
 		}
 
-		if err := ioutil.WriteFile(prules, rules.Bytes(), defaultPerms); err != nil {
+		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultPerms); err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
 		}
 
-		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), defaultPerms); err != nil {
+		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultPerms); err != nil {
 			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
 		}
 
@@ -257,5 +334,5 @@ func main() {
 	}
 
 	runHids(false)
-	hids.LogStats()
+	hostIDS.LogStats()
 }
