@@ -148,3 +148,4 @@ Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/maste
 
 - Sysmon Based EDR written in PowerShell: https://github.com/ion-storm/sysmon-edr
 - Comodo Open Source EDR with user and kernel components: https://github.com/ComodoSecurity/openedr
+- Sysmon X: https://github.com/marcosd4h/sysmonx
