@@ -18,11 +18,14 @@
 	* [Getting a specific command field information](#Getting-a-specific-command-field-information)
 	* [Executing a command on endpoint](#Executing-a-command-on-endpoint)
 		* [The command we want to execute](#The-command-we-want-to-execute)
-		* [Pushing the command on the manager](#Pushing-the-command-on-the-manager)
+		* [Pushing the command on the endpoint](#Pushing-the-command-on-the-endpoint)
 		* [Getting the result](#Getting-the-result)
 * [Endpoint logs and alerts](#Endpoint-logs-and-alerts)
 	* [Getting endpoint alerts](#Getting-endpoint-alerts)
 	* [Getting endpoint logs](#Getting-endpoint-logs)
+* [Endpoint artifacts](#Endpoint-artifacts)
+	* [Listing available endpoint artifacts](#Listing-available-endpoint-artifacts)
+	* [Downloading a given artifact](#Downloading-a-given-artifact)
 * [Endpoint reports](#Endpoint-reports)
 	* [All endpoint reports](#All-endpoint-reports)
 	* [Getting a single endpoint report](#Getting-a-single-endpoint-report)
@@ -56,7 +59,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/stats"
 ## List rules loaded in the EDR
 
 🟢 **GET** `/rules?name=REGEXP`
-
+2021-07-06T17:18:42.835802162Z
 **Description:** This endpoint is usde to retrive rules loaded in the EDR manager (also deployed on all the endpoints connected).
 
 **Request:**
@@ -586,8 +589,6 @@ As stdout may contain binary data it is **base64 encoded**, after decoding we ge
   * **delta:** duration string used for getting alerts around pivot point. Specifying
   a pivot and a delta will search alerts from `pivot-delta` to `pivot+delta`
 
-**NB:** if none of the parameters is specified, alerts from the last 24h are retrieved
-
 **Request:**
 ```bash
 curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/alerts"
@@ -679,6 +680,69 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 **Requirement:** endpoint logging must be configured on the manager (cf. [manager config](configuration.md#manager))
 
 Exact same behaviour as [endpoint alerts endpoint](#Getting-endpoint-alerts)
+
+# Endpoint artifacts
+
+## Listing available endpoint artifacts
+
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/artifacts`
+
+**Description:** list the artifacts collected (following an alert) on a given endpoint.
+
+**Params:**
+  * **since:** RFC 3339 formatted timestamp used to retrieve artifact collected last updated after this date
+
+**Request:**
+```bash
+curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/artifacts?since=2021-07-06T17:19:42.835802162Z
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "update": "2021-07-06T19:21:50.655802826Z",
+      "process-guid": "515cd0d1-ab35-60e4-827c-000000004e00",
+      "event-hash": "2252cc3dee2623a44f5d1644338129b9",
+      "base-url": "/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/artifacts/515cd0d1-ab35-60e4-827c-000000004e00/2252cc3dee2623a44f5d1644338129b9/",
+      "files": [
+        "event.json.gz",
+        "powershell.exe_12644_1625598794801114200.dmp.gz",
+        "report.json.gz"
+      ]
+    }
+  ],
+  "message": "OK",
+  "error": ""
+}
+```
+
+## Downloading a given artifact
+
+🟢 **GET** `/endpoints/{ENDPOINT_UUID}/artifacts/{PROCESS_GUID}/{EVENT_HASH}/{FILENAME}`
+
+**Description:** download a given artifact
+
+**Params:**
+  * **raw:** boolean telling that we want to receive the raw file 
+  * **gunzip:** boolean instructing that artifact content must be gunzipped before being sent
+
+**NB:** boolean must be in one of the following values (true, false, t, f, 0, 1)
+
+**Request:**
+```bash
+curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5f-480fac7ee4ef/artifacts/515cd0d1-9064-60e4-577c-000000004e00/443884f68ad4203613ff54a80d4fba15/event.json.gz
+```
+
+**Response:**
+```json
+{
+  "data": "H4sIAAAAAAAE/5xUW2/iRhT+K+g8tZKdnfFcfJGiyvgS6JINislW27oPXvvAWgseNDZJKOK/V2MDSbZNH5q84Jn5zu37vnOA5BGbDoLTj7joCvMRNiW2ndItBBAFef5b3VTqqc3zbN92uGFOnreoH+sS2yt8RrAgUptN0VSzukEIIO9Rc61WutiM0nqN7einZ0/+nOc3Sq3WmOcP26ro8Pw9fJlYOYw+tI/lEHJbNHsIYMCMZrPIHO+0xqaLa41lp7S5f1NieykRLIixLXW97WrVvMSZNm1XrNeowQJT22fU7fCAXrErJq88ChZMivYbmgFkk5BeU8cXJPaJTFOXsJSFNCHj2HdZGoXOmDOWiHDsENe6jcW1H0oZsjhxhOenLiUed2SYMjccu6kcc2plk9AR8jr0KeNUSEdyxmIRk5S4MUsiTjweSjdNZSoo8yIWsVTyhMk4JhENEx5xh0VSWNPb+STMJtdunFKPSof5kRhHnhCSkJhThxJOZCTGYMF0U6wQAoiC/P8Rc46R1X+ZOFRwLqQ5bDpc6brbz/AR1xDAoBGwYKZWqrnZ1RUEcBBUlBWpqF15FG1JqtJGlzCbEHL5P55BUwMhzwxdsOBO16u6KdaGqk/FxiQfBPEiGrBgXhhVRG9k+I4ufpDugJxuipUJ/QYztPIvcj9hfmz9l0shc61KbNv/6J58JeTSPUfSdz/EPYH7KUiPX4JmOHgOgleZHlrU54N3kvpEclsS5LZw3fKfSQdYn853eZ9Pq2pXdi+eGWYNFtzv1mcWbLDgVUmrXW9psGCBemMYy7A1xuoDE7DgVOqnxSh8WEzu7qeLL3mefckWya257cpF3dPrEIfaxLWJHFE3oF7geFe+T+BowQ02OG2WymypSNddXRbruttDQIkFWb1qim6nEYI/4KH53qin5lLgn0frLM3gANG3oml6ud7WpVatWnb2acvZ2b7dqObD3RZ1YTZHsTZrR222u64fdZxkHxd3c3v26/3nhBgPREprXPePITgcrWGtTmMIwKySfsneY6l01Z85gvie4xtk8ozlziQxRZ2JMDiHMseM8pvG4oTinJgRfMT9k9KVUQF59i7mGf6Mg04+NDzebUtVGVmbi7lWj3VlWjjAzdmWrkuYJ5Z26TiFzRkS++uSlzaRSyF9b7n8WvnGlifjvTcsU1eG5U73XBx6pvs2MpvawqaeebAo2u+niRiiI41Fh5VpfPCZOYTgFfuLV+wzJgUl5HcT6DPqtlYNBCDgeDz+DQAA//8BAAD//1JaS5vGBgAA",
+  "message": "OK",
+  "error": ""
+}
+```
 
 # Endpoint reports
 
