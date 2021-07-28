@@ -34,9 +34,9 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-	"github.com/0xrawsec/golang-utils/fsutil/logfile"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/readers"
+	"github.com/0xrawsec/whids/logger"
 )
 
 const (
@@ -125,13 +125,13 @@ type FileUpload struct {
 // Validate that the file upload follows the expected format
 func (f *FileUpload) Validate() error {
 	if !filenameRe.MatchString(f.Name) {
-		return fmt.Errorf("Bad filename")
+		return fmt.Errorf("bad filename")
 	}
 	if !guidRe.MatchString(f.GUID) {
-		return fmt.Errorf("Bad guid")
+		return fmt.Errorf("bad guid")
 	}
 	if !eventHashRe.MatchString(f.EventHash) {
-		return fmt.Errorf("Bad event hash")
+		return fmt.Errorf("bad event hash")
 	}
 	return nil
 }
@@ -194,9 +194,9 @@ func (t *TLSConfig) Empty() bool {
 func (t *TLSConfig) Verify() error {
 	switch {
 	case !fsutil.IsFile(t.Cert):
-		return fmt.Errorf("Certificate file (%s) not found", t.Cert)
+		return fmt.Errorf("certificate file (%s) not found", t.Cert)
 	case !fsutil.IsFile(t.Key):
-		return fmt.Errorf("Key file (%s) not found", t.Key)
+		return fmt.Errorf("key file (%s) not found", t.Key)
 	}
 	return nil
 }
@@ -267,18 +267,18 @@ func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
 type ManagerLogConfig struct {
 	Root        string `toml:"root" comment:"Root directory where logfiles are stored"`
 	LogBasename string `toml:"logfile" comment:"Logfile name (relative to root) used to store logs"`
-	EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints"`
-	VerboseHTTP bool   `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
+	//EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints"`
+	VerboseHTTP bool `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
 }
 
 // AlertPath builds the path where to store alerts for an endpoint
-func (c *ManagerLogConfig) AlertPath(uuid string, date time.Time) string {
-	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), "alerts.gz")
+func (c *ManagerLogConfig) AlertIndexPath(uuid string, date time.Time) string {
+	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), format("alerts.gz%s", logger.IndexExt))
 }
 
 // LogPath builds the path where to store logs for an endpoint
-func (c *ManagerLogConfig) LogPath(uuid string, date time.Time) string {
-	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), "logs.gz")
+func (c *ManagerLogConfig) LogIndexPath(uuid string, date time.Time) string {
+	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), format("logs.gz%s", logger.IndexExt))
 }
 
 // MispConfig with TOML tags
@@ -439,14 +439,17 @@ func (es *Endpoints) MutEndpoints() []*Endpoint {
 // Manager structure definition
 type Manager struct {
 	sync.RWMutex
-	Config      *ManagerConfig
-	logfile     logfile.LogFile
-	endpointAPI *http.Server
-	endpoints   Endpoints
-	adminAPI    *http.Server
-	admins      *datastructs.SyncedMap
-	stop        chan bool
-	done        bool
+	Config            *ManagerConfig
+	eventLogger       *logger.EventLogger
+	eventSearcher     *logger.EventSearcher
+	detectionLogger   *logger.EventLogger
+	detectionSearcher *logger.EventSearcher
+	endpointAPI       *http.Server
+	endpoints         Endpoints
+	adminAPI          *http.Server
+	admins            *datastructs.SyncedMap
+	stop              chan bool
+	done              bool
 	// Gene related members
 	geneEng          *engine.Engine
 	reducer          *reducer.Reducer
@@ -461,7 +464,13 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	var err error
 
 	m := Manager{Config: c}
-	logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
+	//logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
+	eventDir := filepath.Join(c.Logging.Root, "events")
+	m.eventLogger = logger.NewEventLogger(eventDir, c.Logging.LogBasename, utils.Giga)
+	m.eventSearcher = logger.NewEventSearcher(eventDir)
+	detectionDir := filepath.Join(c.Logging.Root, "detections")
+	m.detectionLogger = logger.NewEventLogger(detectionDir, "logs.gz", utils.Giga)
+	m.detectionSearcher = logger.NewEventSearcher(detectionDir)
 
 	if c.EndpointAPI.Port <= 0 || c.EndpointAPI.Port > 65535 {
 		return nil, fmt.Errorf("Manager Endpoint API Error: invalid port to listen to %d", c.EndpointAPI.Port)
@@ -472,11 +481,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	}
 
 	if err := os.MkdirAll(c.Logging.Root, utils.DefaultPerms); err != nil {
-		return nil, fmt.Errorf("Failed at creating log directory: %s", err)
-	}
-
-	if m.logfile, err = logfile.OpenTimeRotateLogFile(logPath, DefaultLogPerm, time.Hour); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed at creating log directory: %s", err)
 	}
 
 	m.endpoints = NewEndpoints()
@@ -510,7 +515,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	// Dump Directory initialization
 	if m.Config.DumpDir != "" && !fsutil.IsDir(m.Config.DumpDir) {
 		if err := os.MkdirAll(m.Config.DumpDir, utils.DefaultPerms); err != nil {
-			return &m, fmt.Errorf("Failed to created dump directory (%s): %s", m.Config.DumpDir, err)
+			return &m, fmt.Errorf("failed to created dump directory (%s): %s", m.Config.DumpDir, err)
 		}
 	}
 	return &m, nil
@@ -623,10 +628,10 @@ func (m *Manager) IsDone() bool {
 }
 
 // Shutdown the Manager
-func (m *Manager) Shutdown() error {
+func (m *Manager) Shutdown() (lastErr error) {
 	defer func() { go func() { m.stop <- true }() }()
 	if m.done {
-		return nil
+		return
 	}
 	m.done = true
 	if m.endpointAPI != nil {
@@ -635,10 +640,15 @@ func (m *Manager) Shutdown() error {
 	if m.adminAPI != nil {
 		m.adminAPI.Shutdown(context.Background())
 	}
-	if m.logfile != nil {
-		return m.logfile.Close()
+
+	if err := m.detectionLogger.Close(); err != nil {
+		lastErr = err
 	}
-	return nil
+
+	if err := m.eventLogger.Close(); err != nil {
+		lastErr = err
+	}
+	return
 }
 
 // Run starts a new thread spinning the receiver

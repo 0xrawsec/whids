@@ -165,9 +165,18 @@ func TestClientExecuteCommand(t *testing.T) {
 		t.Fail()
 	}
 
-	if _, err := c.ExecuteCommand(); err != nil {
-		t.Errorf("Client failed to execute command")
-		t.Fail()
+	if cmd, err := c.FetchCommand(); err != nil {
+		t.Errorf("Client failed to fetch command: %s", err)
+		t.FailNow()
+	} else {
+		if err := cmd.Run(); err != nil {
+			t.Errorf("Failed to run command: %s", err)
+			t.FailNow()
+		}
+		if err := c.PostCommand(cmd); err != nil {
+			t.Errorf("Failed to post command: %s", err)
+			t.FailNow()
+		}
 	}
 
 	cmd, err = r.GetCommand(cconf.UUID)
@@ -181,12 +190,12 @@ func TestClientExecuteCommand(t *testing.T) {
 		t.Fail()
 	}
 
-	if len(cmd.Stdout) == 0 {
+	if len(cmd.Stdout.([]byte)) == 0 {
 		t.Errorf("Expected output on stdout")
 		t.Fail()
 	}
 
-	t.Logf("Stdout of command executed: %s", string(cmd.Stdout))
+	t.Logf("Stdout of command executed: %s", string(cmd.Stdout.([]byte)))
 
 }
 func TestClientExecuteDroppedCommand(t *testing.T) {
@@ -232,9 +241,18 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 		t.FailNow()
 	}
 
-	if _, err := c.ExecuteCommand(); err != nil {
-		t.Errorf("Client failed to execute command")
+	if cmd, err := c.FetchCommand(); err != nil {
+		t.Errorf("Client failed to fetch command: %s", err)
 		t.FailNow()
+	} else {
+		if err := cmd.Run(); err != nil {
+			t.Errorf("Failed to run command: %s", err)
+			t.FailNow()
+		}
+		if err := c.PostCommand(cmd); err != nil {
+			t.Errorf("Failed to post command: %s", err)
+			t.FailNow()
+		}
 	}
 
 	cmd, err = r.GetCommand(cconf.UUID)
@@ -243,12 +261,12 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 		t.FailNow()
 	}
 
-	if len(cmd.Stdout) == 0 {
+	if len(cmd.Stdout.([]byte)) == 0 {
 		t.Errorf("Expected output on stdout")
 		t.FailNow()
 	}
 
-	t.Logf("Stdout of command executed: %s", string(cmd.Stdout))
+	t.Logf("Stdout of command executed: %s", string(cmd.Stdout.([]byte)))
 
 	expMD5, err := file.Md5("/usr/bin/ls")
 	if err != nil {

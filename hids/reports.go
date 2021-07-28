@@ -92,7 +92,7 @@ func (c *OSQueryConfig) PrepareCommands() (cmds []ReportCommand) {
 
 // ReportConfig holds report configuration
 type ReportConfig struct {
-	EnableReporting bool            `toml:"en-reporting" comment:"Enables IR reporting"`
+	EnableReporting bool            `toml:"en-reporting" comment:"Enables IR reporting"`
 	OSQuery         OSQueryConfig   `toml:"osquery" comment:"OSQuery configuration"`
 	Commands        []ReportCommand `toml:"commands" comment:"Commands to execute in addition to the OSQuery ones" commented:"true"`
 	CommandTimeout  time.Duration   `toml:"timeout" comment:"Timeout after which every command expires (to prevent too long commands)"`

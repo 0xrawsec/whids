@@ -2,18 +2,15 @@ package api
 
 import (
 	"bufio"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/mux"
@@ -21,7 +18,7 @@ import (
 
 var (
 	// ErrUnkEndpoint error to return when endpoint is unknown
-	ErrUnkEndpoint = fmt.Errorf("Unknown endpoint")
+	ErrUnkEndpoint = fmt.Errorf("unknown endpoint")
 )
 
 /////////////////// Utils
@@ -29,6 +26,14 @@ var (
 func (m *Manager) endpointFromRequest(rq *http.Request) *Endpoint {
 	uuid := rq.Header.Get("UUID")
 	if endpt, ok := m.endpoints.GetByUUID(uuid); ok {
+		return endpt
+	}
+	return nil
+}
+
+func (m *Manager) mutEndpointFromRequest(rq *http.Request) *Endpoint {
+	uuid := rq.Header.Get("UUID")
+	if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
 		return endpt
 	}
 	return nil
@@ -74,7 +79,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 		}
 
 		// update last connection timestamp
-		endpt.LastConnection = time.Now()
+		endpt.UpdateLastConnection()
 		next.ServeHTTP(wt, rq)
 	})
 }
@@ -268,10 +273,11 @@ func (m *Manager) ContainerSha256(wt http.ResponseWriter, rq *http.Request) {
 func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 	cnt := 0
 	uuid := rq.Header.Get("UUID")
-	paths := make(map[string]*gzip.Writer)
 
 	defer rq.Body.Close()
 
+	etid := m.eventLogger.InitTransaction()
+	dtid := m.detectionLogger.InitTransaction()
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
 		tok := s.Text()
@@ -280,53 +286,45 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 		if err := json.Unmarshal([]byte(tok), &e); err != nil {
 			log.Errorf("Failed to unmarshal: %s", tok)
 		} else {
-			if endpt := m.endpointFromRequest(rq); endpt != nil {
+			var isAlert bool
+
+			// check if event is associated to an alert
+			if _, err := e.Get(&sigPath); err == nil {
+				isAlert = true
+			}
+
+			if endpt := m.mutEndpointFromRequest(rq); endpt != nil {
 				m.UpdateReducer(endpt.UUID, &e)
+				if isAlert {
+					endpt.LastDetection = e.TimeCreated()
+				}
 			} else {
 				log.Error("Failed to retrieve endpoint from request")
 			}
 
-			// endpoint specific logging
-			// this part is part to race because there is no sync
-			// mechanisms on endpoints log files. However we are not supposed
-			// to receive logs in parallel from the same endpoint because it
-			// would break the order of the events received.
-			if m.Config.Logging.EnEnptLogs {
-				tc := e.TimeCreated()
-				logPaths := []string{m.Config.Logging.LogPath(uuid, tc)}
-				// we test if the event is an alert
-				if _, err := e.Get(&sigPath); err == nil {
-					logPaths = append(logPaths, m.Config.Logging.AlertPath(uuid, tc))
-				}
-				for _, path := range logPaths {
-					if _, ok := paths[path]; !ok {
-						if err := os.MkdirAll(filepath.Dir(path), utils.DefaultPerms); err != nil {
-							log.Errorf("Failed to create endpoint log directory %s: %s", path, err)
-						} else {
-							fd, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, DefaultLogPerm)
-							if err == nil {
-								w := gzip.NewWriter(fd)
-								defer fd.Close()
-								defer w.Close()
-								paths[path] = w
-							} else {
-								log.Errorf("Failed to write enpoint logs to %s: %s", path, err)
-							}
-						}
-					}
-					if w, ok := paths[path]; ok {
-						w.Write([]byte(fmt.Sprintln(tok)))
-						w.Flush()
-					}
+			// If it is an alert
+			if isAlert {
+				if _, err := m.detectionLogger.WriteEvent(dtid, uuid, &e); err != nil {
+					log.Errorf("Failed to write detection: %s", err)
 				}
 			}
 
-			// logging to main log stream
-			m.logfile.Write([]byte(fmt.Sprintln(tok)))
+			if _, err := m.eventLogger.WriteEvent(etid, uuid, &e); err != nil {
+				log.Errorf("Failed to write event: %s", err)
+			}
 		}
 		cnt++
 	}
+
+	if err := m.eventLogger.CommitTransaction(); err != nil {
+		log.Errorf("Failed to commit event logger transaction: %s", err)
+	}
+
+	if err := m.detectionLogger.CommitTransaction(); err != nil {
+		log.Errorf("Failed to commit detection logger transaction: %s", err)
+	}
 	log.Debugf("Count Event Received: %d", cnt)
+
 }
 
 // AddCommand sets a command to be executed on endpoint specified by UUID

@@ -135,7 +135,7 @@ echo [+] Setting up rights to installation directory
 icacls "%INSTALL_DIR%" /inheritance:r /grant:r Administrators:(OI)(CI)F /grant:r SYSTEM:(OI)(CI)F
 
 echo [+] Installing default configuration file
-"%BINPATH%" -dump-conf > "%CONFIG%"
+"%BINPATH%" "-configure"
 EXIT /B 0
 
 :ImportRules

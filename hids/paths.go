@@ -78,9 +78,9 @@ var (
 	pathGeneCriticality = evtx.Path("/Event/GeneInfo/Criticality")
 
 	///////////////////////// Setters //////////////////////////////////////
-	pathProcessGeneScore    = evtx.Path("/Event/EventData/ProcessGeneScore")
-	pathSrcProcessGeneScore = evtx.Path("/Event/EventData/SourceProcessGeneScore")
-	pathTgtProcessGeneScore = evtx.Path("/Event/EventData/TargetProcessGeneScore")
+	pathProcessGeneScore    = evtx.Path("/Event/EventData/ProcessThreatScore")
+	pathSrcProcessGeneScore = evtx.Path("/Event/EventData/SourceProcessThreatScore")
+	pathTgtProcessGeneScore = evtx.Path("/Event/EventData/TargetProcessThreatScore")
 
 	pathAncestors            = evtx.Path("/Event/EventData/Ancestors")
 	pathParentUser           = evtx.Path("/Event/EventData/ParentUser")
@@ -134,5 +134,5 @@ var (
 	pathFileCount      = evtx.Path("/Event/EventData/Count")
 	pathFileCountByExt = evtx.Path("/Event/EventData/CountByExt")
 	pathFileExtension  = evtx.Path("/Event/EventData/Extension")
-	pathFileFrequency  = evtx.Path("/Event/EventData/FrequencyEPS")
+	pathFileFrequency  = evtx.Path("/Event/EventData/FrequencyEps")
 )

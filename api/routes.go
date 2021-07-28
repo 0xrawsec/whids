@@ -52,8 +52,9 @@ const (
 	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + "/command"
 	AdmAPIEndpointCommandFieldPath = AdmAPIEndpointCommandPath + "/{field}"
 	// Logs related
-	AdmAPIEndpointLogsPath   = AdmAPIEndpointsByIDPath + "/logs"
-	AdmAPIEndpointAlertsPath = AdmAPIEndpointsByIDPath + "/alerts"
+	AdmAPIEndpointLogsPath       = AdmAPIEndpointsByIDPath + "/logs"
+	AdmAPIDetectionPart          = "/detections"
+	AdmAPIEndpointDetectionsPath = AdmAPIEndpointsByIDPath + AdmAPIDetectionPart
 	// Reports related
 	AdmAPIEndpointsReportsPath = AdmAPIEndpointsPath + "/reports"
 	AdmAPIEndpointReportPath   = AdmAPIEndpointsByIDPath + "/report"

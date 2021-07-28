@@ -39,7 +39,7 @@ var (
 		Logging: ManagerLogConfig{
 			Root:        "./data/logs",
 			LogBasename: "alerts",
-			EnEnptLogs:  true,
+			//EnEnptLogs:  true,
 		},
 		RulesDir:      "./data",
 		DumpDir:       "./data/uploads/",
@@ -60,7 +60,7 @@ var (
 	}
 )
 
-func dummyEvents(count int) (ce chan *evtx.GoEvtxMap) {
+func emitEvents(count int) (ce chan *evtx.GoEvtxMap) {
 	timecreatedPath := evtx.Path("/Event/System/TimeCreated/SystemTime")
 	ce = make(chan *evtx.GoEvtxMap)
 	go func() {
@@ -77,10 +77,6 @@ func dummyEvents(count int) (ce chan *evtx.GoEvtxMap) {
 		}
 	}()
 	return
-}
-
-func rm(filename string) {
-	os.Remove(filename)
 }
 
 func countLinesInGzFile(filepath string) int {
@@ -139,7 +135,7 @@ func TestForwarderBasic(t *testing.T) {
 	f.Run()
 
 	cnt := 0
-	for e := range dummyEvents(nevents) {
+	for e := range emitEvents(nevents) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -186,7 +182,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 	f.Run()
 
 	cnt := 0
-	for e := range dummyEvents(nevents) {
+	for e := range emitEvents(nevents) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -230,7 +226,7 @@ func TestCollectorAuthSuccess(t *testing.T) {
 	f.Run()
 
 	cnt := 0
-	for e := range dummyEvents(nevents) {
+	for e := range emitEvents(nevents) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -277,7 +273,7 @@ func TestForwarderParallel(t *testing.T) {
 				t.FailNow()
 			}
 			c.Run()
-			for e := range dummyEvents(nevents) {
+			for e := range emitEvents(nevents) {
 				c.PipeEvent(e)
 			}
 			time.Sleep(2 * time.Second)
@@ -326,7 +322,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	defer f.Close()
 
 	// Sending events
-	for e := range dummyEvents(nevents / 2) {
+	for e := range emitEvents(nevents / 2) {
 		f.PipeEvent(e)
 	}
 
@@ -342,7 +338,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	r.Shutdown()
 
 	// Sending another wave of events
-	for e := range dummyEvents(nevents / 2) {
+	for e := range emitEvents(nevents / 2) {
 		f.PipeEvent(e)
 	}
 
@@ -401,7 +397,7 @@ func TestForwarderCleanup(t *testing.T) {
 
 	// send enough events to trigger cleanup
 	for i := 0; i < additionalFiles+3; i++ {
-		for e := range dummyEvents(int(f.EventTresh)) {
+		for e := range emitEvents(int(f.EventTresh)) {
 			f.PipeEvent(e)
 		}
 		time.Sleep(2 * time.Second)

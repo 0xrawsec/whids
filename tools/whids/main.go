@@ -119,14 +119,15 @@ var (
 )
 
 var (
-	flagDumpDefault bool
-	flagDryRun      bool
-	flagPrintAll    bool
-	flagDebug       bool
-	flagVersion     bool
-	flagService     bool
-	flagProfile     bool
-	flagRestore     bool
+	flagDumpConfig bool
+	flagConfigure  bool
+	flagDryRun     bool
+	flagPrintAll   bool
+	flagDebug      bool
+	flagVersion    bool
+	flagService    bool
+	flagProfile    bool
+	flagRestore    bool
 
 	hostIDS *hids.HIDS
 
@@ -212,7 +213,8 @@ func proctectDir(dir string) {
 
 func main() {
 
-	flag.BoolVar(&flagDumpDefault, "dump-conf", flagDumpDefault, "Dumps default configuration")
+	flag.BoolVar(&flagDumpConfig, "dump-conf", flagDumpConfig, "Dumps default configuration to stdout")
+	flag.BoolVar(&flagConfigure, "configure", flagConfigure, "Writes default configuration to default path")
 	flag.BoolVar(&flagDryRun, "dry", flagDryRun, "Dry run (do everything except listening on channels)")
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all events passing through HIDS")
 	flag.BoolVar(&flagVersion, "v", flagVersion, "Print version information and exit")
@@ -267,11 +269,18 @@ func main() {
 		os.Exit(exitSuccess)
 	}
 
-	if flagDumpDefault {
-		enc := toml.NewEncoder(os.Stdout)
+	if flagDumpConfig || flagConfigure {
+		writer := os.Stdout
+		if flagConfigure {
+			if writer, err = utils.HidsCreateFile(config); err != nil {
+				log.LogErrorAndExit(err)
+			}
+			defer writer.Close()
+		}
+		enc := toml.NewEncoder(writer)
 		enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(DefaultHIDSConfig); err != nil {
-			panic(err)
+			log.LogErrorAndExit(err)
 		}
 		os.Exit(exitSuccess)
 	}

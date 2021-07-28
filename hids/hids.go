@@ -249,11 +249,11 @@ func (h *HIDS) updateEngine(force bool) error {
 	h.Lock()
 	defer h.Unlock()
 
-	reloadRules := true
-	reloadContainers := true
+	reloadRules := h.needsRulesUpdate()
+	reloadContainers := h.needsContainersUpdate()
 
 	// check if we need rule update
-	if h.needsRulesUpdate() {
+	if reloadRules {
 		log.Info("Updating WHIDS rules")
 		if err := h.fetchRulesFromManager(); err != nil {
 			log.Errorf("Failed to fetch rules from manager: %s", err)
@@ -261,7 +261,7 @@ func (h *HIDS) updateEngine(force bool) error {
 		}
 	}
 
-	if h.needsContainersUpdate() {
+	if reloadContainers {
 		log.Info("Updating WHIDS containers")
 		if err := h.fetchContainersFromManager(); err != nil {
 			log.Errorf("Failed to fetch containers from manager: %s", err)
@@ -269,6 +269,7 @@ func (h *HIDS) updateEngine(force bool) error {
 		}
 	}
 
+	log.Debugf("reloading rules:%t containers:%t forced:%t", reloadRules, reloadContainers, force)
 	if reloadRules || reloadContainers || force {
 		// We need to create a new engine if we received a rule/containers update
 		h.Engine = newActionnableEngine()

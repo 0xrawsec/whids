@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -76,13 +75,6 @@ func post(url string, data []byte) (r AdminAPIResponse) {
 	return
 }
 
-func unmarshalAdminAPIResp(b []byte) (r AdminAPIResponse) {
-	if err := json.Unmarshal(b, &r); err != nil {
-		panic(err)
-	}
-	return
-}
-
 func failOnAdminAPIError(t *testing.T, r AdminAPIResponse) {
 	if r.Error != "" {
 		t.Errorf("Unexpected API error: %s", r.Error)
@@ -126,14 +118,6 @@ func prettyJSON(i interface{}) string {
 		panic(err)
 	}
 	return string(b)
-}
-
-func base64Decode(s string) []byte {
-	b, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
 
 func JSON(i interface{}) []byte {
@@ -182,9 +166,19 @@ func TestAdminAPIPostCommand(t *testing.T) {
 	}
 	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
-	if _, err := c.ExecuteCommand(); err != nil {
-		t.Errorf("Failed to execute command: %s", err)
+	if cmd, err := c.FetchCommand(); err != nil {
+		t.Errorf("Failed to Fetch command: %s", err)
 		t.FailNow()
+	} else {
+		if err = cmd.Run(); err != nil {
+			t.Errorf("Failed to run command: %s", err)
+			t.FailNow()
+		}
+
+		if err := c.PostCommand(cmd); err != nil {
+			t.Errorf("Failed to post command: %s", err)
+			t.FailNow()
+		}
 	}
 
 	r = get(format("%s/%s/command", AdmAPIEndpointsPath, euuid))
@@ -214,10 +208,21 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
 
-	if _, err := c.ExecuteCommand(); err != nil {
-		t.Errorf("Failed to execute command: %s", err)
+	if cmd, err := c.FetchCommand(); err != nil {
+		t.Errorf("Failed to Fetch command: %s", err)
 		t.FailNow()
+	} else {
+		if err = cmd.Run(); err != nil {
+			t.Errorf("Failed to run command: %s", err)
+			t.FailNow()
+		}
+
+		if err := c.PostCommand(cmd); err != nil {
+			t.Errorf("Failed to post command: %s", err)
+			t.FailNow()
+		}
 	}
+
 	r = get(format("%s/%s/command/stdout", AdmAPIEndpointsPath, euuid))
 	failOnAdminAPIError(t, r)
 

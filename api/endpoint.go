@@ -19,8 +19,12 @@ type Endpoint struct {
 	UUID           string    `json:"uuid"`
 	Hostname       string    `json:"hostname"`
 	IP             string    `json:"ip"`
-	Key            string    `json:"key"`
+	Group          string    `json:"group"`
+	Key            string    `json:"key,omitempty"`
 	Command        *Command  `json:"command,omitempty"`
+	Score          int       `json:"score"`
+	Status         string    `json:"status"`
+	LastDetection  time.Time `json:"last-detection"`
 	LastConnection time.Time `json:"last-connection"`
 }
 
@@ -37,7 +41,7 @@ func (e *Endpoint) Copy() *Endpoint {
 
 // UpdateLastConnection updates the LastConnection member of Endpoint structure
 func (e *Endpoint) UpdateLastConnection() {
-	e.LastConnection = time.Now()
+	e.LastConnection = time.Now().UTC()
 }
 
 // EndpointFile describes a File to drop or fetch from the endpoint

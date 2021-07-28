@@ -61,7 +61,7 @@ func (c *AuditConfig) Configure() {
 			if err := utils.EnableAuditPolicy(ap); err != nil {
 				log.Errorf("Failed to enable audit policy %s: %s", ap, err)
 			} else {
-				log.Infof("Enabled Audit Policy: %s", ap)
+				log.Infof("Enabled Audit Policy: %s", ap)
 			}
 		}
 	}
@@ -69,11 +69,13 @@ func (c *AuditConfig) Configure() {
 	// run this function async as it might take a little bit of time
 	go func() {
 		dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-		log.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
-		if err := utils.SetEDRAuditACL(dirs...); err != nil {
-			log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
+		if len(dirs) > 0 {
+			log.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
+			if err := utils.SetEDRAuditACL(dirs...); err != nil {
+				log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
+			}
+			log.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
 		}
-		log.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
 	}()
 }
 
