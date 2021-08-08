@@ -3,15 +3,12 @@ package hids
 import (
 	"fmt"
 	"os"
-	"sort"
 	"syscall"
 
 	"github.com/0xrawsec/gene/engine"
 	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
-	"github.com/0xrawsec/whids/utils"
 )
 
 func toString(i interface{}) string {
@@ -102,10 +99,4 @@ func getCriticality(e *evtx.GoEvtxMap) int {
 		return (*c).(int)
 	}
 	return 0
-}
-
-func idFromEvent(e *evtx.GoEvtxMap) string {
-	bs := utils.ByteSlice(evtx.ToJSON(e))
-	sort.Stable(bs)
-	return data.Md5(bs)
 }

@@ -32,6 +32,8 @@ type ClientConfig struct {
 	ServerFingerprint string `toml:"server-fingerprint" comment:"Configure manager certificate pinning\n Put here the manager's certificate fingerprint"`
 	Unsafe            bool   `toml:"unsafe" comment:"Allow unsafe HTTPS connection"`
 	MaxUploadSize     int64  `toml:"max-upload-size" comment:"Maximum allowed upload size"`
+
+	localAddr string
 }
 
 // ManagerIP returns the IP address of the manager if any, returns nil otherwise
@@ -47,40 +49,70 @@ func (cc *ClientConfig) ManagerIP() net.IP {
 	return nil
 }
 
+func (cc *ClientConfig) DialContext(ctx context.Context, network, addr string) (con net.Conn, err error) {
+	log.Infof("Dial")
+	dialer := net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
+	con, err = dialer.DialContext(ctx, network, addr)
+
+	if err == nil && con != nil {
+		if addr, ok := con.LocalAddr().(*net.TCPAddr); ok {
+			cc.localAddr = addr.IP.String()
+		}
+	}
+
+	return
+}
+
+func (cc *ClientConfig) DialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
+
+	log.Infof("Dial TLS")
+	c, err := tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: cc.Unsafe})
+
+	if err != nil {
+		return c, err
+	}
+
+	if c != nil {
+		if addr, ok := c.LocalAddr().(*net.TCPAddr); ok {
+			cc.localAddr = addr.IP.String()
+		}
+	}
+
+	if cc.ServerFingerprint == "" {
+		return c, err
+	}
+
+	connstate := c.ConnectionState()
+	for _, peercert := range connstate.PeerCertificates {
+		der, err := x509.MarshalPKIXPublicKey(peercert.PublicKey)
+		hash := data.Sha256(der)
+		if err != nil {
+			return c, err
+		}
+
+		if hash == cc.ServerFingerprint {
+			return c, err
+		}
+	}
+	return c, fmt.Errorf("server fingerprint not verified")
+}
+
 // Transport creates an approriate HTTP transport from a configuration
 // Cert pinning inspired by: https://medium.com/@zmanian/server-public-key-pinning-in-go-7a57bbe39438
 func (cc *ClientConfig) Transport() http.RoundTripper {
 	return &http.Transport{
 		Proxy: nil,
-		DialContext: (&net.Dialer{
+		/*DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
 			DualStack: true,
-		}).DialContext,
-		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			c, err := tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: cc.Unsafe})
-
-			if err != nil {
-				return c, err
-			}
-
-			if cc.ServerFingerprint == "" {
-				return c, err
-			}
-			connstate := c.ConnectionState()
-			for _, peercert := range connstate.PeerCertificates {
-				der, err := x509.MarshalPKIXPublicKey(peercert.PublicKey)
-				hash := data.Sha256(der)
-				if err != nil {
-					return c, err
-				}
-
-				if hash == cc.ServerFingerprint {
-					return c, err
-				}
-			}
-			return c, fmt.Errorf("server fingerprint not verified")
-		},
+		}).DialContext,*/
+		DialContext:           cc.DialContext,
+		DialTLSContext:        cc.DialTLSContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -90,7 +122,7 @@ func (cc *ClientConfig) Transport() http.RoundTripper {
 
 // ManagerClient structure definition
 type ManagerClient struct {
-	config    ClientConfig
+	config    *ClientConfig
 	ManagerIP net.IP
 
 	HTTPClient http.Client
@@ -124,7 +156,7 @@ func NewManagerClient(c *ClientConfig) (*ManagerClient, error) {
 
 	mc := &ManagerClient{
 		HTTPClient: http.Client{Transport: tpt},
-		config:     *c,
+		config:     c,
 		ManagerIP:  c.ManagerIP(),
 	}
 
@@ -158,6 +190,8 @@ func (m *ManagerClient) Prepare(method, url string, body io.Reader) (*http.Reque
 	if err == nil {
 		r.Header.Add("User-Agent", UserAgent)
 		r.Header.Add("Hostname", Hostname)
+		// the address used by the client to connect to the manager
+		r.Header.Add("IP", m.config.localAddr)
 		r.Header.Add("UUID", m.config.UUID)
 		r.Header.Add("Api-Key", m.config.Key)
 	}

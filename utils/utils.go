@@ -15,6 +15,8 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils/powershell"
@@ -67,6 +69,19 @@ func Sha256StringArray(array []string) string {
 		sha256.Write([]byte(e))
 	}
 	return hex.EncodeToString(sha256.Sum(nil))
+}
+
+// HashEventBytes return a hash from a byte slice assuming
+// the event has been JSON encoded with the json.Marshal
+func HashEventBytes(b []byte) string {
+	return data.Sha1(bytes.Trim(b, " \n\r\t"))
+}
+
+// HashEvent returns a hash from an event, it first json.Marshal
+// the event and then calls HashEventBytes
+func HashEvent(e *evtx.GoEvtxMap) string {
+	bs := evtx.ToJSON(e)
+	return HashEventBytes(bs)
 }
 
 /////////////////////////////// Windows Logger ////////////////////////////////

@@ -440,6 +440,7 @@ func (es *Endpoints) MutEndpoints() []*Endpoint {
 type Manager struct {
 	sync.RWMutex
 	Config            *ManagerConfig
+	eventStreamer     *EventStreamer
 	eventLogger       *logger.EventLogger
 	eventSearcher     *logger.EventSearcher
 	detectionLogger   *logger.EventLogger
@@ -471,6 +472,10 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	detectionDir := filepath.Join(c.Logging.Root, "detections")
 	m.detectionLogger = logger.NewEventLogger(detectionDir, "logs.gz", utils.Giga)
 	m.detectionSearcher = logger.NewEventSearcher(detectionDir)
+
+	// Create a new streamer
+	m.eventStreamer = NewEventStreamer()
+	m.eventStreamer.Stream()
 
 	if c.EndpointAPI.Port <= 0 || c.EndpointAPI.Port > 65535 {
 		return nil, fmt.Errorf("Manager Endpoint API Error: invalid port to listen to %d", c.EndpointAPI.Port)

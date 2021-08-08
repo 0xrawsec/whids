@@ -59,6 +59,12 @@ const (
 	AdmAPIEndpointsReportsPath = AdmAPIEndpointsPath + "/reports"
 	AdmAPIEndpointReportPath   = AdmAPIEndpointsByIDPath + "/report"
 	// Dumps related
-	AdmAPIEndpointDumps = AdmAPIEndpointsByIDPath + "/artifacts"
-	AdmAPIEndpointDump  = AdmAPIEndpointDumps + "/{pguid:" + uuidRe + "}/{ehash:[[:xdigit:]]{32}}/{fname:.*}"
+	admAPIArtifactsPart          = "/artifacts"
+	AdmAPIEndpointsArtifactsPath = AdmAPIEndpointsPath + admAPIArtifactsPart
+	AdmAPIEndpointArtifacts      = AdmAPIEndpointsByIDPath + admAPIArtifactsPart
+	AdmAPIEndpointArtifact       = AdmAPIEndpointArtifacts + "/{pguid:" + uuidRe + "}/{ehash:[[:xdigit:]]+}/{fname:.*}"
+
+	//Websockets
+	AdmAPIStreamEvents     = "/stream/events"
+	AdmAPIStreamDetections = "/stream/detections"
 )

@@ -877,7 +877,7 @@ var (
 )
 
 func dumpPrepareDumpFilename(e *evtx.GoEvtxMap, dir, guid, filename string) string {
-	id := idFromEvent(e)
+	id := utils.HashEvent(e)
 	tmpDumpDir := filepath.Join(dir, guid, id)
 	os.MkdirAll(tmpDumpDir, utils.DefaultPerms)
 	return filepath.Join(tmpDumpDir, filename)
@@ -923,7 +923,7 @@ func dumpProcessRtn(h *HIDS, e *evtx.GoEvtxMap) {
 
 			if pt := h.processTracker.GetByGuid(guid); pt != nil {
 				// if the process track is not nil we are sure PID is set
-				dumpPidAndCompress(h, int(pt.PID), guid, idFromEvent(e))
+				dumpPidAndCompress(h, int(pt.PID), guid, utils.HashEvent(e))
 			}
 		}
 		dumpEventAndCompress(h, e, guid)
@@ -967,7 +967,7 @@ func dumpRegistryRtn(h *HIDS, e *evtx.GoEvtxMap) {
 				if details, err := e.GetString(&pathSysmonDetails); err == nil {
 					// We dump only if Details is "Binary Data" since the other kinds can be seen in the raw event
 					if details == "Binary Data" {
-						dumpPath := filepath.Join(h.config.Dump.Dir, guid, idFromEvent(e), "reg.txt")
+						dumpPath := filepath.Join(h.config.Dump.Dir, guid, utils.HashEvent(e), "reg.txt")
 						key, value := filepath.Split(targetObject)
 						dumpEventAndCompress(h, e, guid)
 						content, err := utils.RegQuery(key, value)
@@ -1077,7 +1077,7 @@ func dumpFilesRtn(h *HIDS, e *evtx.GoEvtxMap) {
 		}
 
 		// build up dump path
-		dumpPath := filepath.Join(h.config.Dump.Dir, guid, idFromEvent(e))
+		dumpPath := filepath.Join(h.config.Dump.Dir, guid, utils.HashEvent(e))
 		// dump event who triggered the dump
 		dumpEventAndCompress(h, e, guid)
 

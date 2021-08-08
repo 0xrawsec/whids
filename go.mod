@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/gorilla/websocket v1.4.2
 	github.com/pelletier/go-toml v1.9.1
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 )

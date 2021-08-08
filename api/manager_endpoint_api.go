@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/mux"
@@ -47,6 +48,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 		uuid := rq.Header.Get("UUID")
 		key := rq.Header.Get("Api-Key")
 		hostname := rq.Header.Get("Hostname")
+		ip := rq.Header.Get("IP")
 
 		if endpt, ok = m.endpoints.GetMutByUUID(uuid); !ok {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
@@ -60,13 +62,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 			return
 		}
 
-		ip, err := IPFromRequest(rq)
-		if err != nil {
-			log.Errorf("Failed to parse client IP address: %s", err)
-		} else {
-			// update endpoint IP at every request if possible
-			endpt.IP = ip.String()
-		}
+		endpt.IP = ip
 
 		switch {
 		case endpt.Hostname == "":
@@ -278,12 +274,32 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 
 	etid := m.eventLogger.InitTransaction()
 	dtid := m.detectionLogger.InitTransaction()
+	extraPath := evtx.Path("/Event/EdrData")
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
-		tok := s.Text()
-		log.Debugf("Received Event: %s", tok)
+		tok := []byte(s.Text())
+		log.Debugf("Received Event: %s", string(tok))
 		e := evtx.GoEvtxMap{}
-		if err := json.Unmarshal([]byte(tok), &e); err != nil {
+
+		// ToDo: create an EdrData structure to store those info
+		extra := map[string]interface{}{
+			"Event": map[string]interface{}{
+				"Hash":        utils.HashEventBytes(tok),
+				"Detection":   false,
+				"ReceiptTime": time.Now(),
+			},
+			"Endpoint": map[string]interface{}{
+				"UUID": uuid,
+			},
+		}
+
+		if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
+			extra["Endpoint"].(map[string]interface{})["IP"] = endpt.IP
+			extra["Endpoint"].(map[string]interface{})["Hostname"] = endpt.Hostname
+			extra["Endpoint"].(map[string]interface{})["Group"] = endpt.Group
+		}
+
+		if err := json.Unmarshal(tok, &e); err != nil {
 			log.Errorf("Failed to unmarshal: %s", tok)
 		} else {
 			var isAlert bool
@@ -291,7 +307,11 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 			// check if event is associated to an alert
 			if _, err := e.Get(&sigPath); err == nil {
 				isAlert = true
+				extra["Event"].(map[string]interface{})["Detection"] = true
 			}
+
+			// set extra data
+			e.Set(&extraPath, extra)
 
 			if endpt := m.mutEndpointFromRequest(rq); endpt != nil {
 				m.UpdateReducer(endpt.UUID, &e)
@@ -312,6 +332,9 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 			if _, err := m.eventLogger.WriteEvent(etid, uuid, &e); err != nil {
 				log.Errorf("Failed to write event: %s", err)
 			}
+
+			// we queue event for streaming
+			m.eventStreamer.Queue(e)
 		}
 		cnt++
 	}

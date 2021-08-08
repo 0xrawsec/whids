@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/0xrawsec/gene/reducer"
 	"github.com/0xrawsec/gene/rules"
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/gorilla/websocket"
 
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
@@ -27,6 +29,13 @@ import (
 const (
 	MaxLimitLogAPI = 10000
 )
+
+func admApiParseTime(stimestamp string) (t time.Time, err error) {
+	if t, err = time.Parse(time.RFC3339, stimestamp); err != nil {
+		return
+	}
+	return
+}
 
 func muxGetVar(rq *http.Request, name string) (string, error) {
 	vars := mux.Vars(rq)
@@ -116,6 +125,10 @@ func admMsgStr(s string) []byte {
 }
 
 /////////////////// Manager functions
+
+var (
+	upgrader = websocket.Upgrader{} // use default options
+)
 
 func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
@@ -309,7 +322,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 	var euuid string
 	var start, stop, pivot time.Time
-	var delta time.Duration
+	var last, delta time.Duration
 	var skip int64
 
 	// default limit
@@ -318,6 +331,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	logs := make([]evtx.GoEvtxMap, 0)
 	pStart := rq.URL.Query().Get("start")
 	pStop := rq.URL.Query().Get("stop")
+	pLast := rq.URL.Query().Get("last")
 
 	pPivot := rq.URL.Query().Get("pivot")
 	pDelta := rq.URL.Query().Get("delta")
@@ -325,28 +339,36 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	pLimit := rq.URL.Query().Get("limit")
 	pSkip := rq.URL.Query().Get("skip")
 
-	/*if !m.Config.Logging.EnEnptLogs {
-		wt.Write(admErrStr("Endpoint logging is disabled, enable it and try again"))
-		return
-	}*/
+	now := time.Now()
 
 	// Parsing parameters
 	if pStart != "" {
-		if start, err = time.Parse(time.RFC3339, pStart); err != nil {
+		if start, err = admApiParseTime(pStart); err != nil {
 			wt.Write(admErrStr("Failed to parse start parameter, it must be RFC3339 formated"))
 			return
 		}
 	}
 
 	if pStop != "" {
-		if stop, err = time.Parse(time.RFC3339, pStop); err != nil {
+		if stop, err = admApiParseTime(pStop); err != nil {
 			wt.Write(admErrStr("Failed to parse stop parameter, it must be RFC3339 formated"))
 			return
 		}
 	}
 
+	if pLast != "" {
+		if last, err = time.ParseDuration(pLast); err != nil {
+			if n, err := fmt.Sscanf(pLast, "%dd", &last); n != 1 || err != nil {
+				log.Infof("n=%d err=%s", n, err)
+				wt.Write(admErrStr("Failed to parse last parameter, it must be a valid Go time.Duration format"))
+				return
+			}
+			last *= 24 * time.Hour
+		}
+	}
+
 	if pPivot != "" {
-		if pivot, err = time.Parse(time.RFC3339, pPivot); err != nil {
+		if pivot, err = admApiParseTime(pPivot); err != nil {
 			wt.Write(admErrStr("Failed to parse pivot parameter, it must be RFC3339 formated"))
 			return
 		}
@@ -377,22 +399,16 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 		}
 	}
 
-	// Controlling parameters
-	if start.After(stop) {
-		wt.Write(admErrStr("Start date must be before stop date"))
-		return
-	}
-
-	// Checking compatibility
-	if (pStart != "" || pStop != "") && (pPivot != "" || pDelta != "") {
-		wt.Write(admErrStr("Incompatible parameters, specify either start/stop or pivot/delta parameters"))
-		return
-	}
-
 	// Default settings last hour
-	if pStart == "" && pStop == "" && pPivot == "" && pDelta == "" {
-		stop = time.Now()
-		start = stop.Add(-1 * time.Hour)
+	if pStart == "" && pStop == "" && pPivot == "" && pDelta == "" && pLast == "" {
+		last = time.Hour
+	}
+
+	// Using last parameter
+	if last != 0 {
+		start = now.Add(-last)
+		stop = now
+		goto searchLogs
 	}
 
 	// 10 min delta if delta is not provided
@@ -406,6 +422,16 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 		stop = pivot.Add(+delta)
 	}
 
+	if !start.IsZero() && stop.IsZero() {
+		stop = now
+	}
+
+searchLogs:
+	// Controlling parameters
+	if start.After(stop) {
+		wt.Write(admErrStr("Start date must be before stop date"))
+		return
+	}
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
@@ -469,19 +495,103 @@ type EndpointDumps struct {
 	Files           []string  `json:"files"`
 }
 
-func admApiParseTime(stimestamp string) (t time.Time, err error) {
-	if t, err = time.Parse(time.RFC3339, stimestamp); err != nil {
+func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDumps, err error) {
+	var procGUIDs, eventHashes, eventDumps []fs.DirEntry
+
+	dumps = make([]EndpointDumps, 0)
+	urlPath := fmt.Sprintf("%s/%s%s", AdmAPIEndpointsPath, uuid, admAPIArtifactsPart)
+
+	path := filepath.Join(root, uuid)
+	if procGUIDs, err = os.ReadDir(path); err != nil {
 		return
 	}
+
+	for _, pfi := range procGUIDs {
+		if pfi.IsDir() {
+			evtHashDir := filepath.Join(path, pfi.Name())
+			if eventHashes, err = os.ReadDir(evtHashDir); err != nil {
+				err = fmt.Errorf("failed to list (event hash) directory: %s", err)
+				return
+			}
+
+			for _, efi := range eventHashes {
+				// we remove the curly brackets of the process GUID as gorilla
+				// has issue handling those. Important for API retrieving dump file
+				pguid := strings.Trim(pfi.Name(), "{}")
+				ehash := efi.Name()
+				baseURL := format("%s/%s/%s/", urlPath, pguid, ehash)
+				ed := EndpointDumps{ProcessGUID: pguid, EventHash: ehash, BaseURL: baseURL, Files: make([]string, 0)}
+				if efi.IsDir() {
+					evtDumpDir := filepath.Join(evtHashDir, ehash)
+					if eventDumps, err = os.ReadDir(evtDumpDir); err != nil {
+						err = fmt.Errorf("failed to list (event dump) directory: %s", err)
+						return
+					}
+
+					for _, dfi := range eventDumps {
+						var info fs.FileInfo
+						if info, err = dfi.Info(); err != nil {
+							err = fmt.Errorf("failed to read file (%s) info: %s", filepath.Join(evtDumpDir, dfi.Name()), err)
+							return
+						}
+						// we add file to the list of files only if it has
+						// been modified after the since parameter
+						if since.Before(info.ModTime()) {
+							ed.Files = append(ed.Files, dfi.Name())
+						}
+						if ed.UpdateTimestamp.Before(info.ModTime()) {
+							ed.UpdateTimestamp = info.ModTime().UTC()
+						}
+					}
+				}
+				// we don't update if update timestamp is before since parameter
+				if since.Before(ed.UpdateTimestamp) {
+					dumps = append(dumps, ed)
+				}
+			}
+		}
+	}
 	return
+
+}
+
+func (m *Manager) admAPIArtifacts(wt http.ResponseWriter, rq *http.Request) {
+	var err error
+	var since time.Time
+	var uuids []fs.DirEntry
+
+	pSince := rq.URL.Query().Get("since")
+	resp := make(map[string][]EndpointDumps)
+
+	if pSince != "" {
+		if since, err = admApiParseTime(pSince); err != nil {
+			wt.Write(admErrStr(format("Failed to parse since parameter: %s", err)))
+			return
+		}
+	}
+
+	if uuids, err = os.ReadDir(m.Config.DumpDir); err != nil {
+		wt.Write(admErrStr(format("Failed to read dump directory: %s", err)))
+		return
+	}
+
+	for _, uuid := range uuids {
+		if uuid.IsDir() {
+			if resp[uuid.Name()], err = listEndpointDumps(m.Config.DumpDir, uuid.Name(), since); err != nil {
+				wt.Write(admErrStr(format("Failed list dumps for uuid=%s , %s", uuid.Name(), err)))
+				return
+			}
+		}
+	}
+	wt.Write(admJSONResp(resp))
 }
 
 func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
 	var since time.Time
+	var dumps []EndpointDumps
 
-	resp := make([]EndpointDumps, 0)
 	pSince := rq.URL.Query().Get("since")
 
 	if pSince != "" {
@@ -495,52 +605,12 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
 		if m.endpoints.HasByUUID(euuid) {
-			root := filepath.Join(m.Config.DumpDir, euuid)
-			if procGUIDs, err := ioutil.ReadDir(root); err == nil {
-				for _, pfi := range procGUIDs {
-					if pfi.IsDir() {
-						evtHashDir := filepath.Join(root, pfi.Name())
-						if eventHashes, err := ioutil.ReadDir(evtHashDir); err == nil {
-							for _, efi := range eventHashes {
-								// we remove the curly brackets of the process GUID as gorilla
-								// has issue handling those. Important for API retrieving dump file
-								pguid := strings.Trim(pfi.Name(), "{}")
-								ehash := efi.Name()
-								baseURL := format("%s/%s/%s/", rq.URL.Path, pguid, ehash)
-								ed := EndpointDumps{ProcessGUID: pguid, EventHash: ehash, BaseURL: baseURL, Files: make([]string, 0)}
-								if efi.IsDir() {
-									evtDumpDir := filepath.Join(evtHashDir, ehash)
-									if eventDumps, err := ioutil.ReadDir(evtDumpDir); err == nil {
-										for _, dfi := range eventDumps {
-											ed.Files = append(ed.Files, dfi.Name())
-											if ed.UpdateTimestamp.Before(dfi.ModTime()) {
-												ed.UpdateTimestamp = dfi.ModTime().UTC()
-											}
-										}
-									} else {
-										wt.Write(admErrStr(format("Failed to list dump (event dump) directory: %s", err)))
-										return
-									}
-								}
-
-								// we don't update if update timestamp is before since parameter
-								if !since.IsZero() && ed.UpdateTimestamp.Before(since) {
-									continue
-								}
-
-								resp = append(resp, ed)
-							}
-						} else {
-							wt.Write(admErrStr(format("Failed to list dump (event hash) directory: %s", err)))
-							return
-						}
-					}
-				}
-				// successfull execution path
-				wt.Write(admJSONResp(resp))
-			} else {
-				wt.Write(admErrStr(format("Failed to list dump (process GUID) directory: %s", err)))
+			if dumps, err = listEndpointDumps(m.Config.DumpDir, euuid, since); err != nil {
+				wt.Write(admErrStr(format("Failed to list dumps, %s", err)))
+				return
 			}
+			wt.Write(admJSONResp(dumps))
+			return
 		} else {
 			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
 		}
@@ -842,6 +912,60 @@ func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
 	defer fd.Close()
 }
 
+func wsHandleControlMessage(c *websocket.Conn) {
+	for {
+		if _, _, err := c.NextReader(); err != nil {
+			c.Close()
+			break
+		}
+	}
+}
+
+func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Errorf("StreamLogs, failed to upgrade to websocket: %s", err)
+		return
+	}
+	defer c.Close()
+
+	stream := m.eventStreamer.NewStream()
+	defer stream.Close()
+
+	go wsHandleControlMessage(c)
+
+	for e := range stream.S {
+		err = c.WriteJSON(e)
+		if err != nil {
+			break
+		}
+	}
+}
+
+func (m *Manager) admAPIStreamDetections(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Errorf("StreamLogs, failed to upgrade to websocket: %s", err)
+		return
+	}
+	defer c.Close()
+
+	stream := m.eventStreamer.NewStream()
+	defer stream.Close()
+
+	go wsHandleControlMessage(c)
+
+	for e := range stream.S {
+		// check if event is associated to a detection
+		if _, err := e.Get(&sigPath); err == nil {
+			err = c.WriteJSON(e)
+			if err != nil {
+				break
+			}
+		}
+	}
+}
+
 func (m *Manager) runAdminAPI() {
 
 	go func() {
@@ -872,12 +996,16 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointDetectionsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
-		rt.HandleFunc(AdmAPIEndpointDumps, m.admAPIEndpointArtifacts).Methods("GET")
-		rt.HandleFunc(AdmAPIEndpointDump, m.admAPIEndpointArtifact).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointsArtifactsPath, m.admAPIArtifacts).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesReloadPath, m.admAPIRulesReload).Methods("GET")
 		rt.HandleFunc(AdmAPIRulesSavePath, m.admAPIRulesSave).Methods("GET")
+		// WebSocket handlers
+		rt.HandleFunc(AdmAPIStreamEvents, m.admAPIStreamEvents)
+		rt.HandleFunc(AdmAPIStreamDetections, m.admAPIStreamDetections)
 
 		uri := format("%s:%d", m.Config.AdminAPI.Host, m.Config.AdminAPI.Port)
 		m.adminAPI = &http.Server{
