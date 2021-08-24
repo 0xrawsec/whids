@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xrawsec/gene/engine"
+	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/hids"
 	"github.com/0xrawsec/whids/utils"
@@ -68,7 +68,14 @@ var (
 				RotationInterval: time.Hour * 5,
 			},
 		},
-		Channels: []string{"all"},
+		EtwConfig: &hids.EtwConfig{
+			Providers: []string{
+				"Microsoft-Windows-Sysmon",
+				"Microsoft-Windows-Windows Defender",
+				"Microsoft-Windows-PowerShell",
+			},
+			Traces: []string{"Eventlog-Security"},
+		},
 		Sysmon: &hids.SysmonConfig{
 			Bin:              "C:\\Windows\\Sysmon64.exe",
 			ArchiveDirectory: "C:\\Sysmon\\",
@@ -121,6 +128,8 @@ var (
 var (
 	flagDumpConfig bool
 	flagConfigure  bool
+	flagInstall    bool
+	flagUninstall  bool
 	flagDryRun     bool
 	flagPrintAll   bool
 	flagDebug      bool
@@ -142,12 +151,36 @@ func printInfo(writer io.Writer) {
 	fmt.Fprintf(writer, "%s\nVersion: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", banner, version, commitID, copyright, license)
 }
 
-func fmtAliases() string {
-	aliases := make([]string, 0, len(hids.ChannelAliases))
-	for alias, channel := range hids.ChannelAliases {
-		aliases = append(aliases, fmt.Sprintf("\t\t%s : %s", alias, channel))
+func configure() error {
+	var writer *os.File
+	var err error
+
+	if writer, err = utils.HidsCreateFile(config); err != nil {
+		return err
 	}
-	return strings.Join(aliases, "\n")
+	defer writer.Close()
+
+	enc := toml.NewEncoder(writer)
+	enc.Order(toml.OrderPreserve)
+	if err := enc.Encode(DefaultHIDSConfig); err != nil {
+		return err
+	}
+	return nil
+}
+
+func updateAutologger() error {
+	hidsConf, err := hids.LoadsHIDSConfig(config)
+	if err != nil {
+		return err
+	}
+	if err := hidsConf.EtwConfig.ConfigureAutologger(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteAutologger() error {
+	return hids.Autologger.Delete()
 }
 
 func runHids(service bool) {
@@ -158,12 +191,12 @@ func runHids(service bool) {
 
 	hidsConf, err = hids.LoadsHIDSConfig(config)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
+		log.LogErrorAndExit(fmt.Errorf("failed to load configuration: %s", err))
 	}
 
 	hostIDS, err = hids.NewHIDS(&hidsConf)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to create HIDS: %s", err))
+		log.LogErrorAndExit(fmt.Errorf("failed to create HIDS: %s", err))
 	}
 
 	hostIDS.DryRun = flagDryRun
@@ -214,7 +247,8 @@ func proctectDir(dir string) {
 func main() {
 
 	flag.BoolVar(&flagDumpConfig, "dump-conf", flagDumpConfig, "Dumps default configuration to stdout")
-	flag.BoolVar(&flagConfigure, "configure", flagConfigure, "Writes default configuration to default path")
+	flag.BoolVar(&flagInstall, "install", flagInstall, "Install EDR")
+	flag.BoolVar(&flagUninstall, "uninstall", flagUninstall, "Uninstall EDR")
 	flag.BoolVar(&flagDryRun, "dry", flagDryRun, "Dry run (do everything except listening on channels)")
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all events passing through HIDS")
 	flag.BoolVar(&flagVersion, "v", flagVersion, "Print version information and exit")
@@ -227,7 +261,6 @@ func main() {
 	flag.Usage = func() {
 		printInfo(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintf(os.Stderr, "\nAvailable Channel Aliases:\n%s\n", fmtAliases())
 		fmt.Fprintf(os.Stderr, "\nAvailable Dump modes: %s\n", strings.Join(hids.DumpOptions, ", "))
 		flag.PrintDefaults()
 		os.Exit(exitSuccess)
@@ -235,22 +268,34 @@ func main() {
 
 	flag.Parse()
 
-	// set logfile the time the service starts
-	log.SetLogfile(filepath.Join(abs, "bootstrap.log"))
-
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
 		log.LogErrorAndExit(fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
 	}
 
-	// If it is called by the Windows Service Manager (not interactive)
-	if !isIntSess {
-		// if running as service we protect installation directory with appropriate ACLs
-		if fsutil.IsDir(abs) {
-			proctectDir(abs)
+	if flagInstall {
+		// dump configuration first as config is needed
+		// by subsequent functions
+		if err := configure(); err != nil {
+			log.Errorf("Failed to build configuration: %s", err)
+			os.Exit(exitFail)
 		}
-		runService(svcName, false)
-		return
+
+		if err := updateAutologger(); err != nil {
+			log.Errorf("Failed to update autologger: %s", err)
+			os.Exit(exitFail)
+		}
+
+		os.Exit(exitSuccess)
+	}
+
+	if flagUninstall {
+		rc := exitSuccess
+		if err := deleteAutologger(); err != nil {
+			log.Errorf("Failed to delete autologger: %s", err)
+			rc = exitFail
+		}
+		os.Exit(rc)
 	}
 
 	// profile the program
@@ -271,12 +316,6 @@ func main() {
 
 	if flagDumpConfig || flagConfigure {
 		writer := os.Stdout
-		if flagConfigure {
-			if writer, err = utils.HidsCreateFile(config); err != nil {
-				log.LogErrorAndExit(err)
-			}
-			defer writer.Close()
-		}
 		enc := toml.NewEncoder(writer)
 		enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(DefaultHIDSConfig); err != nil {
@@ -342,6 +381,19 @@ func main() {
 		os.Exit(0)
 	}
 
-	runHids(false)
-	hostIDS.LogStats()
+	// If it is called by the Windows Service Manager (not interactive)
+	if !isIntSess {
+		// set logfile the time the service starts
+		log.SetLogfile(filepath.Join(abs, "bootstrap.log"))
+
+		// if running as service we protect installation directory with appropriate ACLs
+		if fsutil.IsDir(abs) {
+			proctectDir(abs)
+		}
+		runService(svcName, false)
+		return
+	} else {
+		runHids(false)
+		hostIDS.LogStats()
+	}
 }

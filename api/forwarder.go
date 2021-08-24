@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/fileutils"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
@@ -65,9 +64,10 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	// Initialize the Forwarder
 	// TODO: better organize forwarder configuration
 	co := Forwarder{
-		fwdConfig:  c,
-		TimeTresh:  time.Second * 10,
-		EventTresh: 50,
+		fwdConfig: c,
+		TimeTresh: time.Second * 10,
+		// Writing events too quickly has a perf impact
+		EventTresh: 500,
 		Pipe:       new(bytes.Buffer),
 		stop:       make(chan bool),
 		done:       make(chan bool),
@@ -122,10 +122,10 @@ func (f *Forwarder) ArchiveLogs() {
 }
 
 // PipeEvent pipes an event to be sent through the forwarder
-func (f *Forwarder) PipeEvent(e *evtx.GoEvtxMap) {
+func (f *Forwarder) PipeEvent(event interface{}) {
 	f.Lock()
 	defer f.Unlock()
-	f.Pipe.Write(evtx.ToJSON(e))
+	f.Pipe.Write(utils.Json(event))
 	f.Pipe.WriteByte('\n')
 	f.EventsPiped++
 }

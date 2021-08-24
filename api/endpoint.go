@@ -22,7 +22,7 @@ type Endpoint struct {
 	Group          string    `json:"group"`
 	Key            string    `json:"key,omitempty"`
 	Command        *Command  `json:"command,omitempty"`
-	Score          int       `json:"score"`
+	Score          float64   `json:"score"`
 	Status         string    `json:"status"`
 	LastDetection  time.Time `json:"last-detection"`
 	LastConnection time.Time `json:"last-connection"`

@@ -12,7 +12,6 @@ set DUMPS=%INSTALL_DIR%\Dumps
 set VERSION="REPLACED BY MAKEFILE"
 set COMMITID="REPLACED BY MAKEFILE"
 set SVC=Whids
-set SYSMON=Sysmon64
 
 set RULES_IMPORT="%~dp0\rules"
 
@@ -20,9 +19,10 @@ set RULES_IMPORT="%~dp0\rules"
 echo  [i]  Install WHIDS from scratch (removes older installation)
 echo [un]  Uninstall previous installation
 echo [up]  Update WHIDS binary and rules (keeps current config)
-echo [st]  Start services
-echo [sp]  Stop services
-echo  [r]  Restart services
+echo [st]  Start service
+echo [sp]  Stop service
+echo  [d]  Disable service
+echo  [r]  Restart service
 echo  [g]  Remove alerts logs and dumps
 echo  [e]  Edit WHIDS configuration with a registered application
 echo [en]  Edit WHIDS configuration with notepad
@@ -61,6 +61,9 @@ FOR /F "tokens=1* delims=+" %%A IN (%_in_ch%) DO (
     )
     IF "%%A"=="sp" (
         call :StopSvcs
+    )
+    IF "%%A"=="d" (
+        call :DisableSvc
     )
     IF "%%A"=="r" (
         call :StopSvcs
@@ -134,8 +137,8 @@ call :CopyBin
 echo [+] Setting up rights to installation directory
 icacls "%INSTALL_DIR%" /inheritance:r /grant:r Administrators:(OI)(CI)F /grant:r SYSTEM:(OI)(CI)F
 
-echo [+] Installing default configuration file
-"%BINPATH%" "-configure"
+echo [+] Installing
+"%BINPATH%" -install
 EXIT /B 0
 
 :ImportRules
@@ -155,17 +158,16 @@ echo.
 echo [+] Creating WHIDS service
 sc.exe create %SVC% binPath= "%BINPATH%" start= auto
 sc.exe description %SVC% "Windows Host IDS (v%VERSION%)"
+sc.exe failure whids reset= 0 actions= restart/0
 
-echo [+] Making Sysmon service (%SYSMON%) depending on WHIDS in order to catch all events at boot
-sc.exe config %SYSMON% depend= %SVC%
 EXIT /B 0
 
 :GenUninstall 
 echo.
 echo [+] Generating Uninstall Script
 echo @echo off > "%UNINSTALL_SCRIPT%"
+echo "%BINPATH%" -uninstall >> "%UNINSTALL_SCRIPT%"
 echo cd "%PROGRAMFILES%" >> "%UNINSTALL_SCRIPT%"
-echo sc.exe config %SYSMON% depend= "" >> "%UNINSTALL_SCRIPT%"
 echo net.exe stop %SVC% /yes >> "%UNINSTALL_SCRIPT%"
 echo sc.exe delete %SVC% >> "%UNINSTALL_SCRIPT%"
 echo timeout 10 >> "%UNINSTALL_SCRIPT%"
@@ -175,15 +177,14 @@ EXIT /B 0
 :StartSvcs
 echo.
 echo [+] Running %SVC% service
+sc.exe config %SVC% start= auto
 net.exe start %SVC%
-echo [+] Running %SYSMON% service
-net.exe start %SYSMON%
 EXIT /B 0
 
 :PromptStartSvcs
 echo.
 :ask_start
-SET /P _input= "[+] Do you want to start services (Whids + Sysmon) [Y/N]:"
+SET /P _input= "[+] Do you want to start service [Y/N]:"
 IF "%_input%"=="Y" GOTO :start
 IF "%_input%"=="N" GOTO :end_start
 GOTO :ask_start
@@ -196,4 +197,12 @@ EXIT /B 0
 echo.
 echo [+] Stopping %SVC% service
 net.exe stop %SVC% /yes
+EXIT /B 0
+
+:DisableSvc
+echo.
+echo [+] Disabling %SVC% service
+net.exe stop %SVC% /yes
+:: we might need this in case the service is crashing and restarting constently
+sc.exe config %SVC% start= disabled
 EXIT /B 0

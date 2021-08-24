@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xrawsec/gene/rules"
+	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
@@ -189,13 +189,10 @@ func (c *CanariesConfig) RestoreACLs() {
 }
 
 // GenRuleFSAudit generate a rule matching FS Audit events for the configured canaries
-func (c *CanariesConfig) GenRuleFSAudit() (r rules.Rule) {
-	r = rules.NewRule()
+func (c *CanariesConfig) GenRuleFSAudit() (r engine.Rule) {
+	r = engine.NewRule()
 	r.Name = "Builtin:CanaryAccessed"
-	r.Meta.EventIDs = []int64{4663}
-	r.Meta.Channels = []string{
-		"Security",
-	}
+	r.Meta.Events = map[string][]int64{"Security": {4663}}
 	r.Meta.Criticality = 10
 	r.Matches = []string{
 		"$read: AccessMask &= '0x1'",
@@ -210,14 +207,11 @@ func (c *CanariesConfig) GenRuleFSAudit() (r rules.Rule) {
 }
 
 // GenRuleSysmon generate a rule matching sysmon events for the configured canaries
-func (c *CanariesConfig) GenRuleSysmon() (r rules.Rule) {
-	r = rules.NewRule()
+func (c *CanariesConfig) GenRuleSysmon() (r engine.Rule) {
+	r = engine.NewRule()
 	r.Name = "Builtin:CanaryModified"
 	// FileCreate, FileDeleted and FileDeletedDetected
-	r.Meta.EventIDs = []int64{11, 23, 26}
-	r.Meta.Channels = []string{
-		"Microsoft-Windows-Sysmon/Operational",
-	}
+	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {11, 23, 26}}
 	r.Meta.Criticality = 10
 	r.Matches = []string{
 		fmt.Sprintf("$wl_images: Image ~= '%s'", c.whitelistRegexp()),

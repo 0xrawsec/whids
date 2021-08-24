@@ -5,28 +5,36 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/whids/event"
 )
 
 type LogStream struct {
 	closed bool
-	S      chan evtx.GoEvtxMap
+	queue  datastructs.Fifo
+	S      chan *event.EdrEvent
 }
 
-func (s *LogStream) Stream(e evtx.GoEvtxMap) bool {
-	for {
-		if s.closed {
-			close(s.S)
-			return false
-		}
-		select {
-		case s.S <- e:
-			return true
-		default:
-			time.Sleep(time.Millisecond * 10)
-		}
+func (s *LogStream) Queue(e *event.EdrEvent) bool {
+	if s.closed {
+		return false
 	}
+	s.queue.Push(e)
+	return true
+}
+
+func (s *LogStream) Stream() {
+	go func() {
+		defer close(s.S)
+		for !s.closed {
+			if i := s.queue.Pop(); i != nil {
+				e := i.Value.(*event.EdrEvent)
+				s.S <- e
+			} else {
+				time.Sleep(time.Millisecond * 50)
+			}
+		}
+	}()
 }
 
 func (s *LogStream) Close() {
@@ -35,13 +43,11 @@ func (s *LogStream) Close() {
 
 type EventStreamer struct {
 	sync.RWMutex
-	queue   datastructs.Fifo
 	streams map[int]*LogStream
 }
 
 func NewEventStreamer() *EventStreamer {
 	return &EventStreamer{
-		queue:   datastructs.Fifo{},
 		streams: map[int]*LogStream{},
 	}
 }
@@ -49,7 +55,7 @@ func NewEventStreamer() *EventStreamer {
 func (s *EventStreamer) NewStream() *LogStream {
 	s.Lock()
 	defer s.Unlock()
-	ls := &LogStream{S: make(chan evtx.GoEvtxMap)}
+	ls := &LogStream{S: make(chan *event.EdrEvent), queue: datastructs.Fifo{}}
 	s.streams[s.newId()] = ls
 	return ls
 }
@@ -64,40 +70,15 @@ func (s *EventStreamer) newId() int {
 	}
 }
 
-func (s *EventStreamer) Queue(e evtx.GoEvtxMap) {
+func (s *EventStreamer) Queue(e *event.EdrEvent) {
 	s.Lock()
 	defer s.Unlock()
 	// we queue only if there is at least a stream open
 	if len(s.streams) > 0 {
-		s.queue.Push(e)
-	}
-}
-
-func (s *EventStreamer) Stream() {
-	go func() {
-		for {
-			if i := s.queue.Pop(); i != nil {
-				e := i.Value.(evtx.GoEvtxMap)
-				for id, stream := range s.streams {
-					if ok := stream.Stream(e); !ok {
-						s.delStream(id)
-					}
-				}
-			} else {
-				// we sleep only if there is nothing to stream
-				// to minimize delay
-				time.Sleep(time.Millisecond * 50)
+		for id, stream := range s.streams {
+			if ok := stream.Queue(e); !ok {
+				delete(s.streams, id)
 			}
 		}
-	}()
-}
-
-func (s *EventStreamer) delStream(id int) {
-	s.Lock()
-	defer s.Unlock()
-	delete(s.streams, id)
-}
-
-func (s *EventStreamer) Close() {
-
+	}
 }

@@ -1,8 +1,8 @@
 package hids
 
 import (
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/whids/event"
 )
 
 var (
@@ -60,7 +60,7 @@ func NewFilter(eids []int64, channel string) *Filter {
 }
 
 // Match checks if an event matches the filter
-func (f *Filter) Match(e *evtx.GoEvtxMap) bool {
+func (f *Filter) Match(e *event.EdrEvent) bool {
 	if !f.EventIDs.Contains(e.EventID()) && f.EventIDs.Len() > 0 {
 		return false
 	}

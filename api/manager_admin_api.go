@@ -15,15 +15,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xrawsec/gene/engine"
-	"github.com/0xrawsec/gene/reducer"
-	"github.com/0xrawsec/gene/rules"
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/gene/v2/engine"
+	"github.com/0xrawsec/gene/v2/reducer"
+	"github.com/0xrawsec/whids/event"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/mux"
 )
 
 const (
@@ -142,20 +141,40 @@ func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (m *Manager) adminRespHeaderMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
+
+		wt.Header().Set("Access-Control-Allow-Origin", "*")
+		wt.Header().Set("Content-Type", "application/json")
+
+		next.ServeHTTP(wt, rq)
+	})
+}
+
 func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
+	group := rq.URL.Query().Get("group")
+	status := rq.URL.Query().Get("status")
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
 		endpoints := make([]*Endpoint, 0, m.endpoints.Len())
 		for _, endpt := range m.endpoints.Endpoints() {
+			// filter on group
+			if group != "" && endpt.Group != group {
+				continue
+			}
+			// filter on status
+			if status != "" && endpt.Status != status {
+				continue
+			}
 			// never show command
 			endpt.Command = nil
 			if !showKey {
 				endpt.Key = ""
 			}
 			// score is updated at every call as it depends on all the other endpoints
-			endpt.Score = m.reducer.Score(endpt.UUID)
+			endpt.Score = m.reducer.BoundedScore(endpt.UUID)
 			// add endpoint to the list to return
 			endpoints = append(endpoints, endpt)
 		}
@@ -179,8 +198,29 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
 
 	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
-		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
-			if rq.Method == "DELETE" {
+		if endpt, ok := m.endpoints.GetMutByUUID(euuid); ok {
+			switch rq.Method {
+			case "POST":
+				var fields map[string]interface{}
+				if err = readPostAsJSON(rq, &fields); err != nil {
+					wt.Write(admErrStr(err.Error()))
+					return
+				}
+
+				for field, value := range fields {
+					switch field {
+					case "status":
+						if status, ok := value.(string); ok {
+							endpt.Status = status
+						}
+					case "group":
+						if group, ok := value.(string); ok {
+							endpt.Group = group
+						}
+					}
+				}
+
+			case "DELETE":
 				// deleting endpoints from live config
 				m.endpoints.DelByUUID(euuid)
 				// deleting endpoints from config
@@ -190,12 +230,13 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 					log.Errorf("GetEndpoint failed to save config: %s", err)
 				}
 			}
+
 			// we return the endpoint anyway
 			if !showKey {
 				endpt.Key = ""
 			}
 			// score is updated at every call as it depends on all the other endpoints
-			endpt.Score = m.reducer.Score(endpt.UUID)
+			endpt.Score = m.reducer.BoundedScore(endpt.UUID)
 			wt.Write(NewAdminAPIResponse(endpt).ToJSON())
 		} else {
 			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
@@ -328,7 +369,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	// default limit
 	limit := 1000
 
-	logs := make([]evtx.GoEvtxMap, 0)
+	logs := make([]*event.EdrEvent, 0)
 	pStart := rq.URL.Query().Get("start")
 	pStop := rq.URL.Query().Get("stop")
 	pLast := rq.URL.Query().Get("last")
@@ -650,6 +691,7 @@ func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Reques
 									if data, err := ioutil.ReadAll(r); err == nil {
 										// if we want the raw file
 										if raw {
+											wt.Header().Set("Content-Type", "application/octet-stream")
 											wt.Write(data)
 										} else {
 											wt.Write(admJSONResp(data))
@@ -703,12 +745,12 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 
 	switch rq.Method {
 	case "GET":
-		rulesList := make([]rules.Rule, 0, m.geneEng.Count())
+		rulesList := make([]engine.Rule, 0, m.geneEng.Count())
 		if name == "" {
 			name = ".*"
 		}
 		for r := range m.geneEng.GetRawRule(name) {
-			jr := rules.Rule{}
+			jr := engine.Rule{}
 			if err := json.Unmarshal([]byte(r), &jr); err != nil {
 				wt.Write(admErrStr(err.Error()))
 				return
@@ -792,10 +834,10 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 					defer fd.Close()
 
 					// we verify we can decode all the body
-					newRules := make(map[string]rules.Rule)
+					newRules := make(map[string]engine.Rule)
 					dec := json.NewDecoder(bytes.NewReader(b))
 					for {
-						jr := rules.Rule{}
+						jr := engine.Rule{}
 						err := dec.Decode(&jr)
 
 						if err == io.EOF {
@@ -930,6 +972,7 @@ func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	stream := m.eventStreamer.NewStream()
+	stream.Stream()
 	defer stream.Close()
 
 	go wsHandleControlMessage(c)
@@ -951,13 +994,14 @@ func (m *Manager) admAPIStreamDetections(w http.ResponseWriter, r *http.Request)
 	defer c.Close()
 
 	stream := m.eventStreamer.NewStream()
+	stream.Stream()
 	defer stream.Close()
 
 	go wsHandleControlMessage(c)
 
 	for e := range stream.S {
 		// check if event is associated to a detection
-		if _, err := e.Get(&sigPath); err == nil {
+		if e.IsDetection() {
 			err = c.WriteJSON(e)
 			if err != nil {
 				break
@@ -985,11 +1029,13 @@ func (m *Manager) runAdminAPI() {
 		rt.Use(m.adminAuthorizationMiddleware)
 		// Manages Compression
 		rt.Use(gunzipMiddleware)
+		// Set API response headers
+		rt.Use(m.adminRespHeaderMiddleware)
 
 		// Routes initialization
 
 		rt.HandleFunc(AdmAPIEndpointsPath, m.admAPIEndpoints).Methods("GET", "PUT")
-		rt.HandleFunc(AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointCommandPath, m.admAPIEndpointCommand).Methods("GET", "POST")
 		rt.HandleFunc(AdmAPIEndpointCommandFieldPath, m.admAPIEndpointCommandField).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointsReportsPath, m.admAPIEndpointsReports).Methods("GET")

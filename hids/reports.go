@@ -11,6 +11,7 @@ import (
 // Report structure
 type Report struct {
 	Processes map[string]ProcessTrack `json:"processes"`
+	Modules   []ModuleInfo            `json:"modules"`
 	Drivers   []DriverInfo            `json:"drivers"`
 	Commands  []ReportCommand         `json:"commands"`
 	StartTime time.Time               `json:"start-timestamp"` // time at which report generation started

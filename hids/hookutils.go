@@ -5,10 +5,10 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/0xrawsec/gene/engine"
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
+	"github.com/0xrawsec/whids/event"
 )
 
 func toString(i interface{}) string {
@@ -31,72 +31,66 @@ func terminate(pid int) error {
 }
 
 // helper function which checks if the event belongs to current WHIDS
-func isSysmonProcessTerminate(e *evtx.GoEvtxMap) bool {
+func isSysmonProcessTerminate(e *event.EdrEvent) bool {
 	return e.Channel() == sysmonChannel && e.EventID() == SysmonProcessTerminate
 }
 
-func srcPIDFromEvent(e *evtx.GoEvtxMap) int64 {
+func srcPIDFromEvent(e *event.EdrEvent) int64 {
 
-	if pid, err := e.GetInt(&pathSysmonProcessId); err == nil {
+	if pid, ok := e.GetInt(pathSysmonProcessId); ok {
 		return pid
 	}
 
-	if pid, err := e.GetInt(&pathSysmonSourceProcessId); err == nil {
+	if pid, ok := e.GetInt(pathSysmonSourceProcessId); ok {
 		return pid
 	}
 
 	return -1
 }
 
-func srcGUIDFromEvent(e *evtx.GoEvtxMap) string {
-	var procGUIDPath *evtx.GoEvtxPath
+func srcGUIDFromEvent(e *event.EdrEvent) string {
+	var procGUIDPath engine.XPath
 
 	// the interesting pid to dump depends on the event
 	switch e.EventID() {
 	case SysmonAccessProcess:
-		procGUIDPath = &pathSysmonSourceProcessGUID
+		procGUIDPath = pathSysmonSourceProcessGUID
 	case SysmonCreateRemoteThread:
-		procGUIDPath = &pathSysmonCRTSourceProcessGuid
+		procGUIDPath = pathSysmonCRTSourceProcessGuid
 	default:
-		procGUIDPath = &pathSysmonProcessGUID
+		procGUIDPath = pathSysmonProcessGUID
 	}
 
-	if guid, err := e.GetString(procGUIDPath); err == nil {
+	if guid, ok := e.GetString(procGUIDPath); ok {
 		return guid
 	}
 
 	return nullGUID
 }
 
-func processTrackFromEvent(h *HIDS, e *evtx.GoEvtxMap) *ProcessTrack {
+func processTrackFromEvent(h *HIDS, e *event.EdrEvent) *ProcessTrack {
 	if uuid := srcGUIDFromEvent(e); uuid != nullGUID {
 		return h.processTracker.GetByGuid(uuid)
 	}
 	return nil
 }
 
-func hasAction(e *evtx.GoEvtxMap, action string) bool {
-	if i, err := e.Get(&engine.ActionsPath); err == nil {
-		if actions, ok := (*i).([]string); ok {
-			for _, a := range actions {
-				if a == action {
-					return true
-				}
-			}
-		}
+func hasAction(e *event.EdrEvent, action string) bool {
+	if d := e.GetDetection(); d != nil {
+		return d.Actions.Contains(action)
 	}
 	return false
 }
 
 // Todo: move this function into evtx package
-func eventHas(e *evtx.GoEvtxMap, p *evtx.GoEvtxPath) bool {
-	_, err := e.GetString(p)
-	return err == nil
+func eventHas(e *event.EdrEvent, p engine.XPath) bool {
+	_, ok := e.GetString(p)
+	return ok
 }
 
-func getCriticality(e *evtx.GoEvtxMap) int {
-	if c, err := e.Get(&pathGeneCriticality); err == nil {
-		return (*c).(int)
+func getCriticality(e *event.EdrEvent) int {
+	if d := e.GetDetection(); d != nil {
+		return d.Criticality
 	}
 	return 0
 }

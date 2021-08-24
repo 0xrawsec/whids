@@ -15,7 +15,6 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/log"
@@ -34,8 +33,8 @@ func FlushDNSCache() error {
 	return cmd.Run()
 }
 
-// PrettyJSON returns a JSON pretty string out of i
-func PrettyJSON(i interface{}) string {
+// PrettyJson returns a JSON pretty string out of i
+func PrettyJson(i interface{}) string {
 	b, err := json.MarshalIndent(i, "", "    ")
 	if err != nil {
 		panic(err)
@@ -43,8 +42,16 @@ func PrettyJSON(i interface{}) string {
 	return string(b)
 }
 
-// JSON returns a JSON string out of i
-func JSON(i interface{}) string {
+func Json(i interface{}) []byte {
+	b, err := json.Marshal(i)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// JsonString returns a Json string out of i
+func JsonString(i interface{}) string {
 	b, err := json.Marshal(i)
 	if err != nil {
 		panic(err)
@@ -75,13 +82,6 @@ func Sha256StringArray(array []string) string {
 // the event has been JSON encoded with the json.Marshal
 func HashEventBytes(b []byte) string {
 	return data.Sha1(bytes.Trim(b, " \n\r\t"))
-}
-
-// HashEvent returns a hash from an event, it first json.Marshal
-// the event and then calls HashEventBytes
-func HashEvent(e *evtx.GoEvtxMap) string {
-	bs := evtx.ToJSON(e)
-	return HashEventBytes(bs)
 }
 
 /////////////////////////////// Windows Logger ////////////////////////////////

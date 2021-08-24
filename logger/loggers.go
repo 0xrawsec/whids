@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -126,7 +126,7 @@ func (l *EventLogger) InitTransaction() (id TransactionId) {
 
 // WriteEvent writes an event to an IndexedLogfile chosen according to
 // the internal algorithm of the EventLogger
-func (l *EventLogger) WriteEvent(id TransactionId, key string, evt *evtx.GoEvtxMap) (n int, err error) {
+func (l *EventLogger) WriteEvent(id TransactionId, key string, evt *event.EdrEvent) (n int, err error) {
 	var il *IndexedLogfile
 	var re *RawEvent
 

@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/whids/event"
 )
 
 type ConStat struct {
@@ -71,30 +73,22 @@ func (p *ProcStats) ConStat(ip string) *ConStat {
 	return p.Connections[ip]
 }
 
-type GeneScore struct {
+type ThreatScore struct {
 	Signatures map[string]uint `json:"signatures"`
 	Score      int64           `json:"score"`
 }
 
-func NewGeneScore() GeneScore {
-	return GeneScore{make(map[string]uint), 0}
+func NewGeneScore() ThreatScore {
+	return ThreatScore{make(map[string]uint), 0}
 }
 
-func (g *GeneScore) UpdateCriticality(criticality int64) {
-	g.Score += criticality
-}
-
-func (g *GeneScore) UpdateSignature(signature []string) {
-	for _, s := range signature {
-		g.Signatures[s]++
+func (g *ThreatScore) Update(d *engine.Detection) {
+	if d != nil {
+		for _, s := range d.Signature.List() {
+			g.Signatures[s.(string)]++
+		}
+		g.Score += int64(d.Criticality)
 	}
-}
-
-func (g *GeneScore) Update(criticality int64, signature []string) {
-	for _, s := range signature {
-		g.Signatures[s]++
-	}
-	g.Score += criticality
 }
 
 func sysmonHashesToMap(hashes string) map[string]string {
@@ -154,13 +148,14 @@ type ProcessTrack struct {
 	SignatureStatus        string            `json:"signature-status"`
 	Signed                 bool              `json:"signed"`
 	Ancestors              []string          `json:"ancestors"`
+	Modules                []*ModuleInfo     `json:"modules"`
 	Integrity              float64           `json:"integrity"`
 	IntegrityTimeout       bool              `json:"integrity-timeout"`
 	MemDumped              bool              `json:"memory-dumped"`
 	DumpCount              int               `json:"dump-count"`
 	ChildCount             int               `json:"child-count"` // number of currently running child proceses
 	Stats                  ProcStats         `json:"statistics"`
-	GeneScore              GeneScore         `json:"gene-score"`
+	ThreatScore            ThreatScore       `json:"threat-score"`
 	Terminated             bool              `json:"terminated"`
 	TimeTerminated         time.Time         `json:"time-terminated"`
 }
@@ -176,9 +171,10 @@ func NewProcessTrack(image, pguid, guid string, pid int64) *ProcessTrack {
 		Signature:         "?",
 		SignatureStatus:   "?",
 		Ancestors:         make([]string, 0),
+		Modules:           make([]*ModuleInfo, 0),
 		Integrity:         -1.0,
 		Stats:             NewProcStats(),
-		GeneScore:         NewGeneScore(),
+		ThreatScore:       NewGeneScore(),
 	}
 }
 
@@ -194,21 +190,81 @@ func (t *ProcessTrack) TerminateProcess() error {
 	return nil
 }
 
+type ModuleInfo struct {
+	hashes           string
+	Image            string            `json:"image"`
+	FileVersion      string            `json:"file-version"`
+	Description      string            `json:"description"`
+	Product          string            `json:"product"`
+	Company          string            `json:"company"`
+	OriginalFileName string            `json:"orginal-filename"`
+	Hashes           map[string]string `json:"hashes"`
+	Signature        string            `json:"signature"`
+	SignatureStatus  string            `json:"signature-status"`
+	Signed           bool              `json:"signed"`
+	// Statistics
+	LoadCount int64     `json:"load-count"`
+	FirstLoad time.Time `json:"first-load"`
+	LastLoad  time.Time `json:"last-load"`
+}
+
+func ModuleInfoFromEvent(e *event.EdrEvent) (i *ModuleInfo) {
+	var ok bool
+
+	i = &ModuleInfo{}
+	i.Image, _ = e.GetStringOr(pathSysmonImageLoaded, "?")
+	i.FileVersion, _ = e.GetStringOr(pathSysmonFileVersion, "?")
+	i.Description, _ = e.GetStringOr(pathSysmonDescription, "?")
+	i.Product, _ = e.GetStringOr(pathSysmonProduct, "?")
+	i.Company, _ = e.GetStringOr(pathSysmonCompany, "?")
+	i.OriginalFileName, _ = e.GetStringOr(pathSysmonOriginalFileName, "?")
+	if i.hashes, ok = e.GetString(pathSysmonHashes); ok {
+		i.Hashes = sysmonHashesToMap(i.hashes)
+	}
+	i.Signature, _ = e.GetStringOr(pathSysmonSignature, "?")
+	i.SignatureStatus, _ = e.GetStringOr(pathSysmonSignatureStatus, "?")
+	i.Signed, _ = e.GetBool(pathSysmonSigned)
+	i.LoadCount = 1
+	i.FirstLoad = e.Timestamp()
+	i.LastLoad = e.Timestamp()
+	return
+}
+
+func (i *ModuleInfo) Id() string {
+	return i.hashes
+}
+
+func (i *ModuleInfo) UpdateStatistics(other *ModuleInfo) {
+	i.LastLoad = other.LastLoad
+	i.LoadCount++
+}
+
 type DriverInfo struct {
 	/* Private */
 	hashes string
 
 	/* Public */
-	HashesMap       map[string]string `json:"hashes"`
 	Image           string            `json:"image"`
+	HashesMap       map[string]string `json:"hashes"`
+	Signed          bool              `json:"signed"`
 	Signature       string            `json:"signature"`
 	SignatureStatus string            `json:"signature-status"`
-	Signed          bool              `json:"signed"`
 }
 
-func (di *DriverInfo) SetHashes(hashes string) {
-	di.hashes = hashes
-	di.HashesMap = sysmonHashesToMap(hashes)
+func DriverInfoFromEvent(e *event.EdrEvent) (i *DriverInfo) {
+	var ok bool
+
+	i = &DriverInfo{}
+
+	i.Image, _ = e.GetStringOr(pathSysmonImageLoaded, "?")
+	if i.hashes, ok = e.GetString(pathSysmonHashes); ok {
+		i.HashesMap = sysmonHashesToMap(i.hashes)
+	}
+	i.Signature, _ = e.GetStringOr(pathSysmonSignature, "?")
+	i.SignatureStatus, _ = e.GetStringOr(pathSysmonSignatureStatus, "?")
+	i.Signed, _ = e.GetBool(pathSysmonSigned)
+
+	return
 }
 
 type ActivityTracker struct {
@@ -221,7 +277,8 @@ type ActivityTracker struct {
 	tpids       map[int64]*ProcessTrack // for terminated processes
 	blacklisted *datastructs.SyncedSet
 	free        *datastructs.Fifo
-
+	// modules loaded
+	modules map[string]*ModuleInfo
 	// driver loaded
 	Drivers []DriverInfo
 }
@@ -235,6 +292,7 @@ func NewActivityTracker() *ActivityTracker {
 		blacklisted: datastructs.NewSyncedSet(),
 		free:        &datastructs.Fifo{},
 		Drivers:     make([]DriverInfo, 0),
+		modules:     make(map[string]*ModuleInfo),
 	}
 	// startup the routine to free resources
 	pt.freeRtn()
@@ -374,6 +432,27 @@ func (pt *ActivityTracker) ContainsPID(pid int64) bool {
 	defer pt.RUnlock()
 	_, ok := pt.rpids[pid]
 	return ok
+}
+
+func (pt *ActivityTracker) Modules() (s []ModuleInfo) {
+	s = make([]ModuleInfo, 0)
+	for _, m := range pt.modules {
+		s = append(s, *m)
+	}
+	return
+}
+
+// GetModuleOrUpdate retrieves an already existing ModuleInfo or updates
+// the map of known ModuleInfo and returns the ModuleInfo updated
+func (pt *ActivityTracker) GetModuleOrUpdate(i *ModuleInfo) *ModuleInfo {
+	pt.Lock()
+	defer pt.Unlock()
+	if old, ok := pt.modules[i.Id()]; ok {
+		old.UpdateStatistics(i)
+		return old
+	}
+	pt.modules[i.Id()] = i
+	return i
 }
 
 func (pt *ActivityTracker) IsTerminated(guid string) bool {

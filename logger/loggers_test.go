@@ -1,27 +1,23 @@
 package logger
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/golang-utils/readers"
+	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 )
 
 var (
-	events = []string{
-		// regular log
-		`{"Event":{"EventData":{"EventType":"CreateKey","Image":"C:\\Windows\\servicing\\TrustedInstaller.exe","ProcessGuid":"{49F1AF32-38C1-5AC7-0000-00105E5D0B00}","ProcessId":"2544","TargetObject":"HKLM\\SOFTWARE\\Microsoft\\EnterpriseCertificates\\Disallowed","UtcTime":"2018-04-06 20:07:14.423"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA02.caldera.loc","Correlation":{},"EventID":"12","EventRecordID":"886970","Execution":{"ProcessID":"1456","ThreadID":"1712"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"12","TimeCreated":{"SystemTime":"2018-04-06T09:07:14.424360200Z"},"Version":"2"}}}`,
-		// alert log
-		`{"Event":{"EventData":{"CreationUtcTime":"2018-02-26 16:28:13.169","Image":"C:\\Program Files\\cagent\\cagent.exe","ProcessGuid":"{49F1AF32-11B0-5A90-0000-0010594E0100}","ProcessId":"1216","TargetFilename":"C:\\commander.exe","UtcTime":"2018-02-26 16:28:13.169"},"GeneInfo":{"Criticality":10,"Signature":["ExecutableFileCreated","NewExeCreatedInRoot"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"11","EventRecordID":"1274413","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"11","TimeCreated":{"SystemTime":"2018-02-26T16:28:13.185436300Z"},"Version":"2"}}}`,
-		`{"Event":{"EventData":{"CommandLine":"\"powershell\" -command -","Company":"Microsoft Corporation","CurrentDirectory":"C:\\Windows\\system32\\","Description":"Windows PowerShell","FileVersion":"6.1.7600.16385 (win7_rtm.090713-1255)","Hashes":"SHA1=5330FEDAD485E0E4C23B2ABE1075A1F984FDE9FC,MD5=852D67A27E454BD389FA7F02A8CBE23F,SHA256=A8FDBA9DF15E41B6F5C69C79F66A26A9D48E174F9E7018A371600B866867DAB8,IMPHASH=F2C0E8A5BD10DBC167455484050CD683","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","IntegrityLevel":"System","LogonGuid":"{49F1AF32-11AE-5A90-0000-0020E7030000}","LogonId":"0x3e7","ParentCommandLine":"C:\\commander.exe -f","ParentImage":"C:\\commander.exe","ParentProcessGuid":"{49F1AF32-359D-5A94-0000-0010A9530C00}","ParentProcessId":"3068","ProcessGuid":"{49F1AF32-35A0-5A94-0000-0010FE5E0C00}","ProcessId":"1244","Product":"Microsoft® Windows® Operating System","TerminalSessionId":"0","User":"NT AUTHORITY\\SYSTEM","UtcTime":"2018-02-26 16:28:16.514"},"GeneInfo":{"Criticality":10,"Signature":["HeurSpawnShell","PowershellStdin"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"1","EventRecordID":"1274784","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"1","TimeCreated":{"SystemTime":"2018-04-06T16:28:16.530122800Z"},"Version":"5"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"GeneInfo":{"Criticality":10,"Signature":["HeurMaliciousAccess","MaliciousLsassAccess","SuspWriteAccess","SuspiciousLsassAccess"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"2018-02-26T16:43:26.447894800Z"},"Version":"3"}}}`,
-	}
+	eventFile = "./data/events.json"
+	events    = make([]event.EdrEvent, 0)
 )
 
 const (
@@ -29,15 +25,25 @@ const (
 	month = day * 30
 )
 
-func emitEvents(count int, random bool) (ce chan *evtx.GoEvtxMap) {
-	timecreatedPath := evtx.Path("/Event/System/TimeCreated/SystemTime")
-	ce = make(chan *evtx.GoEvtxMap)
+func init() {
+	data, err := ioutil.ReadFile(eventFile)
+	if err != nil {
+		panic(err)
+	}
+	for line := range readers.Readlines(bytes.NewBuffer(data)) {
+		event := event.EdrEvent{}
+		json.Unmarshal(line, &event)
+		events = append(events, event)
+	}
+}
+
+func emitEvents(count int, random bool) (ce chan *event.EdrEvent) {
+	ce = make(chan *event.EdrEvent)
 	go func() {
 		defer close(ce)
 		for i := 0; i < count; i++ {
-			e := new(evtx.GoEvtxMap)
 			i := rand.Int() % len(events)
-			err := json.Unmarshal([]byte(events[i]), e)
+			e := events[i]
 			newTimestamp := time.Now()
 			if random {
 				delayMin := time.Duration(rand.Int()%120) * time.Minute
@@ -47,11 +53,8 @@ func emitEvents(count int, random bool) (ce chan *evtx.GoEvtxMap) {
 					newTimestamp = newTimestamp.Add(delayMin)
 				}
 			}
-			e.Set(&timecreatedPath, newTimestamp.Format(time.RFC3339Nano))
-			if err != nil {
-				log.Errorf("Cannot unmarshall event")
-			}
-			ce <- e
+			e.Event.System.TimeCreated.SystemTime = newTimestamp
+			ce <- &e
 		}
 	}()
 	return

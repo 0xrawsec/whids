@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/mux"
+	"github.com/gorilla/mux"
 )
 
 var (
@@ -274,56 +274,44 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 
 	etid := m.eventLogger.InitTransaction()
 	dtid := m.detectionLogger.InitTransaction()
-	extraPath := evtx.Path("/Event/EdrData")
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
 		tok := []byte(s.Text())
 		log.Debugf("Received Event: %s", string(tok))
-		e := evtx.GoEvtxMap{}
-
-		// ToDo: create an EdrData structure to store those info
-		extra := map[string]interface{}{
-			"Event": map[string]interface{}{
-				"Hash":        utils.HashEventBytes(tok),
-				"Detection":   false,
-				"ReceiptTime": time.Now(),
-			},
-			"Endpoint": map[string]interface{}{
-				"UUID": uuid,
-			},
-		}
-
-		if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
-			extra["Endpoint"].(map[string]interface{})["IP"] = endpt.IP
-			extra["Endpoint"].(map[string]interface{})["Hostname"] = endpt.Hostname
-			extra["Endpoint"].(map[string]interface{})["Group"] = endpt.Group
-		}
+		e := event.EdrEvent{}
 
 		if err := json.Unmarshal(tok, &e); err != nil {
 			log.Errorf("Failed to unmarshal: %s", tok)
 		} else {
-			var isAlert bool
 
-			// check if event is associated to an alert
-			if _, err := e.Get(&sigPath); err == nil {
-				isAlert = true
-				extra["Event"].(map[string]interface{})["Detection"] = true
+			// building up EdrData
+			edrData := event.EdrData{}
+			edrData.Event.Hash = utils.HashEventBytes(tok)
+			edrData.Event.ReceiptTime = time.Now().UTC()
+
+			edrData.Endpoint.UUID = uuid
+
+			if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
+				edrData.Endpoint.IP = endpt.IP
+				edrData.Endpoint.Hostname = endpt.Hostname
+				edrData.Endpoint.Group = endpt.Group
 			}
+			edrData.Event.Detection = e.IsDetection()
 
-			// set extra data
-			e.Set(&extraPath, extra)
+			// setting EdrData
+			e.Event.EdrData = &edrData
 
 			if endpt := m.mutEndpointFromRequest(rq); endpt != nil {
 				m.UpdateReducer(endpt.UUID, &e)
-				if isAlert {
-					endpt.LastDetection = e.TimeCreated()
+				if e.IsDetection() {
+					endpt.LastDetection = e.Timestamp()
 				}
 			} else {
 				log.Error("Failed to retrieve endpoint from request")
 			}
 
 			// If it is an alert
-			if isAlert {
+			if e.IsDetection() {
 				if _, err := m.detectionLogger.WriteEvent(dtid, uuid, &e); err != nil {
 					log.Errorf("Failed to write detection: %s", err)
 				}
@@ -334,7 +322,7 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 			}
 
 			// we queue event for streaming
-			m.eventStreamer.Queue(e)
+			m.eventStreamer.Queue(&e)
 		}
 		cnt++
 	}

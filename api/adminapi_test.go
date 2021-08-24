@@ -2,15 +2,19 @@ package api
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/gorilla/websocket"
 )
 
 func doRequest(method, url string) (r AdminAPIResponse) {
@@ -496,4 +500,100 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
 		t.FailNow()
 	}
+}
+
+func TestEventStream(t *testing.T) {
+	// cleanup previous data
+	clean(&mconf, &fconf)
+
+	m, mc := prepareTest()
+	defer func() {
+		m.Shutdown()
+		m.Wait()
+	}()
+
+	expctd := float64(20000)
+	total := float64(0)
+	sumEps := float64(0)
+	nclients := float64(4)
+	slowClients := float64(0)
+	wg := sync.WaitGroup{}
+
+	for i := float64(0); i < nclients; i++ {
+		u := url.URL{Scheme: "wss", Host: format("localhost:%d", 8001), Path: AdmAPIStreamEvents}
+		key := mconf.AdminAPI.Users[0].Key
+		dialer := *websocket.DefaultDialer
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		t.Logf("connecting to %s", u.String())
+		c, resp, err := dialer.Dial(u.String(), http.Header{"Api-Key": {key}})
+		if err != nil {
+			if err == websocket.ErrBadHandshake {
+				t.Logf("handshake failed with status %d", resp.StatusCode)
+			}
+			t.Errorf("failed to dial: %s", err)
+			t.FailNow()
+		}
+		defer c.Close()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			recvd := float64(0)
+			start := time.Now()
+			slow := false
+
+			if rand.Int()%2 == 0 {
+				slow = true
+				slowClients++
+			}
+
+			for {
+				_, _, err := c.ReadMessage()
+				if err != nil {
+					break
+				}
+				recvd++
+				if recvd == expctd {
+					break
+				}
+				// simulates a slow client
+				if slow {
+					time.Sleep(35 * time.Microsecond)
+				}
+			}
+			eps := recvd / float64(time.Since(start).Seconds())
+			total += recvd
+			// we take into account only normal clients
+			if !slow {
+				sumEps += eps
+				t.Logf("Normal client received %.1f EPS", eps)
+			} else {
+				t.Logf("Slow client received %.1f EPS", eps)
+			}
+		}()
+	}
+
+	mc.PostLogs(readerFromEvents(int(expctd)))
+	tick := time.NewTicker(60 * time.Second)
+loop:
+	for {
+		select {
+		case <-tick.C:
+			break loop
+		default:
+		}
+
+		if total == expctd*nclients {
+			wg.Wait()
+			break
+		}
+	}
+
+	if total != expctd*nclients {
+		t.Errorf("Received less events than expected received=%.0f VS expected=%.0f", total, expctd*nclients)
+		t.FailNow()
+	}
+
+	t.Logf("Average %.1f EPS/client", sumEps/(nclients-slowClients))
+
 }

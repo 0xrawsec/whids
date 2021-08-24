@@ -50,7 +50,6 @@ func (cc *ClientConfig) ManagerIP() net.IP {
 }
 
 func (cc *ClientConfig) DialContext(ctx context.Context, network, addr string) (con net.Conn, err error) {
-	log.Infof("Dial")
 	dialer := net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
@@ -68,8 +67,6 @@ func (cc *ClientConfig) DialContext(ctx context.Context, network, addr string) (
 }
 
 func (cc *ClientConfig) DialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
-
-	log.Infof("Dial TLS")
 	c, err := tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: cc.Unsafe})
 
 	if err != nil {

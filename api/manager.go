@@ -22,14 +22,14 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 
-	"github.com/0xrawsec/gene/reducer"
-
 	"github.com/google/uuid"
 
-	"github.com/0xrawsec/gene/engine"
+	"github.com/0xrawsec/gene/v2/engine"
+	"github.com/0xrawsec/gene/v2/reducer"
 	"github.com/0xrawsec/golang-misp/misp"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
@@ -475,7 +475,6 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 
 	// Create a new streamer
 	m.eventStreamer = NewEventStreamer()
-	m.eventStreamer.Stream()
 
 	if c.EndpointAPI.Port <= 0 || c.EndpointAPI.Port > 65535 {
 		return nil, fmt.Errorf("Manager Endpoint API Error: invalid port to listen to %d", c.EndpointAPI.Port)
@@ -535,7 +534,7 @@ func (m *Manager) LoadGeneEngine() error {
 		return err
 	}
 	// We update the engine only if no error loading the rules
-	m.geneEng = &e
+	m.geneEng = e
 	m.updateRules()
 	return nil
 }
@@ -607,19 +606,19 @@ var (
 )
 
 // UpdateReducer updates the reducer member of the Manager
-func (m *Manager) UpdateReducer(identifier string, e *evtx.GoEvtxMap) {
-	iArray, err := e.Get(&sigPath)
-	if err != nil {
-		// if it is a filtered event it is normal not to have signature field
-		return
-	}
+func (m *Manager) UpdateReducer(identifier string, e *event.EdrEvent) {
+	if e.Event.Detection != nil {
+		isigs := e.Event.Detection.Signature.List()
+		sigs := make([]string, 0, len(isigs))
 
-	sigs := make([]string, 0, len((*iArray).([]interface{})))
-	for _, s := range (*iArray).([]interface{}) {
-		sigs = append(sigs, s.(string))
-	}
+		for _, s := range isigs {
+			sigs = append(sigs, s.(string))
+		}
 
-	m.reducer.Update(e.TimeCreated(), identifier, sigs)
+		if len(sigs) > 0 {
+			m.reducer.Update(e.Timestamp(), identifier, sigs)
+		}
+	}
 }
 
 // Wait the Manager to Shutdown

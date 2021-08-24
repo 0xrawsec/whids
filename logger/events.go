@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/whids/event"
 )
 
 type RawEvent struct {
@@ -16,9 +16,9 @@ type RawEvent struct {
 	data      []byte
 }
 
-func NewRawEvent(e *evtx.GoEvtxMap) (r *RawEvent, err error) {
+func NewRawEvent(e *event.EdrEvent) (r *RawEvent, err error) {
 	r = &RawEvent{}
-	r.Timestamp = e.TimeCreated()
+	r.Timestamp = e.Timestamp()
 	r.data, err = json.Marshal(e)
 	return
 }
@@ -52,8 +52,8 @@ func (e *RawEvent) Encode() []byte {
 	return b
 }
 
-func (e *RawEvent) Event() (evt evtx.GoEvtxMap, err error) {
-	evt = make(evtx.GoEvtxMap)
+func (e *RawEvent) Event() (evt *event.EdrEvent, err error) {
+	evt = &event.EdrEvent{}
 	err = json.Unmarshal(e.data, &evt)
 	return
 }
