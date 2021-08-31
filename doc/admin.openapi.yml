@@ -1,0 +1,186 @@
+openapi: "3.0.2"
+info:
+  title: WHIDS API documentation
+  version: "1.0"
+servers:
+  - url: https://localhost:8001
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: api-key
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /endpoints:
+    get:
+      summary: List all endpoints
+      description: >
+        route use to list the available endpoints and configured to communicate with the manager.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uuid:
+                          type: string
+                        hostname:
+                          type: string
+                        ip:
+                          type: string
+                        group:
+                          type: string
+                        score:
+                          type: number
+                        status:
+                          type: string
+                        last-detection:
+                          type: string
+                        last-connection:
+                          type: string
+                      required: [
+                          uuid
+                          hostname
+                          ip
+                          group
+                          score
+                          status
+                          last-detection
+                          last-connection,
+                        ]
+                  message:
+                    type: string
+                  error:
+                    type: string
+    put:
+      summary: Adding a new endpoints 
+      description: > 
+        adds a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
+        You can now configure a new EDR agent on any endpoint.
+      responses:
+        "403":
+          description: Not Authorized
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  data: 
+                    type: object
+                    properties: 
+                      uuid: 
+                        type: string
+                      hostname: 
+                        type: string
+                      ip: 
+                        type: string
+                      key: 
+                        type: string
+                      last-connection: 
+                        type: string
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+
+  /endpoints/{endpoint_UUID}:
+    get:
+      summary: Get a single endpoints
+      description: >
+        route use to list information about the specified endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      hostname:
+                        type: string
+                      ip:
+                        type: string
+                      group:
+                        type: string
+                      score:
+                        type: number
+                      status:
+                        type: string
+                      last-detection:
+                        type: string
+                      last-connection:
+                        type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+    delete:
+      summary: Delete an endpoint 
+      description: > 
+        deletes an endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
+        credentials it will not be able to communicate with the manager any longer.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "403":
+          description: Not Authorized
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  data: 
+                    type: object
+                    properties: 
+                      uuid: 
+                        type: string
+                      hostname: 
+                        type: string
+                      ip: 
+                        type: string
+                      key: 
+                        type: string
+                      last-connection: 
+                        type: string
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+
