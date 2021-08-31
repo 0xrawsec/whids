@@ -236,7 +236,7 @@ paths:
 
   /endpoints/{endpoint_UUID}/alerts:
     get:
-      summary: Getting endpoint alerts 
+      summary: Getting endpoint alerts
       description: >
         API endpoint to use in order to retrieve alerts collected from a given endpoint
       parameters:
@@ -246,7 +246,7 @@ paths:
           schema:
             type: string
             format: uuid
-            
+
         - in: query
           name: start
           schema:
@@ -271,7 +271,6 @@ paths:
             type: string
           description: duration string used for getting alerts around pivot point. Specifying a pivot and a delta will search alerts from pivot-delta to pivot+delta
 
-
       responses:
         "403":
           description: Not Authorized
@@ -281,140 +280,135 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: array
-                    items: 
+                    items:
                       type: object
-                      properties: 
-                        Event: 
+                      properties:
+                        Event:
                           type: object
-                          properties: 
-                            EventData: 
+                          properties:
+                            EventData:
                               type: object
-                              properties: 
-                                Ancestors: 
+                              properties:
+                                Ancestors:
                                   type: string
-                                CommandLine: 
+                                CommandLine:
                                   type: string
-                                Company: 
+                                Company:
                                   type: string
-                                CurrentDirectory: 
+                                CurrentDirectory:
                                   type: string
-                                Description: 
+                                Description:
                                   type: string
-                                FileVersion: 
+                                FileVersion:
                                   type: string
-                                Hashes: 
+                                Hashes:
                                   type: string
-                                Image: 
+                                Image:
                                   type: string
-                                ImageSize: 
+                                ImageSize:
                                   type: string
-                                IntegrityLevel: 
+                                IntegrityLevel:
                                   type: string
-                                LogonGuid: 
+                                LogonGuid:
                                   type: string
-                                LogonId: 
+                                LogonId:
                                   type: string
-                                OriginalFileName: 
+                                OriginalFileName:
                                   type: string
-                                ParentCommandLine: 
+                                ParentCommandLine:
                                   type: string
-                                ParentImage: 
+                                ParentImage:
                                   type: string
-                                ParentIntegrityLevel: 
+                                ParentIntegrityLevel:
                                   type: string
-                                ParentProcessGuid: 
+                                ParentProcessGuid:
                                   type: string
-                                ParentProcessId: 
+                                ParentProcessId:
                                   type: string
-                                ParentServices: 
+                                ParentServices:
                                   type: string
-                                ParentUser: 
+                                ParentUser:
                                   type: string
-                                ProcessGuid: 
+                                ProcessGuid:
                                   type: string
-                                ProcessId: 
+                                ProcessId:
                                   type: string
-                                Product: 
+                                Product:
                                   type: string
-                                RuleName: 
+                                RuleName:
                                   type: string
-                                Services: 
+                                Services:
                                   type: string
-                                TerminalSessionId: 
+                                TerminalSessionId:
                                   type: string
-                                User: 
+                                User:
                                   type: string
-                                UtcTime: 
+                                UtcTime:
                                   type: string
-                            GeneInfo: 
+                            GeneInfo:
                               type: object
-                              properties: 
-                                Criticality: 
+                              properties:
+                                Criticality:
                                   type: number
-                                Signature: 
+                                Signature:
                                   type: array
-                                  items: 
+                                  items:
                                     type: string
-                            System: 
+                            System:
                               type: object
-                              properties: 
-                                Channel: 
+                              properties:
+                                Channel:
                                   type: string
-                                Computer: 
+                                Computer:
                                   type: string
-                                Correlation: 
+                                Correlation:
                                   type: object
-                                  properties: 
-                                    EventID: 
+                                  properties:
+                                    EventID:
                                       type: string
-                                EventRecordID: 
+                                EventRecordID:
                                   type: string
-                                Execution: 
+                                Execution:
                                   type: object
-                                  properties: 
-                                    ProcessID: 
+                                  properties:
+                                    ProcessID:
                                       type: string
-                                    ThreadID: 
+                                    ThreadID:
                                       type: string
-                                Keywords: 
+                                Keywords:
                                   type: string
-                                Level: 
+                                Level:
                                   type: string
-                                Opcode: 
+                                Opcode:
                                   type: string
-                                Provider: 
+                                Provider:
                                   type: object
-                                  properties: 
-                                    Guid: 
+                                  properties:
+                                    Guid:
                                       type: string
-                                    Name: 
+                                    Name:
                                       type: string
-                                Security: 
+                                Security:
                                   type: object
-                                  properties: 
-                                    UserID: 
+                                  properties:
+                                    UserID:
                                       type: string
-                                Task: 
+                                Task:
                                   type: string
-                                TimeCreated: 
+                                TimeCreated:
                                   type: object
-                                  properties: 
-                                    SystemTime: 
+                                  properties:
+                                    SystemTime:
                                       type: string
-                                Version: 
+                                Version:
                                   type: string
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
-
-               
-
-
-
 
   /endpoints/{endpoint_UUID}/artifacts/{process_GUID}/{event_hash}/{filename}:
     get:
@@ -472,4 +466,3 @@ paths:
                     type: string
                   error:
                     type: string
- 
