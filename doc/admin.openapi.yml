@@ -3,7 +3,7 @@ info:
   title: WHIDS API documentation
   version: "1.0"
 servers:
-  - url: https://localhost:8001
+  - url: https://127.0.0.1:8001
 
 components:
   securitySchemes:
@@ -66,36 +66,36 @@ paths:
                   error:
                     type: string
     put:
-      summary: Adding a new endpoints 
-      description: > 
+      summary: Adding a new endpoints
+      description: >
         adds a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
         You can now configure a new EDR agent on any endpoint.
       responses:
         "403":
           description: Not Authorized
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: object
-                    properties: 
-                      uuid: 
+                    properties:
+                      uuid:
                         type: string
-                      hostname: 
+                      hostname:
                         type: string
-                      ip: 
+                      ip:
                         type: string
-                      key: 
+                      key:
                         type: string
-                      last-connection: 
+                      last-connection:
                         type: string
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
 
   /endpoints/{endpoint_UUID}:
@@ -145,8 +145,8 @@ paths:
                   error:
                     type: string
     delete:
-      summary: Delete an endpoint 
-      description: > 
+      summary: Delete an endpoint
+      description: >
         deletes an endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
         credentials it will not be able to communicate with the manager any longer.
       parameters:
@@ -159,28 +159,134 @@ paths:
       responses:
         "403":
           description: Not Authorized
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: object
-                    properties: 
-                      uuid: 
+                    properties:
+                      uuid:
                         type: string
-                      hostname: 
+                      hostname:
                         type: string
-                      ip: 
+                      ip:
                         type: string
-                      key: 
+                      key:
                         type: string
-                      last-connection: 
+                      last-connection:
                         type: string
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
 
+  /endpoints/{endpoint_UUID}/artifacts:
+    get:
+      summary: List available endpoint artifacts
+      description: >
+        list the artifacts collected (following an alert) on a given endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: since
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used to retrieve artifact collected last updated after this date
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        update:
+                          type: string
+                        process-guid:
+                          type: string
+                        event-hash:
+                          type: string
+                        base-url:
+                          type: string
+                        files:
+                          type: array
+                          items:
+                            type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+  /endpoints/{endpoint_UUID}/artifacts/{process_GUID}/{event_hash}/{filename}:
+    get:
+      summary: Download a given artifact
+      description: >
+        download a given artifact
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: process_GUID
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: event_hash
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: raw
+          schema:
+            type: boolean
+          description: >
+            telling that we want to receive the raw file
+        - in: query
+          name: gunzip
+          schema:
+            type: boolean
+          description: >
+            instructing that artifact content must be gunzipped before being sent
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+ 
