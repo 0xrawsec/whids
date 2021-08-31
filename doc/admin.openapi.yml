@@ -184,56 +184,6 @@ paths:
                   error:
                     type: string
 
-  /endpoints/{endpoint_UUID}/artifacts:
-    get:
-      summary: List available endpoint artifacts
-      description: >
-        list the artifacts collected (following an alert) on a given endpoint.
-      parameters:
-        - in: path
-          name: endpoint_UUID
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - in: query
-          name: since
-          schema:
-            type: string
-          description: RFC 3339 formatted timestamp used to retrieve artifact collected last updated after this date
-
-      responses:
-        "403":
-          description: Not Authorized
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        update:
-                          type: string
-                        process-guid:
-                          type: string
-                        event-hash:
-                          type: string
-                        base-url:
-                          type: string
-                        files:
-                          type: array
-                          items:
-                            type: string
-                  message:
-                    type: string
-                  error:
-                    type: string
-
   /endpoints/{endpoint_UUID}/alerts:
     get:
       summary: Getting endpoint alerts
@@ -405,6 +355,56 @@ paths:
                                       type: string
                                 Version:
                                   type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /endpoints/{endpoint_UUID}/artifacts:
+    get:
+      summary: List available endpoint artifacts
+      description: >
+        list the artifacts collected (following an alert) on a given endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: since
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used to retrieve artifact collected last updated after this date
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        update:
+                          type: string
+                        process-guid:
+                          type: string
+                        event-hash:
+                          type: string
+                        base-url:
+                          type: string
+                        files:
+                          type: array
+                          items:
+                            type: string
                   message:
                     type: string
                   error:
