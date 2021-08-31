@@ -233,6 +233,189 @@ paths:
                     type: string
                   error:
                     type: string
+
+  /endpoints/{endpoint_UUID}/alerts:
+    get:
+      summary: Getting endpoint alerts 
+      description: >
+        API endpoint to use in order to retrieve alerts collected from a given endpoint
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+            
+        - in: query
+          name: start
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as starting point for getting alerts
+
+        - in: query
+          name: since
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as stopping point for getting alerts
+
+        - in: query
+          name: pivot
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as pivot point for retrieving logs
+
+        - in: query
+          name: delta
+          schema:
+            type: string
+          description: duration string used for getting alerts around pivot point. Specifying a pivot and a delta will search alerts from pivot-delta to pivot+delta
+
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  data: 
+                    type: array
+                    items: 
+                      type: object
+                      properties: 
+                        Event: 
+                          type: object
+                          properties: 
+                            EventData: 
+                              type: object
+                              properties: 
+                                Ancestors: 
+                                  type: string
+                                CommandLine: 
+                                  type: string
+                                Company: 
+                                  type: string
+                                CurrentDirectory: 
+                                  type: string
+                                Description: 
+                                  type: string
+                                FileVersion: 
+                                  type: string
+                                Hashes: 
+                                  type: string
+                                Image: 
+                                  type: string
+                                ImageSize: 
+                                  type: string
+                                IntegrityLevel: 
+                                  type: string
+                                LogonGuid: 
+                                  type: string
+                                LogonId: 
+                                  type: string
+                                OriginalFileName: 
+                                  type: string
+                                ParentCommandLine: 
+                                  type: string
+                                ParentImage: 
+                                  type: string
+                                ParentIntegrityLevel: 
+                                  type: string
+                                ParentProcessGuid: 
+                                  type: string
+                                ParentProcessId: 
+                                  type: string
+                                ParentServices: 
+                                  type: string
+                                ParentUser: 
+                                  type: string
+                                ProcessGuid: 
+                                  type: string
+                                ProcessId: 
+                                  type: string
+                                Product: 
+                                  type: string
+                                RuleName: 
+                                  type: string
+                                Services: 
+                                  type: string
+                                TerminalSessionId: 
+                                  type: string
+                                User: 
+                                  type: string
+                                UtcTime: 
+                                  type: string
+                            GeneInfo: 
+                              type: object
+                              properties: 
+                                Criticality: 
+                                  type: number
+                                Signature: 
+                                  type: array
+                                  items: 
+                                    type: string
+                            System: 
+                              type: object
+                              properties: 
+                                Channel: 
+                                  type: string
+                                Computer: 
+                                  type: string
+                                Correlation: 
+                                  type: object
+                                  properties: 
+                                    EventID: 
+                                      type: string
+                                EventRecordID: 
+                                  type: string
+                                Execution: 
+                                  type: object
+                                  properties: 
+                                    ProcessID: 
+                                      type: string
+                                    ThreadID: 
+                                      type: string
+                                Keywords: 
+                                  type: string
+                                Level: 
+                                  type: string
+                                Opcode: 
+                                  type: string
+                                Provider: 
+                                  type: object
+                                  properties: 
+                                    Guid: 
+                                      type: string
+                                    Name: 
+                                      type: string
+                                Security: 
+                                  type: object
+                                  properties: 
+                                    UserID: 
+                                      type: string
+                                Task: 
+                                  type: string
+                                TimeCreated: 
+                                  type: object
+                                  properties: 
+                                    SystemTime: 
+                                      type: string
+                                Version: 
+                                  type: string
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+
+               
+
+
+
+
   /endpoints/{endpoint_UUID}/artifacts/{process_GUID}/{event_hash}/{filename}:
     get:
       summary: Download a given artifact
