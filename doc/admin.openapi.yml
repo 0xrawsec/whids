@@ -1,0 +1,468 @@
+openapi: "3.0.2"
+info:
+  title: WHIDS API documentation
+  version: "1.0"
+servers:
+  - url: https://127.0.0.1:8001
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: api-key
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /endpoints:
+    get:
+      summary: List all endpoints
+      description: >
+        route use to list the available endpoints and configured to communicate with the manager.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uuid:
+                          type: string
+                        hostname:
+                          type: string
+                        ip:
+                          type: string
+                        group:
+                          type: string
+                        score:
+                          type: number
+                        status:
+                          type: string
+                        last-detection:
+                          type: string
+                        last-connection:
+                          type: string
+                      required: [
+                          uuid
+                          hostname
+                          ip
+                          group
+                          score
+                          status
+                          last-detection
+                          last-connection,
+                        ]
+                  message:
+                    type: string
+                  error:
+                    type: string
+    put:
+      summary: Adding a new endpoints
+      description: >
+        adds a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
+        You can now configure a new EDR agent on any endpoint.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      hostname:
+                        type: string
+                      ip:
+                        type: string
+                      key:
+                        type: string
+                      last-connection:
+                        type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /endpoints/{endpoint_UUID}:
+    get:
+      summary: Get a single endpoints
+      description: >
+        route use to list information about the specified endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      hostname:
+                        type: string
+                      ip:
+                        type: string
+                      group:
+                        type: string
+                      score:
+                        type: number
+                      status:
+                        type: string
+                      last-detection:
+                        type: string
+                      last-connection:
+                        type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+    delete:
+      summary: Delete an endpoint
+      description: >
+        deletes an endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
+        credentials it will not be able to communicate with the manager any longer.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      hostname:
+                        type: string
+                      ip:
+                        type: string
+                      key:
+                        type: string
+                      last-connection:
+                        type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /endpoints/{endpoint_UUID}/alerts:
+    get:
+      summary: Getting endpoint alerts
+      description: >
+        API endpoint to use in order to retrieve alerts collected from a given endpoint
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+        - in: query
+          name: start
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as starting point for getting alerts
+
+        - in: query
+          name: since
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as stopping point for getting alerts
+
+        - in: query
+          name: pivot
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used as pivot point for retrieving logs
+
+        - in: query
+          name: delta
+          schema:
+            type: string
+          description: duration string used for getting alerts around pivot point. Specifying a pivot and a delta will search alerts from pivot-delta to pivot+delta
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        Event:
+                          type: object
+                          properties:
+                            EventData:
+                              type: object
+                              properties:
+                                Ancestors:
+                                  type: string
+                                CommandLine:
+                                  type: string
+                                Company:
+                                  type: string
+                                CurrentDirectory:
+                                  type: string
+                                Description:
+                                  type: string
+                                FileVersion:
+                                  type: string
+                                Hashes:
+                                  type: string
+                                Image:
+                                  type: string
+                                ImageSize:
+                                  type: string
+                                IntegrityLevel:
+                                  type: string
+                                LogonGuid:
+                                  type: string
+                                LogonId:
+                                  type: string
+                                OriginalFileName:
+                                  type: string
+                                ParentCommandLine:
+                                  type: string
+                                ParentImage:
+                                  type: string
+                                ParentIntegrityLevel:
+                                  type: string
+                                ParentProcessGuid:
+                                  type: string
+                                ParentProcessId:
+                                  type: string
+                                ParentServices:
+                                  type: string
+                                ParentUser:
+                                  type: string
+                                ProcessGuid:
+                                  type: string
+                                ProcessId:
+                                  type: string
+                                Product:
+                                  type: string
+                                RuleName:
+                                  type: string
+                                Services:
+                                  type: string
+                                TerminalSessionId:
+                                  type: string
+                                User:
+                                  type: string
+                                UtcTime:
+                                  type: string
+                            GeneInfo:
+                              type: object
+                              properties:
+                                Criticality:
+                                  type: number
+                                Signature:
+                                  type: array
+                                  items:
+                                    type: string
+                            System:
+                              type: object
+                              properties:
+                                Channel:
+                                  type: string
+                                Computer:
+                                  type: string
+                                Correlation:
+                                  type: object
+                                  properties:
+                                    EventID:
+                                      type: string
+                                EventRecordID:
+                                  type: string
+                                Execution:
+                                  type: object
+                                  properties:
+                                    ProcessID:
+                                      type: string
+                                    ThreadID:
+                                      type: string
+                                Keywords:
+                                  type: string
+                                Level:
+                                  type: string
+                                Opcode:
+                                  type: string
+                                Provider:
+                                  type: object
+                                  properties:
+                                    Guid:
+                                      type: string
+                                    Name:
+                                      type: string
+                                Security:
+                                  type: object
+                                  properties:
+                                    UserID:
+                                      type: string
+                                Task:
+                                  type: string
+                                TimeCreated:
+                                  type: object
+                                  properties:
+                                    SystemTime:
+                                      type: string
+                                Version:
+                                  type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /endpoints/{endpoint_UUID}/artifacts:
+    get:
+      summary: List available endpoint artifacts
+      description: >
+        list the artifacts collected (following an alert) on a given endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: since
+          schema:
+            type: string
+          description: RFC 3339 formatted timestamp used to retrieve artifact collected last updated after this date
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        update:
+                          type: string
+                        process-guid:
+                          type: string
+                        event-hash:
+                          type: string
+                        base-url:
+                          type: string
+                        files:
+                          type: array
+                          items:
+                            type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /endpoints/{endpoint_UUID}/artifacts/{process_GUID}/{event_hash}/{filename}:
+    get:
+      summary: Download a given artifact
+      description: >
+        download a given artifact
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: process_GUID
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: event_hash
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: raw
+          schema:
+            type: boolean
+          description: >
+            telling that we want to receive the raw file
+        - in: query
+          name: gunzip
+          schema:
+            type: boolean
+          description: >
+            instructing that artifact content must be gunzipped before being sent
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
