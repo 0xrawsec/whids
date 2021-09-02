@@ -15,11 +15,178 @@ security:
   - ApiKeyAuth: []
 
 paths:
+  /stats:
+    get:
+      summary: Get EDR statistics
+      tags:
+        - Statistics
+      description: >
+        Use to retrieve basic statistics about the EDR manager
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      endpoint-count:
+                        type: number
+                      rule-count:
+                        type: number
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+  /rules:
+    get:
+      summary: List rules loaded in the EDR
+      tags:
+        - Rules management
+      description: >
+        Use to list rules loaded in the EDR manager deployed on all the endpoints connected
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: string
+          description: >
+            Regex used to find to the rule
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      endpoint-count:
+                        type: number
+                      rule-count:
+                        type: number
+                  message:
+                    type: string
+                  error:
+                    type: string
+    delete:
+      summary: Delete a rule
+      tags:
+        - Rules management
+      description: >
+        Used to delete a rule from the EDR manager. The engine needs to be reloaded after deletion
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: string
+          description: >
+            Rule's name
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+    post:
+      summary: Adding a new rule
+      tags:
+        - Rules management
+      description: >
+        Use to add a new rule to the manager or update an existing rule. In case of update the rule engine needs to be reloaded
+      parameters:
+        - in: query
+          name: update
+          required: true
+          schema:
+            type: boolean
+          description: >
+            Set to true to force update if rule already exists [1|0|t|f|true|false]
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Name:
+                    type: string
+                  Tags:
+                    type: array
+                    items:
+                      type: string
+                  Meta:
+                    type: object
+                    properties:
+                      EventIDs:
+                        type: array
+                        items:
+                          type: number
+                      Channels:
+                        type: array
+                        items:
+                          type: string
+                      Computers:
+                        type: array
+                        items:
+                          type: string
+                      ATTACK:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            ID:
+                              type: string
+                            Tactic:
+                              type: string
+                            Reference:
+                              type: string
+                      Criticality:
+                        type: number
+                      Disable:
+                        type: boolean
+                      Filter:
+                        type: boolean
+                  Matches:
+                    type: array
+                    items:
+                      type: string
+                  Condition:
+                    type: string
+
   /endpoints:
     get:
       summary: List all endpoints
+      tags:
+        - Endpoints management
       description: >
-        route use to list the available endpoints and configured to communicate with the manager.
+        Use to list the available endpoints and configured to communicate with the manager.
       parameters:
         - in: query
           name: group
@@ -82,8 +249,10 @@ paths:
 
     put:
       summary: Adding a new endpoints
+      tags:
+        - Endpoints management    
       description: >
-        adds a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
+        Add a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
         You can now configure a new EDR agent on any endpoint.
       responses:
         "403":
@@ -116,8 +285,10 @@ paths:
   /endpoints/{endpoint_UUID}:
     get:
       summary: Get a single endpoints
+      tags:
+        - Endpoints management
       description: >
-        route use to list information about the specified endpoint.
+        Use to list information about the specified endpoint.
       parameters:
         - in: path
           name: endpoint_UUID
@@ -161,8 +332,10 @@ paths:
                     type: string
     delete:
       summary: Delete an endpoint
+      tags:
+        - Endpoints management   
       description: >
-        deletes an endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
+        Delete endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
         credentials it will not be able to communicate with the manager any longer.
       parameters:
         - in: path
@@ -202,8 +375,10 @@ paths:
   /endpoints/{endpoint_UUID}/alerts:
     get:
       summary: Getting endpoint alerts
+      tags:
+        - Endpoints alerts
       description: >
-        API endpoint to use in order to retrieve alerts collected from a given endpoint
+        Use to retrieve alerts collected from a given endpoint
       parameters:
         - in: path
           name: endpoint_UUID
@@ -378,8 +553,10 @@ paths:
   /endpoints/{endpoint_UUID}/artifacts:
     get:
       summary: List available endpoint artifacts
+      tags:
+        - Endpoints artifacts      
       description: >
-        list the artifacts collected (following an alert) on a given endpoint.
+        Use to list the artifacts collected (following an alert) on a given endpoint.
       parameters:
         - in: path
           name: endpoint_UUID
@@ -428,8 +605,11 @@ paths:
   /endpoints/{endpoint_UUID}/artifacts/{process_GUID}/{event_hash}/{filename}:
     get:
       summary: Download a given artifact
+      tags:
+        - Endpoints artifacts      
+
       description: >
-        download a given artifact
+        Use to download a given artifact
       parameters:
         - in: path
           name: endpoint_UUID
@@ -457,13 +637,13 @@ paths:
           schema:
             type: boolean
           description: >
-            telling that we want to receive the raw file
+            If you need to download the raw file
         - in: query
           name: gunzip
           schema:
             type: boolean
           description: >
-            instructing that artifact content must be gunzipped before being sent
+            If you need to gunzip that the artifact before being sent
 
       responses:
         "403":
