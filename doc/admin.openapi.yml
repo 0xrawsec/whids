@@ -237,7 +237,7 @@ paths:
       tags:
         - Endpoints management
       description: >
-        Use to list the available endpoints and configured to communicate with the manager.
+        Use to list the available endpoints and configured to communicate with the manager or define endpoint settings (group, status, ...)
       parameters:
         - in: query
           name: group
@@ -251,6 +251,28 @@ paths:
             type: string
           description: >
             filter on specified endpoints' status
+        - in: query
+          name: status_definition
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                description: >
+                  Set a status on the endpoint
+        - in: query
+          name: group_definition
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  group:
+                    type: string
+                description: >
+                  Affect the endpoint to a group
 
       responses:
         "403":
