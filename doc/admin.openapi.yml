@@ -195,16 +195,16 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: string
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
   /rules/reload:
     get:
-      summary: Reloading rules 
+      summary: Reloading rules
       tags:
         - Rules management
       description: >
@@ -218,20 +218,18 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: object
-                    properties: 
-                      endpoint-count: 
+                    properties:
+                      endpoint-count:
                         type: number
-                      rule-count: 
+                      rule-count:
                         type: number
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
-
-
 
   /endpoints:
     get:
@@ -303,7 +301,7 @@ paths:
     put:
       summary: Adding a new endpoints
       tags:
-        - Endpoints management    
+        - Endpoints management
       description: >
         Add a new endpoint to the EDR. The endpoint will also be added to the configuration of the manager and committed to disk. 
         You can now configure a new EDR agent on any endpoint.
@@ -386,7 +384,7 @@ paths:
     delete:
       summary: Delete an endpoint
       tags:
-        - Endpoints management   
+        - Endpoints management
       description: >
         Delete endpoint from the EDR. This change is immediate and persistent. Thus if an EDR agent is still configured using these
         credentials it will not be able to communicate with the manager any longer.
@@ -607,7 +605,7 @@ paths:
     get:
       summary: List available endpoint artifacts
       tags:
-        - Endpoints artifacts      
+        - Endpoints artifacts
       description: >
         Use to list the artifacts collected (following an alert) on a given endpoint.
       parameters:
@@ -659,7 +657,7 @@ paths:
     get:
       summary: Download a given artifact
       tags:
-        - Endpoints artifacts      
+        - Endpoints artifacts
 
       description: >
         Use to download a given artifact
@@ -717,9 +715,9 @@ paths:
 
   /endpoints/reports:
     get:
-      summary: List all endpoints reports 
+      summary: List all endpoints reports
       tags:
-        - Endpoints reports      
+        - Endpoints reports
       description: >
         Use to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
       responses:
@@ -730,93 +728,92 @@ paths:
           content:
             application/json:
               schema:
-                properties: 
-                    data: 
-                      type: object
-                      properties: 
-                        03e31275-2277-d8e0-bb5f-480fac7ee4ef: 
-                          type: object
-                          properties: 
-                            identifier: 
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      03e31275-2277-d8e0-bb5f-480fac7ee4ef:
+                        type: object
+                        properties:
+                          identifier:
+                            type: string
+                          alert-count:
+                            type: number
+                          count-by-signature:
+                            type: object
+                            properties:
+                              DefenderConfigChanged:
+                                type: number
+                              ExecTimestomping:
+                                type: number
+                              ExecutableFileCreated:
+                                type: number
+                              HeurPersistentRAT:
+                                type: number
+                              HeurSpawnShell:
+                                type: number
+                              NewAutorun:
+                                type: number
+                              StopSvchostAccess:
+                                type: number
+                              UnknownServices:
+                                type: number
+                              UntrustedDriverLoaded:
+                                type: number
+                              UntrustedService:
+                                type: number
+                          signatures:
+                            type: array
+                            items:
                               type: string
-                            alert-count: 
-                              type: number
-                            count-by-signature: 
-                              type: object
-                              properties: 
-                                DefenderConfigChanged: 
-                                  type: number
-                                ExecTimestomping: 
-                                  type: number
-                                ExecutableFileCreated: 
-                                  type: number
-                                HeurPersistentRAT: 
-                                  type: number
-                                HeurSpawnShell: 
-                                  type: number
-                                NewAutorun: 
-                                  type: number
-                                StopSvchostAccess: 
-                                  type: number
-                                UnknownServices: 
-                                  type: number
-                                UntrustedDriverLoaded: 
-                                  type: number
-                                UntrustedService: 
-                                  type: number
-                            signatures: 
-                              type: array
-                              items: 
-                                type: string
-                            techniques: 
-                              type: array
-                              items: 
-                                type: string
-                            tactics: 
-                              type: array
-                              items: 
-                                type: string
-                            signature-count: 
-                              type: number
-                            sum-alert-criticality: 
-                              type: number
-                            avg-alert-criticality: 
-                              type: number
-                            std-dev-alert-criticality: 
-                              type: number
-                            sum-rule-criticality: 
-                              type: number
-                            avg-signature-criticality: 
-                              type: number
-                            std-dev-signature-criticality: 
-                              type: number
-                            signature-diversity: 
-                              type: number
-                            count-uniq-signatures: 
-                              type: number
-                            signature-criticality-metric: 
-                              type: number
-                            alert-criticality-metric: 
-                              type: number
-                            score: 
-                              type: number
-                            start-time: 
+                          techniques:
+                            type: array
+                            items:
                               type: string
-                            median-time: 
+                          tactics:
+                            type: array
+                            items:
                               type: string
-                            stop-time: 
-                              type: string
-                    message: 
-                      type: string
-                    error: 
-                      type: string
-
+                          signature-count:
+                            type: number
+                          sum-alert-criticality:
+                            type: number
+                          avg-alert-criticality:
+                            type: number
+                          std-dev-alert-criticality:
+                            type: number
+                          sum-rule-criticality:
+                            type: number
+                          avg-signature-criticality:
+                            type: number
+                          std-dev-signature-criticality:
+                            type: number
+                          signature-diversity:
+                            type: number
+                          count-uniq-signatures:
+                            type: number
+                          signature-criticality-metric:
+                            type: number
+                          alert-criticality-metric:
+                            type: number
+                          score:
+                            type: number
+                          start-time:
+                            type: string
+                          median-time:
+                            type: string
+                          stop-time:
+                            type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
 
   /endpoints/{endpoint_UUID}/reports:
     get:
       summary: Get a single endpoints report
       tags:
-        - Endpoints reports      
+        - Endpoints reports
       description: >
         Use to get an EDR report about a given endpoint.
       parameters:
@@ -834,90 +831,90 @@ paths:
           content:
             application/json:
               schema:
-                properties: 
-                  data: 
+                properties:
+                  data:
                     type: object
-                    properties: 
-                      identifier: 
+                    properties:
+                      identifier:
                         type: string
-                      alert-count: 
+                      alert-count:
                         type: number
-                      count-by-signature: 
+                      count-by-signature:
                         type: object
-                        properties: 
-                          DefenderConfigChanged: 
+                        properties:
+                          DefenderConfigChanged:
                             type: number
-                          ExecTimestomping: 
+                          ExecTimestomping:
                             type: number
-                          ExecutableFileCreated: 
+                          ExecutableFileCreated:
                             type: number
-                          HeurPersistentRAT: 
+                          HeurPersistentRAT:
                             type: number
-                          HeurSpawnShell: 
+                          HeurSpawnShell:
                             type: number
-                          NewAutorun: 
+                          NewAutorun:
                             type: number
-                          StopSvchostAccess: 
+                          StopSvchostAccess:
                             type: number
-                          UnknownServices: 
+                          UnknownServices:
                             type: number
-                          UntrustedDriverLoaded: 
+                          UntrustedDriverLoaded:
                             type: number
-                          UntrustedService: 
+                          UntrustedService:
                             type: number
-                      signatures: 
+                      signatures:
                         type: array
-                        items: 
+                        items:
                           type: string
-                      techniques: 
+                      techniques:
                         type: array
-                        items: 
+                        items:
                           type: string
-                      tactics: 
+                      tactics:
                         type: array
-                        items: 
+                        items:
                           type: string
-                      signature-count: 
+                      signature-count:
                         type: number
-                      sum-alert-criticality: 
+                      sum-alert-criticality:
                         type: number
-                      avg-alert-criticality: 
+                      avg-alert-criticality:
                         type: number
-                      std-dev-alert-criticality: 
+                      std-dev-alert-criticality:
                         type: number
-                      sum-rule-criticality: 
+                      sum-rule-criticality:
                         type: number
-                      avg-signature-criticality: 
+                      avg-signature-criticality:
                         type: number
-                      std-dev-signature-criticality: 
+                      std-dev-signature-criticality:
                         type: number
-                      signature-diversity: 
+                      signature-diversity:
                         type: number
-                      count-uniq-signatures: 
+                      count-uniq-signatures:
                         type: number
-                      signature-criticality-metric: 
+                      signature-criticality-metric:
                         type: number
-                      alert-criticality-metric: 
+                      alert-criticality-metric:
                         type: number
-                      score: 
+                      score:
                         type: number
-                      start-time: 
+                      start-time:
                         type: string
-                      median-time: 
+                      median-time:
                         type: string
-                      stop-time: 
+                      stop-time:
                         type: string
-                  message: 
+                  message:
                     type: string
-                  error: 
+                  error:
                     type: string
 
     delete:
-      summary: Delete an endpoint report 
+      summary: Delete an endpoint report
       tags:
-        - Endpoints reports      
+        - Endpoints reports
       description: >
-       Use to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
+        Use to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
       parameters:
         - in: path
           name: endpoint_UUID
@@ -930,7 +927,3 @@ paths:
           description: Not Authorized
         "200":
           description: OK
-
-
-
-
