@@ -179,6 +179,59 @@ paths:
                       type: string
                   Condition:
                     type: string
+  /rules/save:
+    get:
+      summary: Save rules
+      tags:
+        - Rules management
+      description: >
+        Endpoint to use to save rules.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  data: 
+                    type: string
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+  /rules/reload:
+    get:
+      summary: Reloading rules 
+      tags:
+        - Rules management
+      description: >
+        Use to reload the rule engine.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  data: 
+                    type: object
+                    properties: 
+                      endpoint-count: 
+                        type: number
+                      rule-count: 
+                        type: number
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+
+
 
   /endpoints:
     get:
@@ -661,3 +714,223 @@ paths:
                     type: string
                   error:
                     type: string
+
+  /endpoints/reports:
+    get:
+      summary: List all endpoints reports 
+      tags:
+        - Endpoints reports      
+      description: >
+        Use to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                properties: 
+                    data: 
+                      type: object
+                      properties: 
+                        03e31275-2277-d8e0-bb5f-480fac7ee4ef: 
+                          type: object
+                          properties: 
+                            identifier: 
+                              type: string
+                            alert-count: 
+                              type: number
+                            count-by-signature: 
+                              type: object
+                              properties: 
+                                DefenderConfigChanged: 
+                                  type: number
+                                ExecTimestomping: 
+                                  type: number
+                                ExecutableFileCreated: 
+                                  type: number
+                                HeurPersistentRAT: 
+                                  type: number
+                                HeurSpawnShell: 
+                                  type: number
+                                NewAutorun: 
+                                  type: number
+                                StopSvchostAccess: 
+                                  type: number
+                                UnknownServices: 
+                                  type: number
+                                UntrustedDriverLoaded: 
+                                  type: number
+                                UntrustedService: 
+                                  type: number
+                            signatures: 
+                              type: array
+                              items: 
+                                type: string
+                            techniques: 
+                              type: array
+                              items: 
+                                type: string
+                            tactics: 
+                              type: array
+                              items: 
+                                type: string
+                            signature-count: 
+                              type: number
+                            sum-alert-criticality: 
+                              type: number
+                            avg-alert-criticality: 
+                              type: number
+                            std-dev-alert-criticality: 
+                              type: number
+                            sum-rule-criticality: 
+                              type: number
+                            avg-signature-criticality: 
+                              type: number
+                            std-dev-signature-criticality: 
+                              type: number
+                            signature-diversity: 
+                              type: number
+                            count-uniq-signatures: 
+                              type: number
+                            signature-criticality-metric: 
+                              type: number
+                            alert-criticality-metric: 
+                              type: number
+                            score: 
+                              type: number
+                            start-time: 
+                              type: string
+                            median-time: 
+                              type: string
+                            stop-time: 
+                              type: string
+                    message: 
+                      type: string
+                    error: 
+                      type: string
+
+
+  /endpoints/{endpoint_UUID}/reports:
+    get:
+      summary: Get a single endpoints report
+      tags:
+        - Endpoints reports      
+      description: >
+        Use to get an EDR report about a given endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                properties: 
+                  data: 
+                    type: object
+                    properties: 
+                      identifier: 
+                        type: string
+                      alert-count: 
+                        type: number
+                      count-by-signature: 
+                        type: object
+                        properties: 
+                          DefenderConfigChanged: 
+                            type: number
+                          ExecTimestomping: 
+                            type: number
+                          ExecutableFileCreated: 
+                            type: number
+                          HeurPersistentRAT: 
+                            type: number
+                          HeurSpawnShell: 
+                            type: number
+                          NewAutorun: 
+                            type: number
+                          StopSvchostAccess: 
+                            type: number
+                          UnknownServices: 
+                            type: number
+                          UntrustedDriverLoaded: 
+                            type: number
+                          UntrustedService: 
+                            type: number
+                      signatures: 
+                        type: array
+                        items: 
+                          type: string
+                      techniques: 
+                        type: array
+                        items: 
+                          type: string
+                      tactics: 
+                        type: array
+                        items: 
+                          type: string
+                      signature-count: 
+                        type: number
+                      sum-alert-criticality: 
+                        type: number
+                      avg-alert-criticality: 
+                        type: number
+                      std-dev-alert-criticality: 
+                        type: number
+                      sum-rule-criticality: 
+                        type: number
+                      avg-signature-criticality: 
+                        type: number
+                      std-dev-signature-criticality: 
+                        type: number
+                      signature-diversity: 
+                        type: number
+                      count-uniq-signatures: 
+                        type: number
+                      signature-criticality-metric: 
+                        type: number
+                      alert-criticality-metric: 
+                        type: number
+                      score: 
+                        type: number
+                      start-time: 
+                        type: string
+                      median-time: 
+                        type: string
+                      stop-time: 
+                        type: string
+                  message: 
+                    type: string
+                  error: 
+                    type: string
+
+    delete:
+      summary: Delete an endpoint report 
+      tags:
+        - Endpoints reports      
+      description: >
+       Use to delete a report for a given endpoint. A report can be deleted after an enpoint has been investigated.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+
+
+
+
