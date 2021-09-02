@@ -760,9 +760,6 @@ paths:
           description: Not Authorized
         "200":
           description: OK
-          
-
-
 
   /endpoints/reports:
     get:
@@ -978,3 +975,147 @@ paths:
           description: Not Authorized
         "200":
           description: OK
+
+  /endpoints/{endpoint_UUID}/command:
+    get:
+      summary: Getting command information
+      tags:
+        - Command execution
+      description: >
+        this API endpoint is used to get information about a pending or executed command. In order to make sure the command has been ran, a specific flag in the response can be checked.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      name:
+                        type: string
+                      args:
+                        type: array
+                        items:
+                          type: string
+                      fetch:
+                        type: object
+                      stdout:
+                        type: string
+                      stderr:
+                        type: string
+                      error:
+                        type: string
+                      sent:
+                        type: boolean
+                      background:
+                        type: boolean
+                      completed:
+                        type: boolean
+                      timeout:
+                        type: number
+                      sent-time:
+                        type: string
+                  message:
+                    type: string
+                  error:
+                    type: string
+
+    post:
+      summary: Execute command on endpoint
+      tags:
+        - Command execution
+      description: >
+        this endpoint can be used to ask the endpoint to execute a command or fetch files from the endpoint. 
+        Files can also be dropped prior to command execution, this way it is possible to execute binaries or scripts not initially present on the endpoint.
+        Such dropped files are removed post command execution.
+        It is worth mentionning that it is the EDR agent installed on the endpoint which is responsible for checking commands to execute. 
+        So no connection from the EDR manager to the agent is made.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+        - in: query
+          name: command example
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  command-line:
+                    type: string
+                    example:
+                      - "drivers"
+                  fetch-files:
+                    type: array
+                    items:
+                      type: string
+                      example:
+                        - ""
+                  drop-files:
+                    type: array
+                    items:
+                      type: string
+                      example:
+                        - ""
+                  timeout:
+                    type: number
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+
+  /endpoints/{endpoint_UUID}/command/{field}:
+    get:
+      summary: Getting a specific field information
+      tags:
+        - Command execution
+      description: >
+        use to retrieve only one field of the command. This way it allows saving bandwith for polling patterns. Not all fields are accessible through that endpoint.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: field
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK (successfully authenticated)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: boolean
+                  message:
+                    type: string
+                  error:
+                    type: string
