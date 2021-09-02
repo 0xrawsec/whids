@@ -735,6 +735,35 @@ paths:
                   error:
                     type: string
 
+  /endpoints/{endpoint_UUID}/logs:
+    get:
+      summary: List available endpoint logs
+      tags:
+        - Endpoints logs
+      description: >
+        Use to retrieve logs of an endpoint. Those logs includes filtered in events as well as alerts.
+      parameters:
+        - in: path
+          name: endpoint_UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: number
+          description: Define limit
+
+      responses:
+        "403":
+          description: Not Authorized
+        "200":
+          description: OK
+          
+
+
+
   /endpoints/reports:
     get:
       summary: List all endpoints reports
