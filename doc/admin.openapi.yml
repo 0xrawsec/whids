@@ -445,13 +445,13 @@ paths:
                   error:
                     type: string
 
-  /endpoints/{endpoint_UUID}/alerts:
+  /endpoints/{endpoint_UUID}/detections:
     get:
-      summary: Getting endpoint alerts
+      summary: Getting endpoint detections
       tags:
-        - Endpoints alerts
+        - Endpoints detections
       description: >
-        Use to retrieve alerts collected from a given endpoint
+        Use to retrieve detections collected from a given endpoint
       parameters:
         - in: path
           name: endpoint_UUID
@@ -464,13 +464,13 @@ paths:
           name: start
           schema:
             type: string
-          description: RFC 3339 formatted timestamp used as starting point for getting alerts
+          description: RFC 3339 formatted timestamp used as starting point for getting detections
 
         - in: query
           name: since
           schema:
             type: string
-          description: RFC 3339 formatted timestamp used as stopping point for getting alerts
+          description: RFC 3339 formatted timestamp used as stopping point for getting detections
 
         - in: query
           name: pivot
@@ -482,7 +482,7 @@ paths:
           name: delta
           schema:
             type: string
-          description: duration string used for getting alerts around pivot point. Specifying a pivot and a delta will search alerts from pivot-delta to pivot+delta
+          description: duration string used for getting detections around pivot point. Specifying a pivot and a delta will search detections from pivot-delta to pivot+delta
 
       responses:
         "403":
@@ -629,7 +629,7 @@ paths:
       tags:
         - Endpoints artifacts
       description: >
-        Use to list the artifacts collected (following an alert) on a given endpoint.
+        Use to list the artifacts collected (following an detections) on a given endpoint.
       parameters:
         - in: path
           name: endpoint_UUID
@@ -741,7 +741,7 @@ paths:
       tags:
         - Endpoints logs
       description: >
-        Use to retrieve logs of an endpoint. Those logs includes filtered in events as well as alerts.
+        Use to retrieve logs of an endpoint. Those logs includes filtered in events as well as detection.
       parameters:
         - in: path
           name: endpoint_UUID
