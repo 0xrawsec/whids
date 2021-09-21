@@ -29,6 +29,19 @@ const (
 	MaxLimitLogAPI = 10000
 )
 
+func admApiParseDuration(pLast string) (d time.Duration, err error) {
+	var n int
+
+	if d, err = time.ParseDuration(pLast); err != nil {
+		if n, err = fmt.Sscanf(pLast, "%dd", &d); n != 1 || err != nil {
+			err = fmt.Errorf("invalid duration format")
+			return
+		}
+		d *= 24 * time.Hour
+	}
+	return
+}
+
 func admApiParseTime(stimestamp string) (t time.Time, err error) {
 	if t, err = time.Parse(time.RFC3339, stimestamp); err != nil {
 		return
@@ -60,9 +73,8 @@ func readPostAsJSON(rq *http.Request, i interface{}) error {
 
 // AdminAPIConfig configuration for Administrative API
 type AdminAPIConfig struct {
-	Host  string      `toml:"host" comment:"Hostname or IP address where the API should listen to"`
-	Port  int         `toml:"port" comment:"Port used by the API"`
-	Users []AdminUser `toml:"users" comment:"List of admin users"`
+	Host string `toml:"host" comment:"Hostname or IP address where the API should listen to"`
+	Port int    `toml:"port" comment:"Port used by the API"`
 }
 
 //////////////// AdminAPIResponse
@@ -110,8 +122,8 @@ func (r *AdminAPIResponse) ToJSON() []byte {
 	return b
 }
 
-func admErrStr(s string) []byte {
-	return NewAdminAPIRespErrorString(s).ToJSON()
+func admErr(s interface{}) []byte {
+	return NewAdminAPIRespErrorString(format("%s", s)).ToJSON()
 }
 
 func admJSONResp(data interface{}) []byte {
@@ -133,7 +145,7 @@ func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
 
 		auth := rq.Header.Get("Api-Key")
-		if !m.admins.Contains(auth) {
+		if _, ok := m.users.GetByKey(auth); !ok {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			return
 		}
@@ -151,10 +163,94 @@ func (m *Manager) adminRespHeaderMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
+	var err error
+
+	switch rq.Method {
+	case "GET":
+		wt.Write(admJSONResp(m.users.List()))
+	case "POST":
+		var user AdminAPIUser
+
+		if err = readPostAsJSON(rq, &user); err != nil && rq.ContentLength > 0 {
+			wt.Write(admErr(err))
+			return
+		}
+
+		// we generate a new UUID anyway
+		user.Uuid = UUIDGen().String()
+		// we generate a new key if needed
+		if user.Key == "" {
+			user.Key = KeyGen(DefaultKeySize)
+		}
+		if err = m.users.Add(&user); err != nil {
+			wt.Write(admErr(err))
+			return
+		}
+
+		// save new user to database
+		m.db.InsertOrUpdate(&user)
+
+		wt.Write(admJSONResp(user))
+	}
+}
+
+func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
+	var err error
+	var uuid string
+
+	newKey, _ := strconv.ParseBool(rq.URL.Query().Get("newkey"))
+
+	if uuid, err = muxGetVar(rq, "uuuid"); err == nil {
+		if user, ok := m.users.GetByUUID(uuid); ok {
+			switch rq.Method {
+			case "DELETE":
+				m.users.Delete(user)
+				if err := m.db.Delete(user); err != nil {
+					wt.Write(admErr(err))
+					return
+				}
+			case "POST":
+				var new AdminAPIUser
+
+				if err = readPostAsJSON(rq, &new); err != nil && rq.ContentLength > 0 {
+					wt.Write(admErr(err))
+					return
+				}
+
+				// updating only some allowed fields of existing user
+				if newKey {
+					user.Key = KeyGen(DefaultKeySize)
+				}
+
+				if new.Group != "" {
+					user.Group = new.Group
+				}
+
+				if new.Description != "" {
+					user.Description = new.Description
+				}
+
+				// save new user to database
+				m.db.InsertOrUpdate(user)
+
+			}
+			// return user anyway
+			wt.Write(admJSONResp(user))
+		} else {
+			wt.Write(admErr(format("Unknown user for uuid: %s", uuid)))
+		}
+	} else {
+		wt.Write(admErr(err))
+	}
+}
+
 func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
 	group := rq.URL.Query().Get("group")
 	status := rq.URL.Query().Get("status")
+	criticality, _ := strconv.ParseInt(rq.URL.Query().Get("criticality"), 10, 8)
+
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
@@ -168,13 +264,16 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 			if status != "" && endpt.Status != status {
 				continue
 			}
+			if endpt.Criticality < int(criticality) {
+				continue
+			}
 			// never show command
 			endpt.Command = nil
 			if !showKey {
 				endpt.Key = ""
 			}
 			// score is updated at every call as it depends on all the other endpoints
-			endpt.Score = m.reducer.BoundedScore(endpt.UUID)
+			endpt.Score = m.reducer.BoundedScore(endpt.Uuid)
 			// add endpoint to the list to return
 			endpoints = append(endpoints, endpt)
 		}
@@ -183,9 +282,9 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	case rq.Method == "PUT":
 		endpt := NewEndpoint(UUIDGen().String(), KeyGen(DefaultKeySize))
 		m.endpoints.Add(endpt)
-		m.Config.AddEndpointConfig(endpt.UUID, endpt.Key)
-		if err := m.Config.Save(); err != nil {
-			log.Errorf("GetNewEndpoint failed to save config: %s", err)
+		// save endpoint to database
+		if err := m.db.InsertOrUpdate(endpt); err != nil {
+			log.Errorf("Failed to save new endpoint")
 		}
 		wt.Write(NewAdminAPIResponse(endpt).ToJSON())
 	}
@@ -196,53 +295,68 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 
 	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
+	newKey, _ := strconv.ParseBool(rq.URL.Query().Get("newkey"))
 
 	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
 		if endpt, ok := m.endpoints.GetMutByUUID(euuid); ok {
 			switch rq.Method {
 			case "POST":
-				var fields map[string]interface{}
-				if err = readPostAsJSON(rq, &fields); err != nil {
-					wt.Write(admErrStr(err.Error()))
+				new := Endpoint{Criticality: -1}
+
+				if err = readPostAsJSON(rq, &new); err != nil && rq.ContentLength > 0 {
+					wt.Write(admErr(err.Error()))
 					return
 				}
 
-				for field, value := range fields {
-					switch field {
-					case "status":
-						if status, ok := value.(string); ok {
-							endpt.Status = status
-						}
-					case "group":
-						if group, ok := value.(string); ok {
-							endpt.Group = group
-						}
+				if new.Status != "" {
+					endpt.Status = new.Status
+				}
+
+				if new.Group != "" {
+					endpt.Group = new.Group
+				}
+
+				if new.Criticality != -1 {
+					// we have to do further checks on criticality
+					if new.Criticality < 0 || new.Criticality > 10 {
+						wt.Write(admErr("criticality field must be in [0;10]"))
+						return
 					}
+					endpt.Criticality = new.Criticality
+				}
+
+				// if we want to generate a new random key
+				if newKey {
+					endpt.Key = KeyGen(DefaultKeySize)
+				}
+
+				// save endpoint to database
+				if err := m.db.InsertOrUpdate(endpt); err != nil {
+					log.Errorf("Failed to save updated endpoint")
 				}
 
 			case "DELETE":
 				// deleting endpoints from live config
 				m.endpoints.DelByUUID(euuid)
-				// deleting endpoints from config
-				m.Config.EndpointAPI.DelEndpoint(euuid)
-				// saving config on disk
-				if err := m.Config.Save(); err != nil {
-					log.Errorf("GetEndpoint failed to save config: %s", err)
+				if err := m.db.Delete(endpt); err != nil {
+					log.Errorf("Failed to delete endpoint from database")
 				}
 			}
 
+			// we have to use the copy of the endpoint has we modify the key
+			endpt = endpt.Copy()
 			// we return the endpoint anyway
 			if !showKey {
 				endpt.Key = ""
 			}
 			// score is updated at every call as it depends on all the other endpoints
-			endpt.Score = m.reducer.BoundedScore(endpt.UUID)
+			endpt.Score = m.reducer.BoundedScore(endpt.Uuid)
 			wt.Write(NewAdminAPIResponse(endpt).ToJSON())
 		} else {
-			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 		}
 	} else {
-		wt.Write(admErrStr(format("Failed to parse URL: %s", err)))
+		wt.Write(admErr(format("Failed to parse URL: %s", err)))
 	}
 }
 
@@ -295,7 +409,7 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 				}
 				wt.Write(NewAdminAPIResponse(endpt.Command).ToJSON())
 			} else {
-				wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+				wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 			}
 		}
 	case "POST":
@@ -309,14 +423,14 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 				} else {
 					tmpCmd, err := c.ToCommand()
 					if err != nil {
-						wt.Write(admErrStr(format("Failed to create command to execute: %s", err)))
+						wt.Write(admErr(format("Failed to create command to execute: %s", err)))
 					} else {
 						endpt.Command = tmpCmd
 						wt.Write(NewAdminAPIResponse(endpt).ToJSON())
 					}
 				}
 			} else {
-				wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+				wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 			}
 		}
 	}
@@ -347,14 +461,14 @@ func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Re
 					case "files", "fetch":
 						wt.Write(NewAdminAPIResponse(endpt.Command.Fetch).ToJSON())
 					default:
-						wt.Write(admErrStr(format("Field %s not handled", field)))
+						wt.Write(admErr(format("Field %s not handled", field)))
 					}
 				} else {
-					wt.Write(admErrStr(format("Command is not set for endpoint: %s", euuid)))
+					wt.Write(admErr(format("Command is not set for endpoint: %s", euuid)))
 				}
 			}
 		} else {
-			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 		}
 	}
 }
@@ -385,14 +499,14 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	// Parsing parameters
 	if pStart != "" {
 		if start, err = admApiParseTime(pStart); err != nil {
-			wt.Write(admErrStr("Failed to parse start parameter, it must be RFC3339 formated"))
+			wt.Write(admErr("Failed to parse start parameter, it must be RFC3339 formated"))
 			return
 		}
 	}
 
 	if pStop != "" {
 		if stop, err = admApiParseTime(pStop); err != nil {
-			wt.Write(admErrStr("Failed to parse stop parameter, it must be RFC3339 formated"))
+			wt.Write(admErr("Failed to parse stop parameter, it must be RFC3339 formated"))
 			return
 		}
 	}
@@ -401,7 +515,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 		if last, err = time.ParseDuration(pLast); err != nil {
 			if n, err := fmt.Sscanf(pLast, "%dd", &last); n != 1 || err != nil {
 				log.Infof("n=%d err=%s", n, err)
-				wt.Write(admErrStr("Failed to parse last parameter, it must be a valid Go time.Duration format"))
+				wt.Write(admErr("Failed to parse last parameter, it must be a valid Go time.Duration format"))
 				return
 			}
 			last *= 24 * time.Hour
@@ -410,21 +524,21 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 
 	if pPivot != "" {
 		if pivot, err = admApiParseTime(pPivot); err != nil {
-			wt.Write(admErrStr("Failed to parse pivot parameter, it must be RFC3339 formated"))
+			wt.Write(admErr("Failed to parse pivot parameter, it must be RFC3339 formated"))
 			return
 		}
 	}
 
 	if pDelta != "" {
 		if delta, err = time.ParseDuration(pDelta); err != nil {
-			wt.Write(admErrStr("Failed to parse delta parameter, it must be a valid Go time.Duration format"))
+			wt.Write(admErr("Failed to parse delta parameter, it must be a valid Go time.Duration format"))
 			return
 		}
 	}
 
 	if pSkip != "" {
 		if skip, err = strconv.ParseInt(pSkip, 10, 64); err != nil {
-			wt.Write(admErrStr(format("Failed to parse skip parameter: %s", err)))
+			wt.Write(admErr(format("Failed to parse skip parameter: %s", err)))
 			return
 		}
 	}
@@ -470,7 +584,7 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 searchLogs:
 	// Controlling parameters
 	if start.After(stop) {
-		wt.Write(admErrStr("Start date must be before stop date"))
+		wt.Write(admErr("Start date must be before stop date"))
 		return
 	}
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
@@ -492,7 +606,7 @@ searchLogs:
 
 		// we had an issue doing the search
 		if searcher.Err() != nil {
-			wt.Write(admErrStr(format("failed to search events: %s", searcher.Err())))
+			wt.Write(admErr(format("failed to search events: %s", searcher.Err())))
 			return
 		}
 
@@ -509,13 +623,108 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 	} else {
 		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
 			// we return the report anyway
-			wt.Write(NewAdminAPIResponse(m.reducer.ReduceCopy(endpt.UUID)).ToJSON())
-			// if request is DELETE we reset the report
-			if rq.Method == "DELETE" {
-				m.reducer.Delete(endpt.UUID)
+			rs := m.reducer.ReduceCopy(endpt.Uuid)
+			switch rq.Method {
+			case "GET":
+				wt.Write(admJSONResp(rs))
+			case "DELETE":
+				if rs != nil {
+					ar := ArchivedReport{}
+					ar.ReducedStats = *rs
+					ar.ArchivedTimestamp = time.Now()
+
+					resp := NewAdminAPIResponse(rs)
+
+					// we archive the report in database
+					if err := m.db.InsertOrUpdate(&ar); err != nil {
+						resp = NewAdminAPIRespErrorString(fmt.Sprintf("Failed to save archive: %s", err))
+					}
+
+					// we reset reducer
+					m.reducer.Delete(endpt.Uuid)
+
+					wt.Write(resp.ToJSON())
+				} else {
+					wt.Write(admErr("No report to delete"))
+				}
 			}
 		} else {
-			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
+		}
+	}
+}
+
+func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.Request) {
+	var euuid string
+	var err error
+	var since, until time.Time
+	var last time.Duration
+	var limit uint64
+
+	pSince := rq.URL.Query().Get("since")
+	pUntil := rq.URL.Query().Get("until")
+	pLast := rq.URL.Query().Get("last")
+	pLimit := rq.URL.Query().Get("limit")
+
+	if pSince != "" {
+		if since, err = admApiParseTime(pSince); err != nil {
+			wt.Write(admErr(format("Failed to parse since parameter: %s", err)))
+			return
+		}
+	}
+
+	if pUntil != "" {
+		if until, err = admApiParseTime(pUntil); err != nil {
+			wt.Write(admErr(format("Failed to parse until parameter: %s", err)))
+			return
+		}
+	}
+
+	if pLast != "" {
+		if last, err = admApiParseDuration(pLast); err != nil {
+			wt.Write(admErr(format("Failed to parse last parameter: %s", err)))
+			return
+		}
+	}
+
+	if pLimit != "" {
+		if limit, err = strconv.ParseUint(pLimit, 0, 64); err != nil {
+			wt.Write(admErr(format("Failed to parse limit parameter: %s", err)))
+			return
+		}
+	}
+
+	// initialization of since and until
+	if since.IsZero() && until.IsZero() {
+		since = time.Now().Add(-time.Hour * 24)
+		until = time.Now()
+	} else if until.IsZero() {
+		until = time.Now()
+	}
+
+	// handling case where last is specified
+	if last != 0 {
+		until = time.Now()
+		since = until.Add(-last)
+	}
+
+	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
+		wt.Write(NewAdminAPIRespError(err).ToJSON())
+	} else {
+		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+			search := m.db.Search(&ArchivedReport{}, "Identifier", "=", endpt.Uuid).
+				And("ArchivedTimestamp", ">=", since).
+				And("ArchivedTimestamp", "<=", until)
+			if limit > 0 {
+				search.Limit(limit)
+			}
+			if res, err := search.Reverse().Collect(); err != nil {
+				wt.Write(admErr(err))
+			} else {
+				wt.Write(admJSONResp(res))
+			}
+		} else {
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 		}
 	}
 }
@@ -523,7 +732,7 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Request) {
 	out := make(map[string]*reducer.ReducedStats)
 	for _, e := range m.endpoints.MutEndpoints() {
-		out[e.UUID] = m.reducer.ReduceCopy(e.UUID)
+		out[e.Uuid] = m.reducer.ReduceCopy(e.Uuid)
 	}
 	wt.Write(NewAdminAPIResponse(out).ToJSON())
 }
@@ -606,20 +815,20 @@ func (m *Manager) admAPIArtifacts(wt http.ResponseWriter, rq *http.Request) {
 
 	if pSince != "" {
 		if since, err = admApiParseTime(pSince); err != nil {
-			wt.Write(admErrStr(format("Failed to parse since parameter: %s", err)))
+			wt.Write(admErr(format("Failed to parse since parameter: %s", err)))
 			return
 		}
 	}
 
 	if uuids, err = os.ReadDir(m.Config.DumpDir); err != nil {
-		wt.Write(admErrStr(format("Failed to read dump directory: %s", err)))
+		wt.Write(admErr(format("Failed to read dump directory: %s", err)))
 		return
 	}
 
 	for _, uuid := range uuids {
 		if uuid.IsDir() {
 			if resp[uuid.Name()], err = listEndpointDumps(m.Config.DumpDir, uuid.Name(), since); err != nil {
-				wt.Write(admErrStr(format("Failed list dumps for uuid=%s , %s", uuid.Name(), err)))
+				wt.Write(admErr(format("Failed list dumps for uuid=%s , %s", uuid.Name(), err)))
 				return
 			}
 		}
@@ -637,7 +846,7 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 
 	if pSince != "" {
 		if since, err = admApiParseTime(pSince); err != nil {
-			wt.Write(admErrStr(format("Failed to parse since parameter: %s", err)))
+			wt.Write(admErr(format("Failed to parse since parameter: %s", err)))
 			return
 		}
 	}
@@ -647,13 +856,13 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 	} else {
 		if m.endpoints.HasByUUID(euuid) {
 			if dumps, err = listEndpointDumps(m.Config.DumpDir, euuid, since); err != nil {
-				wt.Write(admErrStr(format("Failed to list dumps, %s", err)))
+				wt.Write(admErr(format("Failed to list dumps, %s", err)))
 				return
 			}
 			wt.Write(admJSONResp(dumps))
 			return
 		} else {
-			wt.Write(admErrStr(format("Unknown endpoint: %s", euuid)))
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 		}
 	}
 }
@@ -680,7 +889,7 @@ func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Reques
 									r = fd
 									if gunzip {
 										if r, err = gzip.NewReader(fd); err != nil {
-											wt.Write(admErrStr(format("Failed to gunzip file: %s", err)))
+											wt.Write(admErr(format("Failed to gunzip file: %s", err)))
 											return
 										}
 									}
@@ -697,30 +906,30 @@ func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Reques
 											wt.Write(admJSONResp(data))
 										}
 									} else {
-										wt.Write(admErrStr(format("Cannot read file: %s", err)))
+										wt.Write(admErr(format("Cannot read file: %s", err)))
 									}
 								} else {
-									wt.Write(admErrStr(format("Cannot open file: %s", err)))
+									wt.Write(admErr(format("Cannot open file: %s", err)))
 								}
 								// we have to return here as we successed or failed to read file
 								return
 							}
 						}
-						wt.Write(admErrStr("File not found"))
+						wt.Write(admErr("File not found"))
 					} else {
-						wt.Write(admErrStr(format("Failed at listing dump directory: %s", err)))
+						wt.Write(admErr(format("Failed at listing dump directory: %s", err)))
 					}
 				} else {
-					wt.Write(admErrStr(err.Error()))
+					wt.Write(admErr(err.Error()))
 				}
 			} else {
-				wt.Write(admErrStr(err.Error()))
+				wt.Write(admErr(err.Error()))
 			}
 		} else {
-			wt.Write(admErrStr(err.Error()))
+			wt.Write(admErr(err.Error()))
 		}
 	} else {
-		wt.Write(admErrStr(err.Error()))
+		wt.Write(admErr(err.Error()))
 	}
 }
 
@@ -752,7 +961,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 		for r := range m.geneEng.GetRawRule(name) {
 			jr := engine.Rule{}
 			if err := json.Unmarshal([]byte(r), &jr); err != nil {
-				wt.Write(admErrStr(err.Error()))
+				wt.Write(admErr(err.Error()))
 				return
 			}
 			// we continue if we want filters and rule is not a filter
@@ -767,13 +976,13 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 		// we want to be sure to be able to create the file before going on
 		newRulesPath := filepath.Join(m.Config.RulesDir, rulesBasename)
 		if m.geneEng.GetRawRuleByName(name) == "" {
-			wt.Write(admErrStr(format(`No such rule "%s", doing nothing`, name)))
+			wt.Write(admErr(format(`No such rule "%s", doing nothing`, name)))
 			return
 		}
 
 		fd, err := os.Create(format("%s.tmp", newRulesPath))
 		if err != nil {
-			wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+			wt.Write(admErr(format("Cannot create temporary file: %s", err)))
 			return
 		}
 		defer fd.Close()
@@ -784,7 +993,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 				fp := filepath.Join(m.Config.RulesDir, fi.Name())
 				if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
 					if err := os.Remove(fp); err != nil {
-						wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+						wt.Write(admErr(format("Failed to delete rule file: %s", err)))
 						return
 					}
 				}
@@ -796,7 +1005,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 			if name != ruleName {
 				// we write as is the rules not needing updates
 				if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(ruleName))); err != nil {
-					wt.Write(admErrStr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
+					wt.Write(admErr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
 					return
 				}
 			}
@@ -805,7 +1014,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 		// close file before renaming
 		fd.Close()
 		if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
-			wt.Write(admErrStr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
+			wt.Write(admErr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
 			return
 		}
 		wt.Write(admMsgStr("Rules updated succesfully, engine needs to be reloaded"))
@@ -817,7 +1026,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 		paramUpdate := rq.URL.Query().Get("update")
 		b, err := ioutil.ReadAll(rq.Body)
 		if err != nil {
-			wt.Write(admErrStr(format("Failed to read request body: %s", err)))
+			wt.Write(admErr(format("Failed to read request body: %s", err)))
 		} else {
 			// LoadReader also asses that the rules are all compilable
 			if err := m.geneEng.LoadReader(bytes.NewReader(b)); err != nil {
@@ -828,7 +1037,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 					newRulesPath := filepath.Join(m.Config.RulesDir, rulesBasename)
 					fd, err := os.Create(format("%s.tmp", newRulesPath))
 					if err != nil {
-						wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+						wt.Write(admErr(format("Cannot create temporary file: %s", err)))
 						return
 					}
 					defer fd.Close()
@@ -844,7 +1053,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 							break
 						}
 						if err != nil {
-							wt.Write(admErrStr(format("Failed to parse body content as JSON: %s", err)))
+							wt.Write(admErr(format("Failed to parse body content as JSON: %s", err)))
 							return
 						}
 						newRules[jr.Name] = jr
@@ -856,7 +1065,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 							fp := filepath.Join(m.Config.RulesDir, fi.Name())
 							if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
 								if err := os.Remove(fp); err != nil {
-									wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+									wt.Write(admErr(format("Failed to delete rule file: %s", err)))
 									return
 								}
 							}
@@ -868,7 +1077,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 						// we write as is the rules not needing updates
 						if _, ok := newRules[name]; !ok {
 							if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(name))); err != nil {
-								wt.Write(admErrStr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
+								wt.Write(admErr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
 								return
 							}
 						}
@@ -876,20 +1085,20 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 					for _, rule := range newRules {
 						json, _ := rule.JSON()
 						if _, err := fd.WriteString(format("%s\n", json)); err != nil {
-							wt.Write(admErrStr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
+							wt.Write(admErr(format("Fail to write rule, new rule file only contain partial results, a manual fix is required: %s", err)))
 							return
 						}
 					}
 					// close file before renaming
 					fd.Close()
 					if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
-						wt.Write(admErrStr(format("Fail to rename temporary rule file, you must rename it manually: %s", err)))
+						wt.Write(admErr(format("Fail to rename temporary rule file, you must rename it manually: %s", err)))
 						return
 					}
 					wt.Write(admMsgStr("Rules updated succesfully, engine needs to be reloaded"))
 				} else {
 					// we return an error because we don't want to replace existing rules
-					wt.Write(admErrStr(format("Error loading rule: %s", err)))
+					wt.Write(admErr(format("Error loading rule: %s", err)))
 				}
 			} else {
 				wt.Write(admMsgStr("Rules added successfully, please save rules for persistence"))
@@ -903,7 +1112,7 @@ func (m *Manager) admAPIRulesReload(wt http.ResponseWriter, rq *http.Request) {
 	defer m.Unlock()
 	// Gene engine initialization
 	if err := m.LoadGeneEngine(); err != nil {
-		wt.Write(admErrStr(format("Failed to reload engine: %s", err)))
+		wt.Write(admErr(format("Failed to reload engine: %s", err)))
 	} else {
 		// Gene Reducer initialization (used to generate reports)
 		m.reducer = reducer.NewReducer(m.geneEng)
@@ -918,7 +1127,7 @@ func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
 	// we want to be sure to be able to create the file before going on
 	fd, err := os.Create(format("%s.tmp", newRulesPath))
 	if err != nil {
-		wt.Write(admErrStr(format("Cannot create temporary file: %s", err)))
+		wt.Write(admErr(format("Cannot create temporary file: %s", err)))
 		return
 	}
 
@@ -928,7 +1137,7 @@ func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
 			fp := filepath.Join(m.Config.RulesDir, fi.Name())
 			if engine.DefaultRuleExtensions.Contains(filepath.Ext(fp)) {
 				if err := os.Remove(fp); err != nil {
-					wt.Write(admErrStr(format("Failed to delete rule file: %s", err)))
+					wt.Write(admErr(format("Failed to delete rule file: %s", err)))
 					return
 				}
 			}
@@ -939,7 +1148,7 @@ func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
 	for _, ruleName := range m.geneEng.GetRuleNames() {
 		// we write as is the rules not needing updates
 		if _, err := fd.WriteString(format("%s\n", m.geneEng.GetRawRuleByName(ruleName))); err != nil {
-			wt.Write(admErrStr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
+			wt.Write(admErr(format("Failed to write rule, updated rule file only contain partial results, a manual fix is required: %s", err)))
 			return
 		}
 	}
@@ -947,7 +1156,7 @@ func (m *Manager) admAPIRulesSave(wt http.ResponseWriter, rq *http.Request) {
 	// close file before renaming
 	fd.Close()
 	if err := os.Rename(format("%s.tmp", newRulesPath), newRulesPath); err != nil {
-		wt.Write(admErrStr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
+		wt.Write(admErr(format("Failed to rename temporary rule file, you must rename it manually: %s", err)))
 		return
 	}
 	wt.Write(admMsgStr("Rules saved succesfully on disk"))
@@ -958,6 +1167,7 @@ func wsHandleControlMessage(c *websocket.Conn) {
 	for {
 		if _, _, err := c.NextReader(); err != nil {
 			c.Close()
+			log.Errorf("Error in WS control handler: %s", err)
 			break
 		}
 	}
@@ -980,6 +1190,7 @@ func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
 	for e := range stream.S {
 		err = c.WriteJSON(e)
 		if err != nil {
+			log.Errorf("Error in WriteJSON: %s", err)
 			break
 		}
 	}
@@ -1034,6 +1245,8 @@ func (m *Manager) runAdminAPI() {
 
 		// Routes initialization
 
+		rt.HandleFunc(AdmAPIUsers, m.admAPIUsers).Methods("GET", "POST")
+		rt.HandleFunc(AdmAPIUserByID, m.admAPIUser).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointsPath, m.admAPIEndpoints).Methods("GET", "PUT")
 		rt.HandleFunc(AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointCommandPath, m.admAPIEndpointCommand).Methods("GET", "POST")
@@ -1042,6 +1255,7 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointDetectionsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointReportArchivePath, m.admAPIEndpointReportArchive).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointsArtifactsPath, m.admAPIArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
