@@ -56,7 +56,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 			return
 		}
 
-		if endpt.UUID != uuid || endpt.Key != key {
+		if endpt.Uuid != uuid || endpt.Key != key {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			// we have to return not to reach ServeHTTP
 			return
@@ -203,7 +203,7 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 			return
 		}
 
-		endptDumpDir := filepath.Join(m.Config.DumpDir, endpt.UUID)
+		endptDumpDir := filepath.Join(m.Config.DumpDir, endpt.Uuid)
 		if err := fu.Dump(endptDumpDir); err != nil {
 			log.Errorf("Upload handler failed to dump file (%s): %s", fu.Implode(), err)
 			http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
@@ -302,7 +302,7 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 			e.Event.EdrData = &edrData
 
 			if endpt := m.mutEndpointFromRequest(rq); endpt != nil {
-				m.UpdateReducer(endpt.UUID, &e)
+				m.UpdateReducer(endpt.Uuid, &e)
 				if e.IsDetection() {
 					endpt.LastDetection = e.Timestamp()
 				}

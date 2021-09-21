@@ -137,6 +137,7 @@ var (
 	flagService    bool
 	flagProfile    bool
 	flagRestore    bool
+	flagAutologger bool
 
 	hostIDS *hids.HIDS
 
@@ -168,15 +169,27 @@ func configure() error {
 	return nil
 }
 
-func updateAutologger() error {
-	hidsConf, err := hids.LoadsHIDSConfig(config)
-	if err != nil {
-		return err
-	}
-	if err := hidsConf.EtwConfig.ConfigureAutologger(); err != nil {
+func updateAutologger(c *hids.Config) error {
+	if err := c.EtwConfig.ConfigureAutologger(); err != nil {
 		return err
 	}
 	return nil
+}
+
+func restoreCanaries(c *hids.Config) {
+	// Removing ACLs found in config
+	log.Infof("Restoring global File System Audit ACLs")
+	c.AuditConfig.Restore()
+
+	log.Infof("Restoring canary File System Audit ACLs")
+	c.CanariesConfig.RestoreACLs()
+}
+
+func cleanCanaries(c *hids.Config) {
+	restoreCanaries(c)
+
+	log.Infof("Deleting canary files")
+	c.CanariesConfig.Clean()
 }
 
 func deleteAutologger() error {
@@ -248,6 +261,7 @@ func main() {
 
 	flag.BoolVar(&flagDumpConfig, "dump-conf", flagDumpConfig, "Dumps default configuration to stdout")
 	flag.BoolVar(&flagInstall, "install", flagInstall, "Install EDR")
+	flag.BoolVar(&flagAutologger, "autologger", flagAutologger, "Update EDR's ETW autologger configuration")
 	flag.BoolVar(&flagUninstall, "uninstall", flagUninstall, "Uninstall EDR")
 	flag.BoolVar(&flagDryRun, "dry", flagDryRun, "Dry run (do everything except listening on channels)")
 	flag.BoolVar(&flagPrintAll, "all", flagPrintAll, "Print all events passing through HIDS")
@@ -273,15 +287,25 @@ func main() {
 		log.LogErrorAndExit(fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
 	}
 
-	if flagInstall {
-		// dump configuration first as config is needed
-		// by subsequent functions
-		if err := configure(); err != nil {
-			log.Errorf("Failed to build configuration: %s", err)
+	if flagInstall || flagAutologger {
+
+		// Only when installing
+		if flagInstall {
+			// dump configuration first as config is needed
+			// by subsequent functions
+			if err := configure(); err != nil {
+				log.Errorf("Failed to build configuration: %s", err)
+				os.Exit(exitFail)
+			}
+		}
+
+		conf, err := hids.LoadsHIDSConfig(config)
+		if err != nil {
+			log.Errorf("Failed to load configuration: %s", err)
 			os.Exit(exitFail)
 		}
 
-		if err := updateAutologger(); err != nil {
+		if err := updateAutologger(&conf); err != nil {
 			log.Errorf("Failed to update autologger: %s", err)
 			os.Exit(exitFail)
 		}
@@ -290,11 +314,23 @@ func main() {
 	}
 
 	if flagUninstall {
+		// we should not abort uninstallation if error
+		var conf hids.Config
+
 		rc := exitSuccess
+
+		if conf, err = hids.LoadsHIDSConfig(config); err == nil {
+			cleanCanaries(&conf)
+		} else {
+			log.Errorf("Failed to load configuration: %s", err)
+			rc = exitFail
+		}
+
 		if err := deleteAutologger(); err != nil {
 			log.Errorf("Failed to delete autologger: %s", err)
 			rc = exitFail
 		}
+
 		os.Exit(rc)
 	}
 
@@ -335,12 +371,7 @@ func main() {
 	}
 
 	if flagRestore {
-		// Removing ACLs found in config
-		log.Infof("Restoring global File System Audit ACLs")
-		hidsConf.AuditConfig.Restore()
-
-		log.Infof("Restoring canary File System Audit ACLs")
-		hidsConf.CanariesConfig.RestoreACLs()
+		restoreCanaries(&hidsConf)
 		os.Exit(exitSuccess)
 	}
 

@@ -43,25 +43,14 @@ var (
 	defaultOrg          = "WHIDS Manager"
 	defaultCertValidity = time.Hour * 24 * 365
 
-	dummyManagerConfig = api.ManagerConfig{
+	simpleManagerConfig = api.ManagerConfig{
 		AdminAPI: api.AdminAPIConfig{
 			Host: "localhost",
 			Port: api.AdmAPIDefaultPort,
-			Users: []api.AdminUser{
-				{
-					Identifier: "admin",
-					Key:        api.KeyGen(api.DefaultKeySize),
-				}},
 		},
 		EndpointAPI: api.EndpointAPIConfig{
 			Host: "0.0.0.0",
 			Port: api.EptAPIDefaultPort,
-			Endpoints: []api.EndpointConfig{
-				{
-					UUID: api.UUIDGen().String(),
-					Key:  api.KeyGen(api.DefaultKeySize),
-				},
-			},
 		},
 		Logging: api.ManagerLogConfig{
 			Root:        "./data/logs",
@@ -242,7 +231,7 @@ func main() {
 	if dumpConfig {
 		enc := toml.NewEncoder(os.Stdout)
 		enc.Order(toml.OrderPreserve)
-		if err := enc.Encode(dummyManagerConfig); err != nil {
+		if err := enc.Encode(simpleManagerConfig); err != nil {
 			panic(err)
 		}
 		os.Exit(0)

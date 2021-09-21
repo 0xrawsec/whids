@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -22,6 +23,11 @@ func cmdHash(path string) (nfi FileInfo, err error) {
 	var fi fs.FileInfo
 
 	if fi, err = os.Stat(path); err != nil {
+		return
+	}
+
+	if !fi.Mode().IsRegular() {
+		err = fmt.Errorf("no such file: %s", path)
 		return
 	}
 

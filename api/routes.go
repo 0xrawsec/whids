@@ -41,7 +41,11 @@ var (
 
 // Routes used for Admin API
 const (
-	uuidRe                  = "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}"
+	uuidRe = "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}"
+
+	AdmAPIUsers    = "/users"
+	AdmAPIUserByID = AdmAPIUsers + "/{uuuid:" + uuidRe + "}"
+
 	AdmAPIStatsPath         = "/stats"
 	AdmAPIRulesPath         = "/rules"
 	AdmAPIRulesReloadPath   = "/rules/reload"
@@ -56,8 +60,9 @@ const (
 	AdmAPIDetectionPart          = "/detections"
 	AdmAPIEndpointDetectionsPath = AdmAPIEndpointsByIDPath + AdmAPIDetectionPart
 	// Reports related
-	AdmAPIEndpointsReportsPath = AdmAPIEndpointsPath + "/reports"
-	AdmAPIEndpointReportPath   = AdmAPIEndpointsByIDPath + "/report"
+	AdmAPIEndpointsReportsPath      = AdmAPIEndpointsPath + "/reports"
+	AdmAPIEndpointReportPath        = AdmAPIEndpointsByIDPath + "/report"
+	AdmAPIEndpointReportArchivePath = AdmAPIEndpointReportPath + "/archive"
 	// Dumps related
 	admAPIArtifactsPart          = "/artifacts"
 	AdmAPIEndpointsArtifactsPath = AdmAPIEndpointsPath + admAPIArtifactsPart

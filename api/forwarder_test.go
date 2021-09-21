@@ -33,9 +33,8 @@ var (
 
 	mconf = ManagerConfig{
 		AdminAPI: AdminAPIConfig{
-			Host:  "localhost",
-			Port:  8001,
-			Users: []AdminUser{{Key: "testing"}},
+			Host: "localhost",
+			Port: 8001,
 		},
 		EndpointAPI: EndpointAPIConfig{
 			Host: "",

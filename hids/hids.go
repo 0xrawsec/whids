@@ -633,15 +633,21 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 	case "uncontain":
 		cmd.FromExecCmd(h.uncontainCmd())
 	case "osquery":
-		if fsutil.IsFile(h.config.Report.OSQuery.Bin) {
+		osquery := h.config.Report.OSQuery.Bin
+		switch {
+		case fsutil.IsFile(h.config.Report.OSQuery.Bin):
 			cmd.Name = h.config.Report.OSQuery.Bin
 			cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
 			cmd.ExpectJSON = true
-		} else {
+		case osquery == "":
 			cmd.Unrunnable()
-			cmd.Error = fmt.Sprintf("OSQuery binary file configured does not exist: %s", h.config.Report.OSQuery.Bin)
+			cmd.Error = "OSQuery binary file configured does not exist"
+		default:
+			cmd.Unrunnable()
+			cmd.Error = fmt.Sprintf("OSQuery binary file configured does not exist: %s", osquery)
 		}
-	// HIDs internal commands
+
+	// internal commands
 	case "terminate":
 		cmd.Unrunnable()
 		if len(cmd.Args) > 0 {
@@ -748,7 +754,7 @@ func (h *HIDS) commandRunnerRoutine() bool {
 					// reduce sleeping time if a command was received
 					sleep = burstSleep
 					burstDur = 0
-					log.Infof("Handling command: %s", cmd.String())
+					log.Infof("Handling manager command: %s", cmd.String())
 					h.handleManagerCommand(cmd)
 					if err := h.forwarder.Client.PostCommand(cmd); err != nil {
 						log.Error(err)
@@ -979,14 +985,25 @@ func (h *HIDS) Stop() {
 	// because of race condition
 	log.Infof("Closing forwarder")
 	h.forwarder.Close()
+
+	// closing event provider
 	log.Infof("Closing event provider")
 	if err := h.eventProvider.Stop(); err != nil {
 		log.Errorf("Error while closing event provider: %s", err)
 	}
+
+	// cleaning canary files
 	if h.config.CanariesConfig.Enable {
 		log.Infof("Cleaning canaries")
 		h.config.CanariesConfig.Clean()
 	}
+
+	// updating autologger configuration
+	log.Infof("Updating autologger configuration")
+	if err := h.config.EtwConfig.ConfigureAutologger(); err != nil {
+		log.Errorf("Failed to update autologger configuration", err)
+	}
+
 	log.Infof("HIDS stopped")
 }
 

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
@@ -31,7 +31,6 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"
 	"github.com/0xrawsec/golang-misp/misp"
-	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
@@ -232,53 +231,18 @@ func KeyGen(size int) string {
 	return string(key)
 }
 
-// AdminUser structure definition
-type AdminUser struct {
-	Identifier string `toml:"identifier"`
-	Key        string `toml:"key"`
-}
-
-// EndpointConfig structure to hold the configuration for one endpoint
-type EndpointConfig struct {
-	UUID string `toml:"uuid" comment:"Unique client identifier"`
-	Key  string `toml:"key" comment:"API key used to authenticate the client"`
-}
-
 // EndpointAPIConfig structure holding configuration for the API used by endpoints
 type EndpointAPIConfig struct {
-	Host      string           `toml:"host" comment:"Hostname or IP where the API should listen to"`
-	Port      int              `toml:"port" comment:"Port used by the API"`
-	ServerKey string           `toml:"server-key" comment:"Server key used to do basic authentication of the server on clients.\n Configure certificate pinning on client offers better security."`
-	Endpoints []EndpointConfig `toml:"endpoints" comment:"Endpoints configurations"`
-}
-
-// DelEndpoint deletes an endpoint from the configuration
-func (ec *EndpointAPIConfig) DelEndpoint(uuid string) {
-	new := make([]EndpointConfig, 0, len(ec.Endpoints)-1)
-	for _, e := range ec.Endpoints {
-		if e.UUID != uuid {
-			new = append(new, e)
-		}
-	}
-	ec.Endpoints = new
+	Host      string `toml:"host" comment:"Hostname or IP where the API should listen to"`
+	Port      int    `toml:"port" comment:"Port used by the API"`
+	ServerKey string `toml:"server-key" comment:"Server key used to do basic authentication of the server on clients.\n Configure certificate pinning on client offers better security."`
 }
 
 // ManagerLogConfig structure to hold manager's logging configuration
 type ManagerLogConfig struct {
 	Root        string `toml:"root" comment:"Root directory where logfiles are stored"`
 	LogBasename string `toml:"logfile" comment:"Logfile name (relative to root) used to store logs"`
-	//EnEnptLogs  bool   `toml:"enable-endpoint-logging" comment:"Enable endpoint logging.In addition to log in the main log file,\n it will store logs individually for each endpoints"`
-	VerboseHTTP bool `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
-}
-
-// AlertPath builds the path where to store alerts for an endpoint
-func (c *ManagerLogConfig) AlertIndexPath(uuid string, date time.Time) string {
-	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), format("alerts.gz%s", logger.IndexExt))
-}
-
-// LogPath builds the path where to store logs for an endpoint
-func (c *ManagerLogConfig) LogIndexPath(uuid string, date time.Time) string {
-	return filepath.Join(c.Root, uuid, date.Format("2006-01-02"), format("logs.gz%s", logger.IndexExt))
+	VerboseHTTP bool   `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
 }
 
 // MispConfig with TOML tags
@@ -314,12 +278,6 @@ func LoadManagerConfig(path string) (*ManagerConfig, error) {
 	return &mc, err
 }
 
-// AddEndpointConfig adds a new endpoint with uuid and key to the manager
-func (mc *ManagerConfig) AddEndpointConfig(uuid, key string) {
-	ec := EndpointConfig{UUID: uuid, Key: key}
-	mc.EndpointAPI.Endpoints = append(mc.EndpointAPI.Endpoints, ec)
-}
-
 // SetPath exposes the path member for changes
 func (mc *ManagerConfig) SetPath(path string) {
 	mc.path = path
@@ -334,112 +292,11 @@ func (mc *ManagerConfig) Save() error {
 	return ioutil.WriteFile(mc.path, b, 0650)
 }
 
-// Endpoints structure used to manage endpoints
-// This struct looks over complicated for what it
-// does but it is because it was more complex before
-// and got simplified (too lazy to change it...)
-type Endpoints struct {
-	sync.RWMutex
-	endpoints []*Endpoint
-	mapUUID   map[string]int
-}
-
-// NewEndpoints creates a new Endpoints structure
-func NewEndpoints() Endpoints {
-	return Endpoints{
-		endpoints: make([]*Endpoint, 0),
-		mapUUID:   make(map[string]int),
-	}
-}
-
-// Add adds an Endpoint to the Endpoints
-func (es *Endpoints) Add(e *Endpoint) {
-	es.Lock()
-	defer es.Unlock()
-	es.endpoints = append(es.endpoints, e)
-	es.mapUUID[e.UUID] = len(es.endpoints) - 1
-}
-
-// DelByUUID deletes an Endpoint by its UUID
-func (es *Endpoints) DelByUUID(uuid string) {
-	es.Lock()
-	defer es.Unlock()
-	if i, ok := es.mapUUID[uuid]; ok {
-		delete(es.mapUUID, uuid)
-
-		switch {
-		case i == 0:
-			if len(es.endpoints) == 1 {
-				es.endpoints = make([]*Endpoint, 0)
-			} else {
-				es.endpoints = es.endpoints[i+1:]
-			}
-		case i == len(es.endpoints)-1:
-			es.endpoints = es.endpoints[:i]
-		default:
-			es.endpoints = append(es.endpoints[:i], es.endpoints[i+1:]...)
-		}
-	}
-}
-
-func (es *Endpoints) HasByUUID(uuid string) bool {
-	es.RLock()
-	defer es.RUnlock()
-	_, ok := es.mapUUID[uuid]
-	return ok
-}
-
-// GetByUUID returns a reference to the copy of an Endpoint by its UUID
-func (es *Endpoints) GetByUUID(uuid string) (*Endpoint, bool) {
-	es.RLock()
-	defer es.RUnlock()
-	if i, ok := es.mapUUID[uuid]; ok {
-		return es.endpoints[i].Copy(), true
-	}
-	return nil, false
-}
-
-// GetMutByUUID returns reference to an Endpoint
-func (es *Endpoints) GetMutByUUID(uuid string) (*Endpoint, bool) {
-	es.RLock()
-	defer es.RUnlock()
-	if i, ok := es.mapUUID[uuid]; ok {
-		return es.endpoints[i], true
-	}
-	return nil, false
-}
-
-// Len returns the number of endpoints
-func (es *Endpoints) Len() int {
-	es.RLock()
-	defer es.RUnlock()
-	return len(es.endpoints)
-}
-
-// Endpoints returns a list of references to copies of the endpoints
-func (es *Endpoints) Endpoints() []*Endpoint {
-	es.RLock()
-	defer es.RUnlock()
-	endpts := make([]*Endpoint, 0, len(es.endpoints))
-	for _, e := range es.endpoints {
-		endpts = append(endpts, e.Copy())
-	}
-	return endpts
-}
-
-// MutEndpoints returns a list of references of the endpoints
-func (es *Endpoints) MutEndpoints() []*Endpoint {
-	es.RLock()
-	defer es.RUnlock()
-	endpts := make([]*Endpoint, len(es.endpoints))
-	copy(endpts, es.endpoints)
-	return endpts
-}
-
 // Manager structure definition
 type Manager struct {
 	sync.RWMutex
-	Config            *ManagerConfig
+	/* Private */
+	db                *sod.DB
 	eventStreamer     *EventStreamer
 	eventLogger       *logger.EventLogger
 	eventSearcher     *logger.EventSearcher
@@ -448,7 +305,7 @@ type Manager struct {
 	endpointAPI       *http.Server
 	endpoints         Endpoints
 	adminAPI          *http.Server
-	admins            *datastructs.SyncedMap
+	users             *Users
 	stop              chan bool
 	done              bool
 	// Gene related members
@@ -458,11 +315,15 @@ type Manager struct {
 	rulesSha256      string // rules integrity check and update
 	containers       map[string][]string
 	containersSha256 map[string]string
+
+	/* Public */
+	Config *ManagerConfig
 }
 
 // NewManager creates a new WHIDS manager with a logfile as parameter
 func NewManager(c *ManagerConfig) (*Manager, error) {
 	var err error
+	var objects []sod.Object
 
 	m := Manager{Config: c}
 	//logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
@@ -473,29 +334,48 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	m.detectionLogger = logger.NewEventLogger(detectionDir, "logs.gz", utils.Giga)
 	m.detectionSearcher = logger.NewEventSearcher(detectionDir)
 
+	// database initialization
+	m.db = sod.Open("database")
 	// Create a new streamer
 	m.eventStreamer = NewEventStreamer()
 
 	if c.EndpointAPI.Port <= 0 || c.EndpointAPI.Port > 65535 {
-		return nil, fmt.Errorf("Manager Endpoint API Error: invalid port to listen to %d", c.EndpointAPI.Port)
+		return nil, fmt.Errorf("manager Endpoint API Error: invalid port to listen to %d", c.EndpointAPI.Port)
 	}
 
 	if c.AdminAPI.Port <= 0 || c.AdminAPI.Port > 65535 {
-		return nil, fmt.Errorf("Manager Admin API Error: invalid port to listen to %d", c.EndpointAPI.Port)
+		return nil, fmt.Errorf("manager Admin API Error: invalid port to listen to %d", c.EndpointAPI.Port)
 	}
 
 	if err := os.MkdirAll(c.Logging.Root, utils.DefaultPerms); err != nil {
 		return nil, fmt.Errorf("failed at creating log directory: %s", err)
 	}
 
-	m.endpoints = NewEndpoints()
-	for _, ec := range c.EndpointAPI.Endpoints {
-		m.endpoints.Add(NewEndpoint(ec.UUID, ec.Key))
+	if err := m.initializeDB(); err != nil {
+		return nil, fmt.Errorf("failed to initialize manager's database: %w", err)
+
 	}
 
-	m.admins = datastructs.NewSyncedMap()
-	for _, au := range c.AdminAPI.Users {
-		m.admins.Add(au.Key, au)
+	// Endpoints initialization
+	m.endpoints = NewEndpoints()
+	if objects, err = m.db.All(&Endpoint{}); err != nil {
+		return nil, err
+	}
+	for _, o := range objects {
+		ept := o.(*Endpoint)
+		m.endpoints.Add(ept)
+	}
+
+	// Users initialization
+	m.users = NewUsers()
+	if objects, err = m.db.All(&AdminAPIUser{}); err != nil {
+		return nil, err
+	}
+	for _, o := range objects {
+		user := o.(*AdminAPIUser)
+		if err = m.users.Add(user); err != nil {
+			return nil, err
+		}
 	}
 
 	m.stop = make(chan bool)
@@ -523,6 +403,24 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 		}
 	}
 	return &m, nil
+}
+
+func (m *Manager) initializeDB() (err error) {
+	if err = m.db.Create(&Endpoint{}, &sod.DefaultSchema); err != nil {
+		return
+	}
+
+	if err = m.db.Create(&AdminAPIUser{}, &sod.DefaultSchema); err != nil {
+		return
+	}
+
+	archivedReportSchema := sod.DefaultSchema
+	archivedReportSchema.ObjectsIndex = sod.NewIndex("Identifier", "ArchivedTimestamp")
+	if err = m.db.Create(&ArchivedReport{}, &archivedReportSchema); err != nil {
+		return
+	}
+
+	return
 }
 
 // LoadGeneEngine make the manager update the gene rules it has to serve
@@ -600,10 +498,6 @@ func (m *Manager) updateMispContainer() {
 func (m *Manager) AddEndpoint(uuid, key string) {
 	m.endpoints.Add(NewEndpoint(uuid, key))
 }
-
-var (
-	sigPath = evtx.Path("/Event/GeneInfo/Signature")
-)
 
 // UpdateReducer updates the reducer member of the Manager
 func (m *Manager) UpdateReducer(identifier string, e *event.EdrEvent) {
