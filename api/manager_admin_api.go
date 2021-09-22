@@ -737,12 +737,19 @@ func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Reques
 	wt.Write(NewAdminAPIResponse(out).ToJSON())
 }
 
+type DumpFile struct {
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 type EndpointDumps struct {
-	UpdateTimestamp time.Time `json:"update"`
-	ProcessGUID     string    `json:"process-guid"`
-	EventHash       string    `json:"event-hash"`
-	BaseURL         string    `json:"base-url"`
-	Files           []string  `json:"files"`
+	Created      time.Time  `json:"creation"`
+	Modification time.Time  `json:"modification"`
+	ProcessGUID  string     `json:"process-guid"`
+	EventHash    string     `json:"event-hash"`
+	BaseURL      string     `json:"base-url"`
+	Files        []DumpFile `json:"files"`
 }
 
 func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDumps, err error) {
@@ -770,7 +777,7 @@ func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDump
 				pguid := strings.Trim(pfi.Name(), "{}")
 				ehash := efi.Name()
 				baseURL := format("%s/%s/%s/", urlPath, pguid, ehash)
-				ed := EndpointDumps{ProcessGUID: pguid, EventHash: ehash, BaseURL: baseURL, Files: make([]string, 0)}
+				ed := EndpointDumps{ProcessGUID: pguid, EventHash: ehash, BaseURL: baseURL, Files: make([]DumpFile, 0)}
 				if efi.IsDir() {
 					evtDumpDir := filepath.Join(evtHashDir, ehash)
 					if eventDumps, err = os.ReadDir(evtDumpDir); err != nil {
@@ -784,18 +791,27 @@ func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDump
 							err = fmt.Errorf("failed to read file (%s) info: %s", filepath.Join(evtDumpDir, dfi.Name()), err)
 							return
 						}
+						f := DumpFile{info.Name(), info.Size(), info.ModTime()}
 						// we add file to the list of files only if it has
 						// been modified after the since parameter
-						if since.Before(info.ModTime()) {
-							ed.Files = append(ed.Files, dfi.Name())
+						//if since.Before(info.ModTime()) {
+						ed.Files = append(ed.Files, f)
+						//}
+
+						// update creation date
+						if ed.Created.IsZero() || info.ModTime().Before(ed.Created) {
+							ed.Created = info.ModTime().UTC()
 						}
-						if ed.UpdateTimestamp.Before(info.ModTime()) {
-							ed.UpdateTimestamp = info.ModTime().UTC()
+
+						// update modification date
+						if ed.Modification.Before(info.ModTime()) {
+							ed.Modification = info.ModTime().UTC()
 						}
 					}
 				}
+
 				// we don't update if update timestamp is before since parameter
-				if since.Before(ed.UpdateTimestamp) {
+				if since.Before(ed.Modification) {
 					dumps = append(dumps, ed)
 				}
 			}
