@@ -791,12 +791,10 @@ func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDump
 							err = fmt.Errorf("failed to read file (%s) info: %s", filepath.Join(evtDumpDir, dfi.Name()), err)
 							return
 						}
-						f := DumpFile{info.Name(), info.Size(), info.ModTime()}
+						f := DumpFile{info.Name(), info.Size(), info.ModTime().UTC()}
 						// we add file to the list of files only if it has
 						// been modified after the since parameter
-						//if since.Before(info.ModTime()) {
 						ed.Files = append(ed.Files, f)
-						//}
 
 						// update creation date
 						if ed.Created.IsZero() || info.ModTime().Before(ed.Created) {
