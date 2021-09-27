@@ -204,12 +204,12 @@ func runHids(service bool) {
 
 	hidsConf, err = hids.LoadsHIDSConfig(config)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("failed to load configuration: %s", err))
+		log.Abort(exitFail, fmt.Errorf("failed to load configuration: %s", err))
 	}
 
 	hostIDS, err = hids.NewHIDS(&hidsConf)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("failed to create HIDS: %s", err))
+		log.Abort(exitFail, fmt.Errorf("failed to create HIDS: %s", err))
 	}
 
 	hostIDS.DryRun = flagDryRun
@@ -284,7 +284,7 @@ func main() {
 
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
+		log.Abort(exitFail, fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
 	}
 
 	if flagInstall || flagAutologger {
@@ -355,7 +355,7 @@ func main() {
 		enc := toml.NewEncoder(writer)
 		enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(DefaultHIDSConfig); err != nil {
-			log.LogErrorAndExit(err)
+			log.Abort(exitFail, err)
 		}
 		os.Exit(exitSuccess)
 	}
@@ -367,7 +367,7 @@ func main() {
 
 	hidsConf, err := hids.LoadsHIDSConfig(config)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to load configuration: %s", err))
+		log.Abort(exitFail, fmt.Errorf("Failed to load configuration: %s", err))
 	}
 
 	if flagRestore {
@@ -382,30 +382,30 @@ func main() {
 		hidsConf.Logfile = ""
 		hostIDS, err = hids.NewHIDS(&hidsConf)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed create HIDS: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed create HIDS: %s", err))
 		}
 		log.Infof("Importing rules from %s", importRules)
 		hostIDS.Engine = engine.NewEngine(false)
 		hostIDS.Engine.SetDumpRaw(true)
 
 		if err := hostIDS.Engine.LoadDirectory(importRules); err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
 		}
 
 		prules, psha256 := hostIDS.RulesPaths()
 		rules := new(bytes.Buffer)
 		for rule := range hostIDS.Engine.GetRawRule(".*") {
 			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
-				log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+				log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
 			}
 		}
 
 		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultPerms); err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
 		}
 
 		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultPerms); err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
 		}
 
 		log.Infof("IMPORT SUCCESSFUL: %s", prules)

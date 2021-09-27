@@ -155,3 +155,11 @@ func (e *EdrEvent) EventID() int64 {
 func (e *EdrEvent) Timestamp() time.Time {
 	return e.Event.System.TimeCreated.SystemTime
 }
+
+func (er *EdrEvent) Copy() (new *EdrEvent) {
+	etwEvent := *er.Event.Event
+	new = NewEdrEvent(&etwEvent)
+	new.Event.EdrData = er.Event.EdrData
+	new.Event.Detection = er.Event.Detection
+	return
+}

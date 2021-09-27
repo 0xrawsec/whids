@@ -114,8 +114,8 @@ func (i *IndexEntry) UpdateTime(t time.Time) {
 }
 
 // Implements datastructs.Sortable interface
-func (i *IndexEntry) Less(other *datastructs.Sortable) bool {
-	return i.Start.Before((*other).(*IndexEntry).Start)
+func (i *IndexEntry) Less(other datastructs.Sortable) bool {
+	return i.Start.Before(other.(*IndexEntry).Start)
 }
 
 // In returns true if entry is fully in time range start < entry < stop

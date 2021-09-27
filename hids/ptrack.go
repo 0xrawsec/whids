@@ -84,7 +84,7 @@ func NewGeneScore() ThreatScore {
 
 func (g *ThreatScore) Update(d *engine.Detection) {
 	if d != nil {
-		for _, s := range d.Signature.List() {
+		for _, s := range d.Signature.Slice() {
 			g.Signatures[s.(string)]++
 		}
 		g.Score += int64(d.Criticality)

@@ -15,7 +15,6 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/crypto/file"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-win32/win32"
@@ -333,7 +332,7 @@ func hookHandleActions(h *HIDS, e *event.EdrEvent) {
 
 		//if i, err := e.Get(&engine.ActionsPath); err == nil {
 		if d := e.GetDetection(); d != nil {
-			for _, i := range d.Actions.List() {
+			for _, i := range d.Actions.Slice() {
 				action := i.(string)
 				switch action {
 				case ActionKill:
@@ -846,7 +845,7 @@ func dumpEventAndCompress(h *HIDS, e *event.EdrEvent, guid string) (err error) {
 		if err != nil {
 			return
 		}
-		f.Write(evtx.ToJSON(e))
+		f.Write(utils.Json(e))
 		f.Close()
 		h.compress(dumpPath)
 		h.filedumped.Add(dumpPath)

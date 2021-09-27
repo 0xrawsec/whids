@@ -40,8 +40,8 @@ func DecodeRawEvent(b []byte) (r *RawEvent, err error) {
 	return
 }
 
-func (e *RawEvent) Less(other *datastructs.Sortable) bool {
-	return e.Timestamp.Before((*other).(*RawEvent).Timestamp)
+func (e *RawEvent) Less(other datastructs.Sortable) bool {
+	return e.Timestamp.Before(other.(*RawEvent).Timestamp)
 }
 
 func (e *RawEvent) Encode() []byte {

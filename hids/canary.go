@@ -96,7 +96,7 @@ func (c *Canary) clean() {
 		}
 
 		// we remove directory which have been created
-		for _, i := range c.createdDir.List() {
+		for _, i := range c.createdDir.Slice() {
 			dir := i.(string)
 			os.RemoveAll(dir)
 		}
@@ -127,7 +127,7 @@ func (c *CanariesConfig) canaryRegexp() string {
 	for _, c := range c.Canaries {
 
 		// adding list of created dir
-		for _, i := range c.createdDir.List() {
+		for _, i := range c.createdDir.Slice() {
 			dir := fmt.Sprintf("%s%c", i.(string), os.PathSeparator)
 			repaths = append(repaths, regexp.QuoteMeta(dir))
 		}

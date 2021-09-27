@@ -43,7 +43,10 @@ func emitEvents(count int, random bool) (ce chan *event.EdrEvent) {
 		defer close(ce)
 		for i := 0; i < count; i++ {
 			i := rand.Int() % len(events)
-			e := events[i]
+			// we need to use a copy of the event as event
+			// contains some pointer making shalow copy
+			// copying that pointer too
+			e := events[i].Copy()
 			newTimestamp := time.Now()
 			if random {
 				delayMin := time.Duration(rand.Int()%120) * time.Minute
@@ -54,7 +57,7 @@ func emitEvents(count int, random bool) (ce chan *event.EdrEvent) {
 				}
 			}
 			e.Event.System.TimeCreated.SystemTime = newTimestamp
-			ce <- &e
+			ce <- e
 		}
 	}()
 	return

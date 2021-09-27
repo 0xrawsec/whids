@@ -27,6 +27,8 @@ import (
 const (
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
 	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
+
+	exitFail = 1
 )
 
 var (
@@ -222,7 +224,7 @@ func main() {
 	if fingerprint != "" {
 		fing, err := computeFingerprint(fingerprint)
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed at computing fingerprint: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed at computing fingerprint: %s", err))
 		}
 		fmt.Printf("Certificate fingerprint to set in client configuration to enable certificate pinning\n%s\n", fing)
 		os.Exit(0)
@@ -239,13 +241,13 @@ func main() {
 
 	managerConf, err := api.LoadManagerConfig(config)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to load manager configuration: %s", err))
+		log.Abort(exitFail, fmt.Errorf("Failed to load manager configuration: %s", err))
 	}
 
 	if certgen {
 		err = generateCert([]string{managerConf.EndpointAPI.Host, managerConf.AdminAPI.Host})
 		if err != nil {
-			log.LogErrorAndExit(fmt.Errorf("Failed to generate key/cert pair: %s", err))
+			log.Abort(exitFail, fmt.Errorf("Failed to generate key/cert pair: %s", err))
 		}
 		log.Infof("Certificate and key generated should be used for testing purposes only.")
 		os.Exit(0)
@@ -253,7 +255,7 @@ func main() {
 
 	manager, err = api.NewManager(managerConf)
 	if err != nil {
-		log.LogErrorAndExit(fmt.Errorf("Failed to create manager: %s", err))
+		log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
 	}
 
 	// Registering signal handler for sig interrupt

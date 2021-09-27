@@ -18,22 +18,24 @@ func (m *WhidsService) Execute(args []string, r <-chan svc.ChangeRequest, change
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 loop:
-	for {
-		select {
-		case c := <-r:
-			switch c.Cmd {
-			case svc.Interrogate:
-				changes <- c.CurrentStatus
-			case svc.Stop:
-				// Stop WHIDS there
-				hostIDS.Stop()
-				hostIDS.Wait()
-				hostIDS.LogStats()
-				break loop
-			}
+	/*for {
+	select {
+	case c := <-r:*/
+	for c := range r {
+		switch c.Cmd {
+		case svc.Interrogate:
+			changes <- c.CurrentStatus
+		case svc.Stop:
+			changes <- svc.Status{State: svc.StopPending}
+			// Stop WHIDS there
+			hostIDS.Stop()
+			hostIDS.Wait()
+			hostIDS.LogStats()
+			break loop
 		}
+		//	}
 	}
-	changes <- svc.Status{State: svc.StopPending}
+	changes <- svc.Status{State: svc.Stopped}
 	return
 }
 

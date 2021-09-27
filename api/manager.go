@@ -502,7 +502,7 @@ func (m *Manager) AddEndpoint(uuid, key string) {
 // UpdateReducer updates the reducer member of the Manager
 func (m *Manager) UpdateReducer(identifier string, e *event.EdrEvent) {
 	if e.Event.Detection != nil {
-		isigs := e.Event.Detection.Signature.List()
+		isigs := e.Event.Detection.Signature.Slice()
 		sigs := make([]string, 0, len(isigs))
 
 		for _, s := range isigs {
