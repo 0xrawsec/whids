@@ -451,18 +451,15 @@ func hookSelfGUID(h *HIDS, e *event.EdrEvent) {
 func hookFileSystemAudit(h *HIDS, e *event.EdrEvent) {
 	e.Set(pathSysmonCommandLine, "?")
 	e.Set(pathSysmonProcessGUID, nullGUID)
+	e.Set(pathSysmonImage, "?")
 	e.Set(pathImageHashes, "?")
 	if pid, ok := e.GetInt(pathFSAuditProcessId); ok {
 		if pt := h.processTracker.GetByPID(pid); pt != nil {
-			if pt.CommandLine != "" {
-				e.Set(pathSysmonCommandLine, pt.CommandLine)
-			}
-			if pt.hashes != "" {
-				e.Set(pathImageHashes, pt.hashes)
-			}
-			if pt.ProcessGUID != "" {
-				e.Set(pathSysmonProcessGUID, pt.ProcessGUID)
-			}
+
+			e.SetIf(pathSysmonImage, pt.Image, pt.Image != "")
+			e.SetIf(pathSysmonCommandLine, pt.CommandLine, pt.CommandLine != "")
+			e.SetIf(pathImageHashes, pt.hashes, pt.hashes != "")
+			e.SetIf(pathSysmonProcessGUID, pt.ProcessGUID, pt.ProcessGUID != "")
 
 			if obj, ok := e.GetString(pathFSAuditObjectName); ok {
 				if fsutil.IsFile(obj) {

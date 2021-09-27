@@ -46,6 +46,12 @@ type RulesConfig struct {
 	UpdateInterval time.Duration `toml:"update-interval" comment:"Update interval at which rules should be pulled from manager\n NB: only applies if a manager server is configured"`
 }
 
+func (c *RulesConfig) RulesPaths() (path, sha256Path string) {
+	path = filepath.Join(c.RulesDB, "database.gen")
+	sha256Path = fmt.Sprintf("%s.sha256", path)
+	return
+}
+
 // AuditConfig holds Windows audit configuration
 type AuditConfig struct {
 	Enable        bool     `toml:"enable" comment:"Enable following Audit Policies or not"`

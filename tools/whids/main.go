@@ -134,7 +134,6 @@ var (
 	flagPrintAll   bool
 	flagDebug      bool
 	flagVersion    bool
-	flagService    bool
 	flagProfile    bool
 	flagRestore    bool
 	flagAutologger bool
@@ -367,7 +366,7 @@ func main() {
 
 	hidsConf, err := hids.LoadsHIDSConfig(config)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("Failed to load configuration: %s", err))
+		log.Abort(exitFail, fmt.Sprintf("Failed to load configuration: %s", err))
 	}
 
 	if flagRestore {
@@ -380,32 +379,28 @@ func main() {
 		// in order not to write logs into file
 		// TODO: add a stream handler to log facility
 		hidsConf.Logfile = ""
-		hostIDS, err = hids.NewHIDS(&hidsConf)
-		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed create HIDS: %s", err))
-		}
 		log.Infof("Importing rules from %s", importRules)
-		hostIDS.Engine = engine.NewEngine(false)
-		hostIDS.Engine.SetDumpRaw(true)
+		eng := engine.NewEngine(false)
+		eng.SetDumpRaw(true)
 
-		if err := hostIDS.Engine.LoadDirectory(importRules); err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
+		if err := eng.LoadDirectory(importRules); err != nil {
+			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
 		}
 
-		prules, psha256 := hostIDS.RulesPaths()
+		prules, psha256 := hidsConf.RulesConfig.RulesPaths()
 		rules := new(bytes.Buffer)
-		for rule := range hostIDS.Engine.GetRawRule(".*") {
+		for rule := range eng.GetRawRule(".*") {
 			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
-				log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
+				log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
 			}
 		}
 
 		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
 		}
 
 		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
 		}
 
 		log.Infof("IMPORT SUCCESSFUL: %s", prules)

@@ -98,6 +98,22 @@ func (e *EdrEvent) GetBool(p engine.XPath) (b bool, ok bool) {
 	return
 }
 
+// SetIfOr set value if cond == true
+func (e *EdrEvent) SetIf(p engine.XPath, value interface{}, cond bool) (err error) {
+	if cond {
+		return e.Set(p, value)
+	}
+	return nil
+}
+
+// SetIfOr set value if cond == true or other
+func (e *EdrEvent) SetIfOr(p engine.XPath, value interface{}, cond bool, other interface{}) (err error) {
+	if cond {
+		return e.Set(p, value)
+	}
+	return e.Set(p, other)
+}
+
 func (e *EdrEvent) Set(p engine.XPath, i interface{}) (err error) {
 	switch {
 	case p.StartsWith(eventDataPath):

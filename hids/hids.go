@@ -286,7 +286,7 @@ func (h *HIDS) updateEngine(force bool) error {
 func (h *HIDS) needsRulesUpdate() bool {
 	var err error
 	var oldSha256, sha256 string
-	_, rulesSha256Path := h.RulesPaths()
+	_, rulesSha256Path := h.config.RulesConfig.RulesPaths()
 
 	if h.forwarder.Local {
 		return false
@@ -338,7 +338,7 @@ func (h *HIDS) needsContainerUpdate(remoteCont string) bool {
 func (h *HIDS) fetchRulesFromManager() (err error) {
 	var rules, sha256 string
 
-	rulePath, sha256Path := h.RulesPaths()
+	rulePath, sha256Path := h.config.RulesConfig.RulesPaths()
 
 	// if we are not connected to a manager we return
 	if h.config.FwdConfig.Local {
@@ -858,11 +858,11 @@ func (h *HIDS) Report() (r Report) {
 }
 
 // RulesPaths returns the path used by WHIDS to save gene rules
-func (h *HIDS) RulesPaths() (path, sha256Path string) {
+/*func (h *HIDS) RulesPaths() (path, sha256Path string) {
 	path = filepath.Join(h.config.RulesConfig.RulesDB, "database.gen")
 	sha256Path = fmt.Sprintf("%s.sha256", path)
 	return
-}
+}*/
 
 // Run starts the WHIDS engine and waits channel listening is stopped
 func (h *HIDS) Run() {
