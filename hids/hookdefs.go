@@ -40,6 +40,7 @@ const (
 	ActionFiledump  = "filedump"
 	ActionRegdump   = "regdump"
 	ActionReport    = "report"
+	ActionBrief     = "brief"
 )
 
 var (
@@ -359,7 +360,9 @@ func hookHandleActions(h *HIDS, e *event.EdrEvent) {
 				case ActionFiledump:
 					dumpFilesRtn(h, e)
 				case ActionReport:
-					dumpReportRtn(h, e)
+					dumpReportRtn(h, e, false)
+				case ActionBrief:
+					dumpReportRtn(h, e, true)
 				default:
 					log.Errorf("Cannot handle %s action as it is unknown", action)
 				}
@@ -1153,7 +1156,7 @@ func dumpFilesRtn(h *HIDS, e *event.EdrEvent) {
 	}()
 }
 
-func hookDumpReport(h *HIDS, e *event.EdrEvent) {
+/*func hookDumpReport(h *HIDS, e *event.EdrEvent) {
 	// We have to check that if we are handling one of
 	// our event and we don't want to dump ourself
 	if h.IsHIDSEvent(e) {
@@ -1171,9 +1174,9 @@ func hookDumpReport(h *HIDS, e *event.EdrEvent) {
 	}
 
 	dumpReportRtn(h, e)
-}
+}*/
 
-func dumpReportRtn(h *HIDS, e *event.EdrEvent) {
+func dumpReportRtn(h *HIDS, e *event.EdrEvent, light bool) {
 	// make it non blocking
 	go func() {
 		h.hookSemaphore.Acquire()
@@ -1188,11 +1191,10 @@ func dumpReportRtn(h *HIDS, e *event.EdrEvent) {
 			return
 		}
 		reportPath := dumpPrepareDumpFilename(e, h.config.Dump.Dir, guid, "report.json")
-		//psPath := dumpPrepareDumpFilename(e, h.config.Dump.Dir, guid, "ps.json")
 		dumpEventAndCompress(h, e, guid)
 		if c.EnableReporting {
 			log.Infof("Generating IR report: %s", guid)
-			if b, err := json.Marshal(h.Report()); err != nil {
+			if b, err := json.Marshal(h.Report(light)); err != nil {
 				log.Errorf("Failed to JSON encode report: %s", guid)
 			} else {
 				utils.HidsWriteFile(reportPath, b)
@@ -1200,6 +1202,5 @@ func dumpReportRtn(h *HIDS, e *event.EdrEvent) {
 			}
 			log.Infof("Finished generating report: %s", guid)
 		}
-
 	}()
 }

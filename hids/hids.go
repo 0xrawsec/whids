@@ -707,7 +707,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 	case "report":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Stdout = h.Report()
+		cmd.Stdout = h.Report(false)
 	case "processes":
 		h.processTracker.RLock()
 		cmd.Unrunnable()
@@ -834,7 +834,7 @@ func (h *HIDS) IsHIDSEvent(e *event.EdrEvent) bool {
 
 // Report generate a forensic ready report (meant to be dumped)
 // this method is blocking as it runs commands and wait after those
-func (h *HIDS) Report() (r Report) {
+func (h *HIDS) Report(light bool) (r Report) {
 	r.StartTime = time.Now()
 
 	// generate a report for running processes or those terminated still having one child or more
@@ -847,10 +847,13 @@ func (h *HIDS) Report() (r Report) {
 	// Drivers loaded
 	r.Drivers = h.processTracker.Drivers
 
-	// run all the commands configured to inculde in the report
-	r.Commands = h.config.Report.PrepareCommands()
-	for i := range r.Commands {
-		r.Commands[i].Run()
+	// if this is a light report, we don't run the commands
+	if !light {
+		// run all the commands configured to include in the report
+		r.Commands = h.config.Report.PrepareCommands()
+		for i := range r.Commands {
+			r.Commands[i].Run()
+		}
 	}
 
 	r.StopTime = time.Now()
