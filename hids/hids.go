@@ -92,9 +92,21 @@ type HIDS struct {
 	PrintAll bool
 }
 
-func newActionnableEngine() (e *engine.Engine) {
+func newActionnableEngine(c *Config) (e *engine.Engine) {
 	e = engine.NewEngine(false)
 	e.ShowActions = true
+	if c.Actions.Low != nil {
+		e.SetDefaultActions(actionLowLow, actionLowHigh, c.Actions.Low)
+	}
+	if c.Actions.Medium != nil {
+		e.SetDefaultActions(actionMediumLow, actionMediumHigh, c.Actions.Medium)
+	}
+	if c.Actions.High != nil {
+		e.SetDefaultActions(actionHighLow, actionHighHigh, c.Actions.High)
+	}
+	if c.Actions.Critical != nil {
+		e.SetDefaultActions(actionCriticalLow, actionCriticalHigh, c.Actions.Critical)
+	}
 	return
 }
 
@@ -191,25 +203,13 @@ func (h *HIDS) initHooks(advanced bool) {
 		// Experimental
 		//h.preHooks.Hook(hookSetValueSize, fltRegSetValue)
 
-		// Registering post detection hooks
-		// if endpoint we enable dump features
-		if h.config.Endpoint {
-			if h.config.Dump.IsModeEnabled("registry") {
-				h.postHooks.Hook(hookDumpRegistry, fltRegSetValue)
-			}
-			if h.config.Dump.IsModeEnabled("file") {
-				h.postHooks.Hook(hookDumpFiles, fltAnySysmon)
-			}
-			if h.config.Dump.IsModeEnabled("memory") {
-				h.postHooks.Hook(hookDumpProcess, fltAnySysmon)
-			}
-		}
-
 		// This hook must run before action handling as we want
 		// the gene score to be set before an eventual reporting
 		h.postHooks.Hook(hookUpdateGeneScore, fltAnyEvent)
 		// Handles actions defined in rules for any Sysmon event
-		h.postHooks.Hook(hookHandleActions, fltAnyEvent)
+		if h.config.Endpoint {
+			h.postHooks.Hook(hookHandleActions, fltAnyEvent)
+		}
 	}
 }
 
@@ -240,7 +240,7 @@ func (h *HIDS) updateEngine(force bool) error {
 	log.Debugf("reloading rules:%t containers:%t forced:%t", reloadRules, reloadContainers, force)
 	if reloadRules || reloadContainers || force {
 		// We need to create a new engine if we received a rule/containers update
-		h.Engine = newActionnableEngine()
+		h.Engine = newActionnableEngine(h.config)
 
 		// containers must be loaded before the rules anyway
 		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.RulesConfig.ContainersDB)
@@ -561,7 +561,7 @@ func (h *HIDS) updateRoutine() bool {
 }
 
 func (h *HIDS) uploadRoutine() bool {
-	if h.config.IsDumpEnabled() && h.config.IsForwardingEnabled() {
+	if h.config.IsForwardingEnabled() {
 		// force compression in this case
 		h.config.Dump.Compression = true
 		go func() {

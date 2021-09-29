@@ -14,22 +14,30 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-// DumpConfig structure definition
-type DumpConfig struct {
-	Mode          string `toml:"mode" comment:"Dump mode (choices: file, registry, memory)\n Modes can be combined together, separated by |"`
-	Dir           string `toml:"dir" comment:"Directory used to store dumps"`
-	Treshold      int    `toml:"treshold" comment:"Dumps only when event criticality is above this threshold"`
-	MaxDumps      int    `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
-	Compression   bool   `toml:"compression" comment:"Enable dumps compression"`
-	DumpUntracked bool   `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
+const (
+	// default action lower and upper bounds
+	actionLowLow, actionLowHigh           = 1, 4
+	actionMediumLow, actionMediumHigh     = 5, 7
+	actionHighLow, actionHighHigh         = 8, 9
+	actionCriticalLow, actionCriticalHigh = 10, 10
+)
+
+type ActionsConfig struct {
+	AvailableActions []string `toml:"available-actions" comment:"List of available actions (here as a memo for easier configuration, but it is not used in any way by the engine)"`
+	Low              []string `toml:"low" comment:"Default actions to be taken when event criticality is in [1; 4]"`
+	Medium           []string `toml:"medium" comment:"Default actions to be taken when event criticality is in [5; 7]"`
+	High             []string `toml:"high" comment:"Default actions to be taken when event criticality is in [8; 9]"`
+	Critical         []string `toml:"critical" comment:"Default actions to be taken when event criticality is 10"`
 }
 
-// IsModeEnabled checks if dump mode is enabled
-func (d *DumpConfig) IsModeEnabled(mode string) bool {
-	if strings.Contains(d.Mode, "all") {
-		return true
-	}
-	return strings.Contains(d.Mode, mode)
+// DumpConfig structure definition
+type DumpConfig struct {
+	//Mode          string `toml:"mode" comment:"Dump mode (choices: file, registry, memory)\n Modes can be combined together, separated by |"`
+	Dir string `toml:"dir" comment:"Directory used to store dumps"`
+	//Treshold      int    `toml:"treshold" comment:"Dumps only when event criticality is above this threshold"`
+	MaxDumps      int  `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
+	Compression   bool `toml:"compression" comment:"Enable dumps compression"`
+	DumpUntracked bool `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
 }
 
 // SysmonConfig holds Sysmon related configuration
@@ -111,6 +119,7 @@ type Config struct {
 	EtwConfig       *EtwConfig           `toml:"etw" comment:"ETW configuration"`
 	FwdConfig       *api.ForwarderConfig `toml:"forwarder" comment:"Forwarder configuration"`
 	Sysmon          *SysmonConfig        `toml:"sysmon" comment:"Sysmon related settings"`
+	Actions         *ActionsConfig       `toml:"actions" comment:"Default actions to apply to events, depending on their criticality"`
 	Dump            *DumpConfig          `toml:"dump" comment:"Dump related settings"`
 	Report          *ReportConfig        `toml:"reporting" comment:"Reporting related settings"`
 	RulesConfig     *RulesConfig         `toml:"rules" comment:"Gene rules related settings\n Gene repo: https://github.com/0xrawsec/gene\n Gene rules repo: https://github.com/0xrawsec/gene-rules"`
@@ -128,12 +137,6 @@ func LoadsHIDSConfig(path string) (c Config, err error) {
 	dec := toml.NewDecoder(fd)
 	err = dec.Decode(&c)
 	return
-}
-
-// IsDumpEnabled returns true if any kind of dump is enabled
-func (c *Config) IsDumpEnabled() bool {
-	// Dump can be enabled only in endpoint mode
-	return c.Endpoint && (c.Dump.IsModeEnabled("file") || c.Dump.IsModeEnabled("registry") || c.Dump.IsModeEnabled("memory"))
 }
 
 // IsForwardingEnabled returns true if a forwarder is actually configured to forward logs

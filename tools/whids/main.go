@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -81,12 +82,17 @@ var (
 			ArchiveDirectory: "C:\\Sysmon\\",
 			CleanArchived:    true,
 		},
+		Actions: &hids.ActionsConfig{
+			AvailableActions: hids.AvailableActions,
+			Low:              []string{},
+			Medium:           []string{"brief", "filedump", "regdump"},
+			High:             []string{"report", "filedump", "regdump"},
+			Critical:         []string{"report", "filedump", "regdump", "memdump"},
+		},
 		Dump: &hids.DumpConfig{
-			Mode:          "file|registry",
 			Dir:           filepath.Join(abs, "Dumps"),
 			Compression:   true,
 			MaxDumps:      4,
-			Treshold:      8,
 			DumpUntracked: false,
 		},
 		Report: &hids.ReportConfig{
@@ -335,12 +341,9 @@ func main() {
 
 	// profile the program
 	if flagProfile {
-		f, err := os.Create("cpu.pprof")
-		if err != nil {
-			log.Errorf("Failed to create profile file")
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
+		go func() {
+			log.Info("Running profiling server", http.ListenAndServe("0.0.0.0:4242", nil))
+		}()
 	}
 
 	// Print version information and exit

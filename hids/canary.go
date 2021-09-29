@@ -96,9 +96,11 @@ func (c *Canary) clean() {
 		}
 
 		// we remove directory which have been created
-		for _, i := range c.createdDir.Slice() {
-			dir := i.(string)
-			os.RemoveAll(dir)
+		if c.createdDir != nil {
+			for _, i := range c.createdDir.Slice() {
+				dir := i.(string)
+				os.RemoveAll(dir)
+			}
 		}
 	}
 }

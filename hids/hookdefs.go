@@ -32,17 +32,6 @@ const (
 	nullGUID = "{00000000-0000-0000-0000-000000000000}"
 )
 
-const (
-	// Actions
-	ActionKill      = "kill"
-	ActionBlacklist = "blacklist"
-	ActionMemdump   = "memdump"
-	ActionFiledump  = "filedump"
-	ActionRegdump   = "regdump"
-	ActionReport    = "report"
-	ActionBrief     = "brief"
-)
-
 var (
 	selfPath, _ = filepath.Abs(os.Args[0])
 )
@@ -430,20 +419,24 @@ func hookSelfGUID(h *HIDS, e *event.EdrEvent) {
 			// Check parent image first because we launch whids.exe -h to test process termination
 			// and we catch it up if we check image first
 			if pimage, ok := e.GetString(pathSysmonParentImage); ok {
-				if pimage == selfPath {
-					if pguid, ok := e.GetString(pathSysmonParentProcessGUID); ok {
-						h.guid = pguid
-						log.Infof("Found self GUID from PGUID: %s", h.guid)
-						return
+				if ppid, ok := e.GetInt(pathSysmonParentProcessId); ok {
+					if pimage == selfPath && ppid == int64(os.Getpid()) {
+						if pguid, ok := e.GetString(pathSysmonParentProcessGUID); ok {
+							h.guid = pguid
+							log.Infof("Found self GUID from PGUID: %s", h.guid)
+							return
+						}
 					}
 				}
 			}
 			if image, ok := e.GetString(pathSysmonImage); ok {
-				if image == selfPath {
-					if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-						h.guid = guid
-						log.Infof("Found self GUID: %s", h.guid)
-						return
+				if pid, ok := e.GetInt(pathSysmonProcessId); ok {
+					if image == selfPath && pid == int64(os.Getpid()) {
+						if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
+							h.guid = guid
+							log.Infof("Found self GUID: %s", h.guid)
+							return
+						}
 					}
 				}
 			}
@@ -867,28 +860,13 @@ func dumpPrepareDumpFilename(e *event.EdrEvent, dir, guid, filename string) stri
 	return filepath.Join(tmpDumpDir, filename)
 }
 
-func hookDumpProcess(h *HIDS, e *event.EdrEvent) {
-	// We have to check that if we are handling one of
-	// our event and we don't want to dump ourself
+// this hook can run async
+func dumpProcessRtn(h *HIDS, e *event.EdrEvent) {
+
 	if h.IsHIDSEvent(e) {
 		return
 	}
 
-	// we dump only if alert is relevant
-	if getCriticality(e) < h.config.Dump.Treshold {
-		return
-	}
-
-	// if memory got already dumped
-	if hasAction(e, ActionMemdump) {
-		return
-	}
-
-	dumpProcessRtn(h, e)
-}
-
-// this hook can run async
-func dumpProcessRtn(h *HIDS, e *event.EdrEvent) {
 	// make it non blocking
 	go func() {
 		h.hookSemaphore.Acquire()
@@ -901,7 +879,6 @@ func dumpProcessRtn(h *HIDS, e *event.EdrEvent) {
 		if guid = srcGUIDFromEvent(e); guid != nullGUID {
 			// check if we should go on
 			if !h.processTracker.CheckDumpCountOrInc(guid, h.config.Dump.MaxDumps, h.config.Dump.DumpUntracked) {
-				log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
 				return
 			}
 
@@ -914,36 +891,20 @@ func dumpProcessRtn(h *HIDS, e *event.EdrEvent) {
 	}()
 }
 
-func hookDumpRegistry(h *HIDS, e *event.EdrEvent) {
-	// We have to check that if we are handling one of
-	// our event and we don't want to dump ourself
-	if h.IsHIDSEvent(e) {
-		return
-	}
-
-	// we dump only if alert is relevant
-	if getCriticality(e) < h.config.Dump.Treshold {
-		return
-	}
-
-	// if registry got already dumped
-	if hasAction(e, ActionRegdump) {
-		return
-	}
-
-	dumpRegistryRtn(h, e)
-}
-
 func dumpRegistryRtn(h *HIDS, e *event.EdrEvent) {
+
+	// we don't go further if not a registry set value event
+	if e.EventID() != SysmonRegSetValue || h.IsHIDSEvent(e) {
+		return
+	}
+
 	// make it non blocking
 	go func() {
 		h.hookSemaphore.Acquire()
 		defer h.hookSemaphore.Release()
 		if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-
 			// check if we should go on
 			if !h.processTracker.CheckDumpCountOrInc(guid, h.config.Dump.MaxDumps, h.config.Dump.DumpUntracked) {
-				log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
 				return
 			}
 
@@ -971,7 +932,6 @@ func dumpRegistryRtn(h *HIDS, e *event.EdrEvent) {
 				}
 			}
 		}
-		log.Errorf("Failed to dump registry from event")
 	}()
 }
 
@@ -1027,28 +987,12 @@ func dumpParentCommandLine(h *HIDS, e *event.EdrEvent, dumpPath string) {
 	}
 }
 
-func hookDumpFiles(h *HIDS, e *event.EdrEvent) {
-	// We have to check that if we are handling one of
-	// our event and we don't want to dump ourself
+func dumpFilesRtn(h *HIDS, e *event.EdrEvent) {
+	var err error
+
 	if h.IsHIDSEvent(e) {
 		return
 	}
-
-	// we dump only if alert is relevant
-	if getCriticality(e) < h.config.Dump.Treshold {
-		return
-	}
-
-	// if file got already dumped
-	if hasAction(e, ActionFiledump) {
-		return
-	}
-
-	dumpFilesRtn(h, e)
-}
-
-func dumpFilesRtn(h *HIDS, e *event.EdrEvent) {
-	var err error
 
 	// make it non blocking
 	go func() {
@@ -1058,7 +1002,6 @@ func dumpFilesRtn(h *HIDS, e *event.EdrEvent) {
 
 		// check if we should go on
 		if !h.processTracker.CheckDumpCountOrInc(guid, h.config.Dump.MaxDumps, h.config.Dump.DumpUntracked) {
-			log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
 			return
 		}
 
@@ -1156,27 +1099,12 @@ func dumpFilesRtn(h *HIDS, e *event.EdrEvent) {
 	}()
 }
 
-/*func hookDumpReport(h *HIDS, e *event.EdrEvent) {
-	// We have to check that if we are handling one of
-	// our event and we don't want to dump ourself
+func dumpReportRtn(h *HIDS, e *event.EdrEvent, light bool) {
+
 	if h.IsHIDSEvent(e) {
 		return
 	}
 
-	// we dump only if alert is relevant
-	if getCriticality(e) < h.config.Dump.Treshold {
-		return
-	}
-
-	// if file got already dumped
-	if hasAction(e, ActionReport) {
-		return
-	}
-
-	dumpReportRtn(h, e)
-}*/
-
-func dumpReportRtn(h *HIDS, e *event.EdrEvent, light bool) {
 	// make it non blocking
 	go func() {
 		h.hookSemaphore.Acquire()
@@ -1187,9 +1115,9 @@ func dumpReportRtn(h *HIDS, e *event.EdrEvent, light bool) {
 
 		// check if we should go on
 		if !h.processTracker.CheckDumpCountOrInc(guid, h.config.Dump.MaxDumps, h.config.Dump.DumpUntracked) {
-			log.Warnf("Not dumping, reached maximum dumps count for guid %s", guid)
 			return
 		}
+
 		reportPath := dumpPrepareDumpFilename(e, h.config.Dump.Dir, guid, "report.json")
 		dumpEventAndCompress(h, e, guid)
 		if c.EnableReporting {
