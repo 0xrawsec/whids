@@ -66,15 +66,50 @@ func GzipFileBestSpeed(path string) (err error) {
 	return os.Rename(partname, fname)
 }
 
+// HidsMkdirAll is a wrapper around os.MkdirAll with appropriate
+// permissions
+func HidsMkdirAll(dir string) error {
+	return os.MkdirAll(dir, DefaultPerms)
+}
+
 // HidsCreateFile creates a file with the good permissions
 func HidsCreateFile(filename string) (*os.File, error) {
 	return os.OpenFile(filename, os.O_CREATE|os.O_RDWR, DefaultPerms)
 }
 
-// HidsWriteFile is a wrapper around ioutil.WriteFile to write a file
+// HidsWriteData is a wrapper around ioutil.WriteFile to write a file
 // with the good permissions
-func HidsWriteFile(filename string, data []byte) error {
-	return ioutil.WriteFile(filename, data, DefaultPerms)
+func HidsWriteData(dest string, data []byte) error {
+	return ioutil.WriteFile(dest, data, DefaultPerms)
+}
+
+// HidsWriteReader writes the content of a reader to a destination file. If
+// compress is true .gz extension is added to destination file name.
+func HidsWriteReader(dst string, content io.Reader, compress bool) (err error) {
+	var out *os.File
+	var w io.WriteCloser
+
+	if compress && !strings.HasSuffix(dst, ".gz") {
+		dst = fmt.Sprintf("%s.gz", dst)
+	}
+
+	if out, err = HidsCreateFile(dst); err != nil {
+		return
+	}
+	defer out.Close()
+
+	if compress {
+		if w, err = gzip.NewWriterLevel(out, gzip.BestSpeed); err != nil {
+			return
+		}
+		defer w.Close()
+	}
+
+	if _, err = io.Copy(w, content); err != nil {
+		return
+	}
+
+	return w.Close()
 }
 
 // IsPipePath checks whether the argument path is a pipe

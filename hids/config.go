@@ -32,12 +32,10 @@ type ActionsConfig struct {
 
 // DumpConfig structure definition
 type DumpConfig struct {
-	//Mode          string `toml:"mode" comment:"Dump mode (choices: file, registry, memory)\n Modes can be combined together, separated by |"`
-	Dir string `toml:"dir" comment:"Directory used to store dumps"`
-	//Treshold      int    `toml:"treshold" comment:"Dumps only when event criticality is above this threshold"`
-	MaxDumps      int  `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
-	Compression   bool `toml:"compression" comment:"Enable dumps compression"`
-	DumpUntracked bool `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
+	Dir           string `toml:"dir" comment:"Directory used to store dumps"`
+	MaxDumps      int    `toml:"max-dumps" comment:"Maximum number of dumps per process"` // maximum number of dump per GUID
+	Compression   bool   `toml:"compression" comment:"Enable dumps compression"`
+	DumpUntracked bool   `toml:"dump-untracked" comment:"Dumps untracked process. Untracked processes are missing\n enrichment information and may generate unwanted dumps"` // whether or not we should dump untracked processes, if true it would create many FPs
 }
 
 // SysmonConfig holds Sysmon related configuration

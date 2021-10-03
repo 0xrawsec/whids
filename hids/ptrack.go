@@ -350,7 +350,7 @@ func (pt *ActivityTracker) freeRtn() {
 // returns true if DumpCount member of processTrack is below max argument
 // and increments if necessary. This function is used to check whether we
 // should still dump information given a guid
-func (pt *ActivityTracker) CheckDumpCountOrInc(guid string, max int, deflt bool) bool {
+func (pt *ActivityTracker) CheckDumpCountOrInc(guid string, max int, dfault bool) bool {
 	pt.Lock()
 	defer pt.Unlock()
 	if track, ok := pt.guids[guid]; ok {
@@ -361,7 +361,7 @@ func (pt *ActivityTracker) CheckDumpCountOrInc(guid string, max int, deflt bool)
 		return false
 	}
 	// we return a parametrized default value (cleaner than returning global)
-	return deflt
+	return dfault
 }
 
 func (pt *ActivityTracker) Add(t *ProcessTrack) {
