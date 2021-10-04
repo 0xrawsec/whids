@@ -119,9 +119,9 @@ func (cc *ClientConfig) Transport() http.RoundTripper {
 
 // ManagerClient structure definition
 type ManagerClient struct {
-	config    *ClientConfig
-	ManagerIP net.IP
+	config *ClientConfig
 
+	ManagerIP  net.IP
 	HTTPClient http.Client
 }
 
@@ -152,9 +152,9 @@ func NewManagerClient(c *ClientConfig) (*ManagerClient, error) {
 	tpt := c.Transport()
 
 	mc := &ManagerClient{
-		HTTPClient: http.Client{Transport: tpt},
 		config:     c,
 		ManagerIP:  c.ManagerIP(),
+		HTTPClient: http.Client{Transport: tpt},
 	}
 
 	// host
@@ -420,27 +420,7 @@ func (m *ManagerClient) GetRules() (string, error) {
 	return "", nil
 }
 
-// PrepareFileUpload prepares a FileUpload from several parameters
-func (m *ManagerClient) PrepareFileUpload(path, guid, evthash, filename string) (*FileUpload, error) {
-	fu := FileUpload{Name: filename, GUID: guid, EventHash: evthash}
-	if fsutil.IsFile(path) {
-		if !m.isFileAboveUploadLimit(path) {
-			fd, err := os.Open(path)
-			if err != nil {
-				return &fu, err
-			}
-			defer fd.Close()
-			if fu.Content, err = ioutil.ReadAll(fd); err != nil {
-				return &fu, err
-			}
-			return &fu, nil
-		}
-		return &fu, fmt.Errorf("dump size above limit")
-	}
-	return &fu, os.ErrNotExist
-}
-
-func (m *ManagerClient) isFileAboveUploadLimit(path string) bool {
+func (m *ManagerClient) IsFileAboveUploadLimit(path string) bool {
 	if fsutil.IsFile(path) {
 		stats, err := os.Stat(path)
 		if err == nil {
@@ -454,12 +434,14 @@ func (m *ManagerClient) isFileAboveUploadLimit(path string) bool {
 func (m *ManagerClient) PostDump(f *FileUpload) error {
 	if auth, up := m.IsServerAuthenticated(); auth {
 		if up {
-			body, err := json.Marshal(f)
-			if err != nil {
-				return fmt.Errorf("PostDump failed to JSON encode")
+			buf := new(bytes.Buffer)
+			enc := json.NewEncoder(buf)
+
+			if err := enc.Encode(f); err != nil {
+				return fmt.Errorf("PostDump failed to encode to JSON")
 			}
 
-			req, err := m.Prepare("POST", EptAPIPostDumpPath, bytes.NewBuffer(body))
+			req, err := m.Prepare("POST", EptAPIPostDumpPath, buf)
 
 			if err != nil {
 				return fmt.Errorf("PostDump failed to prepare request: %s", err)

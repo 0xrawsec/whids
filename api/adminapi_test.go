@@ -17,9 +17,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var (
+	testAdminUser = &AdminAPIUser{
+		Identifier: "test",
+		Key:        KeyGen(DefaultKeySize),
+	}
+)
+
 func doRequest(method, url string) (r AdminAPIResponse) {
 	cl := http.Client{Transport: cconf.Transport()}
-	key := mconf.AdminAPI.Users[0].Key
+	key := testAdminUser.Key
 	uri := fmt.Sprintf("https://%s:%d%s", mconf.AdminAPI.Host, mconf.AdminAPI.Port, url)
 	req, err := http.NewRequest(method, uri, new(bytes.Buffer))
 	if err != nil {
@@ -54,7 +61,7 @@ func put(url string) (r AdminAPIResponse) {
 
 func post(url string, data []byte) (r AdminAPIResponse) {
 	cl := http.Client{Transport: cconf.Transport()}
-	key := mconf.AdminAPI.Users[0].Key
+	key := testAdminUser.Key
 	uri := fmt.Sprintf("https://%s:%d%s", mconf.AdminAPI.Host, mconf.AdminAPI.Port, url)
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
@@ -101,6 +108,7 @@ func prepareTest() (m *Manager, c *ManagerClient) {
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)
 	}
+	m.users.Add(testAdminUser)
 	m.AddEndpoint(cconf.UUID, key)
 	m.Run()
 
@@ -454,7 +462,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// test retrieving all the logs
-	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts")
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart)
 	failOnAdminAPIError(t, r)
 	data := make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -521,7 +529,8 @@ func TestEventStream(t *testing.T) {
 
 	for i := float64(0); i < nclients; i++ {
 		u := url.URL{Scheme: "wss", Host: format("localhost:%d", 8001), Path: AdmAPIStreamEvents}
-		key := mconf.AdminAPI.Users[0].Key
+		key := testAdminUser.Key
+		m.users.GetByIdentifier("Test")
 		dialer := *websocket.DefaultDialer
 		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		t.Logf("connecting to %s", u.String())

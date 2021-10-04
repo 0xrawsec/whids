@@ -31,7 +31,8 @@ type Command struct {
 	Drop []*EndpointFile `json:"drop"`
 	// used to fetch files from the endpoint
 	Fetch      map[string]*EndpointFile `json:"fetch"`
-	Stdout     interface{}              `json:"stdout"`
+	Json       interface{}              `json:"json"`
+	Stdout     []byte                   `json:"stdout"`
 	Stderr     []byte                   `json:"stderr"`
 	Error      string                   `json:"error"`
 	Sent       bool                     `json:"sent"`
@@ -188,7 +189,7 @@ func (c *Command) Run() (err error) {
 
 			// if we expect JSON output
 			if c.ExpectJSON {
-				if err := json.Unmarshal(stdout, &c.Stdout); err != nil {
+				if err := json.Unmarshal(stdout, &c.Json); err != nil {
 					c.Stdout = stdout
 				}
 			} else {
@@ -232,6 +233,7 @@ func (c *Command) Complete(other *Command) error {
 	if c.UUID == other.UUID {
 		c.Name = other.Name
 		c.Args = other.Args
+		c.Json = other.Json
 		c.Stdout = other.Stdout
 		c.Stderr = other.Stderr
 		c.Error = other.Error

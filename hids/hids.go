@@ -572,18 +572,42 @@ func (h *HIDS) uploadRoutine() bool {
 						// upload only file with some extensions
 						if uploadExts.Contains(filepath.Ext(fi.Name())) {
 							if len(sp) >= 2 {
+								var shrink *api.UploadShrinker
+								var err error
+
+								guid := sp[len(sp)-2]
+								ehash := sp[len(sp)-1]
 								fullpath := filepath.Join(wi.Dirpath, fi.Name())
-								fu, err := h.forwarder.Client.PrepareFileUpload(fullpath, sp[len(sp)-2], sp[len(sp)-1], fi.Name())
-								if err != nil {
-									log.Errorf("Failed to prepare dump file to upload: %s", err)
+
+								// we create upload shrinker object
+								if shrink, err = api.NewUploadShrinker(fullpath, guid, ehash); err != nil {
+									log.Errorf("Failed to create upload iterator: %s", err)
 									continue
 								}
-								if err := h.forwarder.Client.PostDump(fu); err != nil {
-									log.Errorf("%s", err)
-									continue
+
+								if shrink.Size() > h.config.FwdConfig.Client.MaxUploadSize {
+									log.Warnf("Dump file is above allowed upload limit, %s will be deleted without being sent", fullpath)
+									goto CleanShrinker
 								}
-								log.Infof("Dump file successfully sent to manager, deleting: %s", fullpath)
-								os.Remove(fullpath)
+
+								// we shrink a file into several chunks to reduce memory impact
+								for fu := shrink.Next(); fu != nil; fu = shrink.Next() {
+									if err = h.forwarder.Client.PostDump(fu); err != nil {
+										log.Error(err)
+										break
+									}
+								}
+
+							CleanShrinker:
+								// close shrinker otherwise we cannot remove files
+								shrink.Close()
+
+								if shrink.Err() == nil {
+									log.Infof("Dump file successfully sent to manager, deleting: %s (err=%s)", fullpath, os.Remove(fullpath))
+								} else {
+									log.Errorf("Failed to post dump file: %s", shrink.Err())
+								}
+
 							} else {
 								log.Errorf("Unexpected directory layout, cannot send dump to manager")
 							}
@@ -664,7 +688,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			if out, err := cmdHash(cmd.Args[0]); err != nil {
 				cmd.Error = err.Error()
 			} else {
-				cmd.Stdout = out
+				cmd.Json = out
 			}
 		}
 	case "stat":
@@ -674,7 +698,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			if out, err := cmdStat(cmd.Args[0]); err != nil {
 				cmd.Error = err.Error()
 			} else {
-				cmd.Stdout = out
+				cmd.Json = out
 			}
 		}
 	case "dir":
@@ -684,14 +708,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			if out, err := cmdDir(cmd.Args[0]); err != nil {
 				cmd.Error = err.Error()
 			} else {
-				cmd.Stdout = out
+				cmd.Json = out
 			}
 		}
 	case "walk":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
-			cmd.Stdout = cmdWalk(cmd.Args[0])
+			cmd.Json = cmdWalk(cmd.Args[0])
 		}
 	case "find":
 		cmd.Unrunnable()
@@ -700,30 +724,30 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			if out, err := cmdFind(cmd.Args[0], cmd.Args[1]); err != nil {
 				cmd.Error = err.Error()
 			} else {
-				cmd.Stdout = out
+				cmd.Json = out
 			}
 		}
 	case "report":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Stdout = h.Report(false)
+		cmd.Json = h.Report(false)
 	case "processes":
 		h.processTracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Stdout = h.processTracker.PS()
+		cmd.Json = h.processTracker.PS()
 		h.processTracker.RUnlock()
 	case "modules":
 		h.processTracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Stdout = h.processTracker.Modules()
+		cmd.Json = h.processTracker.Modules()
 		h.processTracker.RUnlock()
 	case "drivers":
 		h.processTracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Stdout = h.processTracker.Drivers
+		cmd.Json = h.processTracker.Drivers
 		h.processTracker.RUnlock()
 	}
 

@@ -62,6 +62,13 @@ func (u *Users) List() (s []*AdminAPIUser) {
 	return
 }
 
+func (u *Users) GetByIdentifier(identifier string) (user *AdminAPIUser, ok bool) {
+	u.RLock()
+	defer u.RUnlock()
+	user, ok = u.identifiers[identifier]
+	return
+}
+
 func (u *Users) GetByKey(key string) (user *AdminAPIUser, ok bool) {
 	u.RLock()
 	defer u.RUnlock()

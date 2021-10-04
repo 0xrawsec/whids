@@ -76,13 +76,23 @@ func TestClientPostDump(t *testing.T) {
 
 	for wi := range fswalker.Walk("./dumps") {
 		for _, fi := range wi.Files {
+			var shrink *UploadShrinker
 			sp := strings.Split(wi.Dirpath, "/")
+			guid := sp[len(sp)-2]
+			ehash := sp[len(sp)-1]
 			path := filepath.Join(wi.Dirpath, fi.Name())
-			fu, err := c.PrepareFileUpload(path, sp[len(sp)-2], sp[len(sp)-1], fi.Name())
-			if err != nil {
+
+			if shrink, err = NewUploadShrinker(path, guid, ehash); err != nil {
 				t.Errorf("Failed to prepare dump: %s", path)
 			}
-			c.PostDump(fu)
+			for fu := shrink.Next(); fu != nil; fu = shrink.Next() {
+				if err = c.PostDump(fu); err != nil {
+					t.Error(err)
+				}
+			}
+			if shrink.Err() != nil {
+				t.Error(shrink.Err())
+			}
 		}
 	}
 }
@@ -190,12 +200,13 @@ func TestClientExecuteCommand(t *testing.T) {
 		t.Fail()
 	}
 
-	if len(cmd.Stdout.([]byte)) == 0 {
+	t.Logf("%v", cmd.Stdout)
+	if len(cmd.Stdout) == 0 {
 		t.Errorf("Expected output on stdout")
 		t.Fail()
 	}
 
-	t.Logf("Stdout of command executed: %s", string(cmd.Stdout.([]byte)))
+	t.Logf("Stdout of command executed: %s", string(cmd.Stdout))
 
 }
 func TestClientExecuteDroppedCommand(t *testing.T) {
@@ -261,12 +272,12 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 		t.FailNow()
 	}
 
-	if len(cmd.Stdout.([]byte)) == 0 {
+	if len(cmd.Stdout) == 0 {
 		t.Errorf("Expected output on stdout")
 		t.FailNow()
 	}
 
-	t.Logf("Stdout of command executed: %s", string(cmd.Stdout.([]byte)))
+	t.Logf("Stdout of command executed: %s", string(cmd.Stdout))
 
 	expMD5, err := file.Md5("/usr/bin/ls")
 	if err != nil {
