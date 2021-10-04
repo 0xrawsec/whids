@@ -326,8 +326,12 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 	det := e.GetDetection()
 
 	if m.shouldDump(e) && !m.hids.IsHIDSEvent(e) && det != nil {
-		kill := det.Actions.Contains(ActionKill)
 		hash := e.Hash()
+
+		// Test variables
+		report := det.Actions.Contains(ActionReport)
+		brief := det.Actions.Contains(ActionBrief)
+		kill := det.Actions.Contains(ActionKill)
 
 		// handling blacklisting action
 		if det.Actions.Contains(ActionBlacklist) {
@@ -360,9 +364,8 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		}
 
 		// handling report dumping
-		if det.Actions.Contains(ActionReport) && m.hids.config.Report.EnableReporting {
-			light := e.GetDetection().Actions.Contains(ActionBrief)
-			if err := m.dumpAsJson(m.prepare(e, "report.json"), m.hids.Report(light)); err != nil {
+		if (report || brief) && m.hids.config.Report.EnableReporting {
+			if err := m.dumpAsJson(m.prepare(e, "report.json"), m.hids.Report(brief)); err != nil {
 				log.Errorf("Failed to dump report for event %s: %s", hash, err)
 			}
 		}
