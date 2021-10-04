@@ -25,7 +25,7 @@ var (
 /////////////////// Utils
 
 func (m *Manager) endpointFromRequest(rq *http.Request) *Endpoint {
-	uuid := rq.Header.Get("UUID")
+	uuid := rq.Header.Get(EndpointUUIDHeader)
 	if endpt, ok := m.endpoints.GetByUUID(uuid); ok {
 		return endpt
 	}
@@ -33,22 +33,24 @@ func (m *Manager) endpointFromRequest(rq *http.Request) *Endpoint {
 }
 
 func (m *Manager) mutEndpointFromRequest(rq *http.Request) *Endpoint {
-	uuid := rq.Header.Get("UUID")
+	uuid := rq.Header.Get(EndpointUUIDHeader)
 	if endpt, ok := m.endpoints.GetMutByUUID(uuid); ok {
 		return endpt
 	}
 	return nil
 }
 
+// Middleware definitions
+
 func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
 		var endpt *Endpoint
 		var ok bool
 
-		uuid := rq.Header.Get("UUID")
-		key := rq.Header.Get("Api-Key")
-		hostname := rq.Header.Get("Hostname")
-		ip := rq.Header.Get("IP")
+		uuid := rq.Header.Get(EndpointUUIDHeader)
+		key := rq.Header.Get(AuthKeyHeader)
+		hostname := rq.Header.Get(EndpointHostnameHeader)
+		ip := rq.Header.Get(EndpointIPHeader)
 
 		if endpt, ok = m.endpoints.GetMutByUUID(uuid); !ok {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
@@ -89,11 +91,19 @@ func isVerboseURL(u *url.URL) bool {
 	return false
 }
 
-func quietLogHTTPMiddleware(next http.Handler) http.Handler {
+func endptLogHTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// src-ip:src-port http-method http-proto url user-agent UUID content-length
+		fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(EndpointUUIDHeader), r.ContentLength)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func endptQuietLogHTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isVerboseURL(r.URL) {
 			// src-ip:src-port http-method http-proto url user-agent UUID content-length
-			fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get("UUID"), r.ContentLength)
+			fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(EndpointUUIDHeader), r.ContentLength)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -114,9 +124,9 @@ func (m *Manager) runEndpointAPI() {
 		// Middleware initialization
 		// Manages Request Logging
 		if m.Config.Logging.VerboseHTTP {
-			rt.Use(logHTTPMiddleware)
+			rt.Use(endptLogHTTPMiddleware)
 		} else {
-			rt.Use(quietLogHTTPMiddleware)
+			rt.Use(endptQuietLogHTTPMiddleware)
 		}
 
 		// Manages Authorization
@@ -268,7 +278,7 @@ func (m *Manager) ContainerSha256(wt http.ResponseWriter, rq *http.Request) {
 // Collect HTTP handler
 func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 	cnt := 0
-	uuid := rq.Header.Get("UUID")
+	uuid := rq.Header.Get(EndpointUUIDHeader)
 
 	defer rq.Body.Close()
 
@@ -359,7 +369,7 @@ func (m *Manager) GetCommand(uuid string) (*Command, error) {
 
 // Command HTTP handler
 func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
-	id := rq.Header.Get("UUID")
+	id := rq.Header.Get(EndpointUUIDHeader)
 	switch rq.Method {
 	case "GET":
 		if endpt, ok := m.endpoints.GetMutByUUID(id); ok {

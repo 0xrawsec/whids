@@ -186,11 +186,11 @@ func (m *ManagerClient) Prepare(method, url string, body io.Reader) (*http.Reque
 
 	if err == nil {
 		r.Header.Add("User-Agent", UserAgent)
-		r.Header.Add("Hostname", Hostname)
+		r.Header.Add(EndpointHostnameHeader, Hostname)
 		// the address used by the client to connect to the manager
-		r.Header.Add("IP", m.config.localAddr)
-		r.Header.Add("UUID", m.config.UUID)
-		r.Header.Add("Api-Key", m.config.Key)
+		r.Header.Add(EndpointIPHeader, m.config.localAddr)
+		r.Header.Add(EndpointUUIDHeader, m.config.UUID)
+		r.Header.Add(AuthKeyHeader, m.config.Key)
 	}
 	return r, err
 }

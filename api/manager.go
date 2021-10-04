@@ -88,15 +88,6 @@ func IPFromRequest(req *http.Request) (net.IP, error) {
 	return userIP, nil
 }
 
-// Middleware definitions
-func logHTTPMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// src-ip:src-port http-method http-proto url user-agent UUID content-length
-		fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get("UUID"), r.ContentLength)
-		next.ServeHTTP(w, r)
-	})
-}
-
 func gunzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Encoding") == "gzip" {

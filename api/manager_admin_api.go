@@ -144,12 +144,20 @@ var (
 func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
 
-		auth := rq.Header.Get("Api-Key")
+		auth := rq.Header.Get(AuthKeyHeader)
 		if _, ok := m.users.GetByKey(auth); !ok {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(wt, rq)
+	})
+}
+
+func admLogHTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// src-ip:src-port http-method http-proto url user-agent UUID content-length
+		fmt.Printf("%s %s %s %s %s \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.ContentLength)
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -1249,7 +1257,7 @@ func (m *Manager) runAdminAPI() {
 		rt := mux.NewRouter()
 		// Middleware initialization
 		// Manages Request Logging
-		rt.Use(logHTTPMiddleware)
+		rt.Use(admLogHTTPMiddleware)
 		// Manages Authorization
 		rt.Use(m.adminAuthorizationMiddleware)
 		// Manages Compression

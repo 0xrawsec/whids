@@ -32,7 +32,7 @@ func doRequest(method, url string) (r AdminAPIResponse) {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Add("Api-Key", key)
+	req.Header.Add(AuthKeyHeader, key)
 	resp, err := cl.Do(req)
 	if err != nil {
 		panic(err)
@@ -67,7 +67,7 @@ func post(url string, data []byte) (r AdminAPIResponse) {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Add("Api-Key", key)
+	req.Header.Add(AuthKeyHeader, key)
 	resp, err := cl.Do(req)
 	if err != nil {
 		panic(err)
@@ -534,7 +534,7 @@ func TestEventStream(t *testing.T) {
 		dialer := *websocket.DefaultDialer
 		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		t.Logf("connecting to %s", u.String())
-		c, resp, err := dialer.Dial(u.String(), http.Header{"Api-Key": {key}})
+		c, resp, err := dialer.Dial(u.String(), http.Header{AuthKeyHeader: {key}})
 		if err != nil {
 			if err == websocket.ErrBadHandshake {
 				t.Logf("handshake failed with status %d", resp.StatusCode)
