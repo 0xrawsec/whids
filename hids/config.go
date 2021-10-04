@@ -23,7 +23,7 @@ const (
 )
 
 type ActionsConfig struct {
-	AvailableActions []string `toml:"available-actions" comment:"List of available actions (here as a memo for easier configuration, but it is not used in any way by the engine)"`
+	AvailableActions []string `toml:"available-actions" commented:"true" comment:"List of available actions (here as a memo for easier configuration, but it is not used in any way by the engine)"`
 	Low              []string `toml:"low" comment:"Default actions to be taken when event criticality is in [1; 4]"`
 	Medium           []string `toml:"medium" comment:"Default actions to be taken when event criticality is in [5; 7]"`
 	High             []string `toml:"high" comment:"Default actions to be taken when event criticality is in [8; 9]"`
