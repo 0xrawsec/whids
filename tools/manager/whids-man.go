@@ -57,11 +57,11 @@ var (
 		Logging: api.ManagerLogConfig{
 			Root:        "./data/logs",
 			LogBasename: "forwarded",
-			//EnEnptLogs:  true,
 		},
 		ContainersDir: "./data/containers",
 		RulesDir:      "./data/rules",
 		DumpDir:       "./data/dumps",
+		Database:      "./data/database",
 	}
 )
 

@@ -93,7 +93,7 @@ func (s *EventSearcher) buildIndex(start, stop time.Time, key string) (index *da
 	index = datastructs.NewSortedSlice()
 	marked := datastructs.NewSet()
 
-	if key != "" {
+	if key == "" {
 		if keys, err = s.keys(); err != nil {
 			return
 		}

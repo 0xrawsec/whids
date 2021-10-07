@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/0xrawsec/golang-utils/scanner"
 	"github.com/0xrawsec/golang-utils/sync/semaphore"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/logger"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -43,8 +45,8 @@ var (
 		Logging: ManagerLogConfig{
 			Root:        "./data/logs",
 			LogBasename: "alerts",
-			//EnEnptLogs:  true,
 		},
+		Database:      "./data/database",
 		RulesDir:      "./data",
 		DumpDir:       "./data/uploads/",
 		ContainersDir: "./data/containers",
@@ -70,26 +72,58 @@ func init() {
 	}
 }
 
-func emitEvents(count int) (ce chan *event.EdrEvent) {
+func emitEvents(count int, detection bool) (ce chan *event.EdrEvent) {
 	ce = make(chan *event.EdrEvent)
 	go func() {
 		defer close(ce)
-		for i := 0; i < count; i++ {
+		for count > 0 {
 			i := rand.Int() % len(events)
 			e := events[i]
+			if detection && !e.IsDetection() {
+				continue
+			}
+			if !detection && e.IsDetection() {
+				continue
+			}
 			e.Event.System.TimeCreated.SystemTime = time.Now()
 			ce <- &e
+			count--
 		}
 	}()
 	return
 }
 
-func readerFromEvents(count int) io.Reader {
-	tmp := make([]string, 0, count)
-	for event := range emitEvents(count) {
-		tmp = append(tmp, string(utils.Json(event)))
+func emitMixedEvents(ecount, dcount int) (ce chan *event.EdrEvent) {
+	ce = make(chan *event.EdrEvent)
+	go func() {
+		defer close(ce)
+		for ecount > 0 || dcount > 0 {
+			i := rand.Int() % len(events)
+			e := events[i]
+			if dcount == 0 && e.IsDetection() {
+				continue
+			}
+			if ecount == 0 && !e.IsDetection() {
+				continue
+			}
+			e.Event.System.TimeCreated.SystemTime = time.Now()
+			ce <- &e
+			if e.IsDetection() {
+				dcount--
+			} else {
+				ecount--
+			}
+		}
+	}()
+	return
+}
+
+func countEvents(s *logger.EventSearcher) (n int) {
+	for range s.Events(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "", math.MaxInt, 0) {
+		n++
 	}
-	return bytes.NewBufferString(strings.Join(tmp, "\n"))
+	return
+
 }
 
 func countLinesInGzFile(filepath string) int {
@@ -114,6 +148,14 @@ func countLinesInGzFile(filepath string) int {
 	return line
 }
 
+func readerFromEvents(count int) io.Reader {
+	tmp := make([]string, 0, count)
+	for event := range emitEvents(count, false) {
+		tmp = append(tmp, string(utils.Json(event)))
+	}
+	return bytes.NewBufferString(strings.Join(tmp, "\n"))
+}
+
 func clean(mc *ManagerConfig, fc *ForwarderConfig) {
 	os.RemoveAll(mc.Logging.Root)
 	os.RemoveAll(fc.Logging.Dir)
@@ -128,8 +170,8 @@ func TestForwarderBasic(t *testing.T) {
 	//defer clean(&mconf, &fconf)
 
 	nevents := 1000
-	testfile := "Testlog.gz"
 	key := KeyGen(DefaultKeySize)
+	testfile := "Testlog.gz"
 	mconf.Logging.LogBasename = testfile
 
 	r, err := NewManager(&mconf)
@@ -146,9 +188,10 @@ func TestForwarderBasic(t *testing.T) {
 		t.FailNow()
 	}
 	f.Run()
+	defer f.Close()
 
 	cnt := 0
-	for e := range emitEvents(nevents) {
+	for e := range emitEvents(nevents, false) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -158,7 +201,7 @@ func TestForwarderBasic(t *testing.T) {
 
 	// shuts down the receiver before counting lines
 	r.Shutdown()
-	if n := countLinesInGzFile(logfileFromConfig(mconf)); n != nevents {
+	if n := countEvents(r.eventSearcher); n != nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nevents)
 	}
 	log.Infof("Shutting down")
@@ -193,9 +236,10 @@ func TestCollectorAuthFailure(t *testing.T) {
 		t.FailNow()
 	}
 	f.Run()
+	defer f.Close()
 
 	cnt := 0
-	for e := range emitEvents(nevents) {
+	for e := range emitEvents(nevents, false) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -205,7 +249,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 
 	// shuts down the receiver before counting lines
 	r.Shutdown()
-	if n := countLinesInGzFile(logfileFromConfig(mconf)); n != 0 {
+	if n := countEvents(r.eventSearcher); n != 0 {
 		t.Errorf("Some events were logged while it should not")
 	}
 }
@@ -237,9 +281,10 @@ func TestCollectorAuthSuccess(t *testing.T) {
 		t.FailNow()
 	}
 	f.Run()
+	defer f.Close()
 
 	cnt := 0
-	for e := range emitEvents(nevents) {
+	for e := range emitEvents(nevents, false) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
@@ -249,12 +294,17 @@ func TestCollectorAuthSuccess(t *testing.T) {
 
 	// shuts down the receiver before counting lines
 	r.Shutdown()
-	if n := countLinesInGzFile(logfileFromConfig(mconf)); n != nevents {
+	if n := countEvents(r.eventSearcher); n != nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nevents)
 	}
 }
 
 func TestForwarderParallel(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip()
+	}
+
 	clean(&mconf, &fconf)
 	defer clean(&mconf, &fconf)
 
@@ -286,11 +336,11 @@ func TestForwarderParallel(t *testing.T) {
 				t.FailNow()
 			}
 			c.Run()
-			for e := range emitEvents(nevents) {
+			defer c.Close()
+			for e := range emitEvents(nevents, false) {
 				c.PipeEvent(e)
 			}
 			time.Sleep(2 * time.Second)
-			c.Close()
 		}()
 	}
 	wg.Wait()
@@ -298,7 +348,7 @@ func TestForwarderParallel(t *testing.T) {
 
 	// shuts down the receiver before counting lines
 	r.Shutdown()
-	if n := countLinesInGzFile(logfileFromConfig(mconf)); n != nclients*nevents {
+	if n := countEvents(r.eventSearcher); n != nclients*nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nclients*nevents)
 	}
 }
@@ -310,7 +360,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 
 	nevents := 1000
 	testfile := "TestCollectorQueue.log"
-	outfile := fmt.Sprintf("%s.1", testfile)
+	//outfile := fmt.Sprintf("%s.1", testfile)
 
 	// Initialize the receiver
 	key := KeyGen(DefaultKeySize)
@@ -335,7 +385,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	defer f.Close()
 
 	// Sending events
-	for e := range emitEvents(nevents / 2) {
+	for e := range emitEvents(nevents/2, false) {
 		f.PipeEvent(e)
 	}
 
@@ -351,7 +401,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	r.Shutdown()
 
 	// Sending another wave of events
-	for e := range emitEvents(nevents / 2) {
+	for e := range emitEvents(nevents/2, false) {
 		f.PipeEvent(e)
 	}
 
@@ -367,7 +417,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 
 	// shuts down the receiver before counting lines
 	r.Shutdown()
-	if n := countLinesInGzFile(filepath.Join(mconf.Logging.Root, outfile)); n != nevents {
+	if n := countEvents(r.eventSearcher); n != nevents {
 		t.Errorf("Some events were lost on the way: %d logged by server instead of %d sent", n, nevents)
 	}
 }
@@ -387,6 +437,7 @@ func TestForwarderCleanup(t *testing.T) {
 	}
 	// Running the forwarder
 	f.Run()
+	defer f.Close()
 
 	// create bogus files inside queue directory
 	numberOfFiles := DiskSpaceThreshold / DefaultLogfileSize
@@ -409,18 +460,17 @@ func TestForwarderCleanup(t *testing.T) {
 	}
 
 	// send enough events to trigger cleanup
-	for i := 0; i < additionalFiles+3; i++ {
-		for e := range emitEvents(int(f.EventTresh)) {
+	for i := 0; i < additionalFiles; i++ {
+		for e := range emitEvents(int(f.EventTresh), false) {
 			f.PipeEvent(e)
 		}
 		time.Sleep(2 * time.Second)
 	}
 
 	files, _ := ioutil.ReadDir(fconf.Logging.Dir)
-	if len(files) != numberOfFiles {
-		t.Errorf("Unexpected number of files remaining in the directory")
+	if len(files)-1 != numberOfFiles {
+		t.Errorf("Expecting %d remaining in directory but got %d", numberOfFiles, len(files)-1)
 		t.FailNow()
 	}
 
-	defer f.Close()
 }

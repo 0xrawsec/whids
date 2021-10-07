@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/utils"
 	"github.com/gorilla/websocket"
 )
 
@@ -171,13 +173,14 @@ func TestAdminAPIPostCommand(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	euuid := getEndpointUUID()
+	euuid := c.config.UUID
 	ca := CommandAPI{
 		CommandLine: "/bin/ls",
 		FetchFiles:  []string{"/etc/fstab"},
 	}
 	r := post(format("%s/%s/command", AdmAPIEndpointsPath, euuid), JSON(ca))
 	failOnAdminAPIError(t, r)
+	time.Sleep(2 * time.Second)
 	if cmd, err := c.FetchCommand(); err != nil {
 		t.Errorf("Failed to Fetch command: %s", err)
 		t.FailNow()
@@ -212,7 +215,7 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	euuid := getEndpointUUID()
+	euuid := c.config.UUID
 	ca := CommandAPI{
 		CommandLine: "/bin/ls",
 		FetchFiles:  []string{"/etc/fstab"},
@@ -280,9 +283,11 @@ func TestAdminAPIGetNewEndpoint(t *testing.T) {
 func TestAdminAPIGetEndpointReport(t *testing.T) {
 
 	events := []string{
-		`{"Event":{"EventData":{"CreationUtcTime":"2018-02-26 16:28:13.169","Image":"C:\\Program Files\\cagent\\cagent.exe","ProcessGuid":"{49F1AF32-11B0-5A90-0000-0010594E0100}","ProcessId":"1216","TargetFilename":"C:\\commander.exe","UtcTime":"2018-02-26 16:28:13.169"},"GeneInfo":{"Criticality":10,"Signature":["ExecutableFileCreated","NewExeCreatedInRoot"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"11","EventRecordID":"1274413","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"11","TimeCreated":{"SystemTime":"2018-02-26T16:28:13.185436300Z"},"Version":"2"}}}`,
-		`{"Event":{"EventData":{"CommandLine":"\"powershell\" -command -","Company":"Microsoft Corporation","CurrentDirectory":"C:\\Windows\\system32\\","Description":"Windows PowerShell","FileVersion":"6.1.7600.16385 (win7_rtm.090713-1255)","Hashes":"SHA1=5330FEDAD485E0E4C23B2ABE1075A1F984FDE9FC,MD5=852D67A27E454BD389FA7F02A8CBE23F,SHA256=A8FDBA9DF15E41B6F5C69C79F66A26A9D48E174F9E7018A371600B866867DAB8,IMPHASH=F2C0E8A5BD10DBC167455484050CD683","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","IntegrityLevel":"System","LogonGuid":"{49F1AF32-11AE-5A90-0000-0020E7030000}","LogonId":"0x3e7","ParentCommandLine":"C:\\commander.exe -f","ParentImage":"C:\\commander.exe","ParentProcessGuid":"{49F1AF32-359D-5A94-0000-0010A9530C00}","ParentProcessId":"3068","ProcessGuid":"{49F1AF32-35A0-5A94-0000-0010FE5E0C00}","ProcessId":"1244","Product":"Microsoft® Windows® Operating System","TerminalSessionId":"0","User":"NT AUTHORITY\\SYSTEM","UtcTime":"2018-02-26 16:28:16.514"},"GeneInfo":{"Criticality":10,"Signature":["HeurSpawnShell","PowershellStdin"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"1","EventRecordID":"1274784","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"1","TimeCreated":{"SystemTime":"2018-02-26T16:28:16.530122800Z"},"Version":"5"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"GeneInfo":{"Criticality":10,"Signature":["HeurMaliciousAccess","MaliciousLsassAccess","SuspWriteAccess","SuspiciousLsassAccess"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"2018-02-26T16:43:26.447894800Z"},"Version":"3"}}}`,
+		`{"Event":{"EventData":{"CommandLine":"\"C:\\Program Files\\Mozilla Firefox\\firefox.exe\"","CurrentDirectory":"C:\\Program Files\\Mozilla Firefox\\","Image":"C:\\Program Files\\Mozilla Firefox\\firefox.exe","ImageHashes":"SHA1=6923508844E6FE0C1DEDD684FE299EBC26D778F3,MD5=988976B1058A1DAE198C93A5688142FD,SHA256=28BE8E0485DBA68F6A4B37F6A68D7AE542B0DA00925A69EA12A4E7AA3B477EC6,IMPHASH=AECE7B7E776840D7A7255A31B309B7E4","ImageSignature":"Mozilla Corporation","ImageSignatureStatus":"Valid","ImageSigned":"true","IntegrityLevel":"Medium","ProcessGuid":"{515cd0d1-c09c-615c-6886-000000008b00}","ProcessId":"9472","ProcessThreatScore":"60","QueryName":"analytics-collector-28944298.us-east-1.elb.amazonaws.com","QueryResults":"-","QueryStatus":"9501","RuleName":"-","Services":"N/A","User":"DESKTOP-LJRVE06\\Generic","UtcTime":"2021-10-04 03:47:27.711"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-LJRVE06","EventID":22,"Execution":{"ProcessID":3188,"ThreadID":1536},"Keywords":{"Value":9223372036854776000,"Name":""},"Level":{"Value":4,"Name":"Information"},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"TimeCreated":{"SystemTime":"2021-10-04T03:47:28.7994921Z"}},"EdrData":{"Endpoint":{"UUID":"03e31275-2277-d8e0-bb5f-480fac7ee4ef","IP":"192.168.56.110","Hostname":"DESKTOP-LJRVE06","Group":"HR"},"Event":{"Hash":"107115af9a7ae294b66499d9f24b4da40840f8dc","Detection":true,"ReceiptTime":"2021-10-06T07:00:47.488763072Z"}},"Detection":{"Signature":["HeurSysmonLongDomain"],"Criticality":6,"Actions":["brief","filedump","regdump"]}}}`,
+		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+9c524|C:\\Windows\\System32\\wow64.dll+17014|C:\\Windows\\System32\\wow64.dll+16c85|C:\\Windows\\System32\\wow64.dll+1723b|C:\\Windows\\System32\\wow64.dll+1e5b|C:\\Windows\\System32\\wow64.dll+301d|C:\\Windows\\System32\\wow64.dll+67e3|C:\\Windows\\System32\\wow64cpu.dll+1783|C:\\Windows\\System32\\wow64cpu.dll+1199|C:\\Windows\\System32\\wow64.dll+baea|C:\\Windows\\System32\\wow64.dll+b9a7|C:\\Windows\\SYSTEM32\\ntdll.dll+d3fb3|C:\\Windows\\SYSTEM32\\ntdll.dll+c1dbd|C:\\Windows\\SYSTEM32\\ntdll.dll+717f3|C:\\Windows\\SYSTEM32\\ntdll.dll+7179e|C:\\Windows\\SYSTEM32\\ntdll.dll+71ffc(wow64)|C:\\Windows\\System32\\KERNELBASE.dll+110926(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+f614(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+f89d(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12ef1(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12f58(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12e7b(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12fc9(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+aa418(wow64)","GrantedAccess":"0x1010","RuleName":"-","SourceHashes":"SHA1=12950D906FF703F3A1E0BD973FCA2B433E5AB207,MD5=9A66A3DE2589F7108426AF37AB7F6B41,SHA256=A913415626433D5D0F07D3EC4084A67FF6F5138C3C3F64E36DD0C1AE4C423C65,IMPHASH=7DF1816239C5BC855600D41210406C5B","SourceImage":"C:\\Program Files (x86)\\Google\\Update\\GoogleUpdate.exe","SourceIntegrityLevel":"System","SourceProcessGUID":"{515cd0d1-421a-615d-e087-000000008b00}","SourceProcessId":"6176","SourceProcessThreatScore":"54","SourceServices":"N/A","SourceThreadId":"5788","SourceUser":"NT AUTHORITY\\SYSTEM","TargetHashes":"?","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetIntegrityLevel":"?","TargetParentProcessGuid":"?","TargetProcessGUID":"{515cd0d1-6dae-6154-0c00-000000008b00}","TargetProcessId":"708","TargetProcessThreatScore":"-1","TargetServices":"KeyIso,SamSs,VaultSvc","TargetUser":"?","UtcTime":"2021-10-06 06:28:43.309"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-LJRVE06","EventID":10,"Execution":{"ProcessID":3188,"ThreadID":3104},"Keywords":{"Value":9223372036854776000,"Name":""},"Level":{"Value":4,"Name":"Information"},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"TimeCreated":{"SystemTime":"2021-10-04T03:15:27.1523337Z"}},"EdrData":{"Endpoint":{"UUID":"03e31275-2277-d8e0-bb5f-480fac7ee4ef","IP":"192.168.56.110","Hostname":"DESKTOP-LJRVE06","Group":"HR"},"Event":{"Hash":"af6ee1bef517b5f2d45205f3fb0cf3b48b8d3851","Detection":true,"ReceiptTime":"2021-10-06T06:28:44.894685897Z"}},"Detection":{"Signature":["SuspiciousLsassAccess"],"Criticality":8,"Actions":["report","filedump","regdump","memdump"]}}}`,
+		`{"Event":{"EventData":{"CommandLine":"\"C:\\Program Files (x86)\\Google\\Update\\Install\\{B29ED602-C455-4B82-80D2-A5992C371348}\\CR_C52DD.tmp\\setup.exe\" --install-archive=\"C:\\Program Files (x86)\\Google\\Update\\Install\\{B29ED602-C455-4B82-80D2-A5992C371348}\\CR_C52DD.tmp\\CHROME_PATCH.PACKED.7Z\" --previous-version=\"94.0.4606.61\" --verbose-logging --do-not-launch-chrome --channel=stable --system-level","Count":"104","CountByExt":"9","CreationUtcTime":"2021-10-06 06:28:31.108","CurrentDirectory":"C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\","Extension":".dll","FrequencyEps":"6","Image":"C:\\Program Files (x86)\\Google\\Update\\Install\\{B29ED602-C455-4B82-80D2-A5992C371348}\\CR_C52DD.tmp\\setup.exe","ImageHashes":"SHA1=0019051003B762EBA424E00BA0D34023608D48D6,MD5=46EB8A20A6B5B16C0BC24B907E0AA684,SHA256=C5360313BD1E95409174C03B71AC83FA13FBFFD3D13412A71D38FB451783FC0E,IMPHASH=44B4DFB0DCCA5DE0AA33EAEC613BAC84","ImageSignature":"Google LLC","ImageSignatureStatus":"Valid","ImageSigned":"true","IntegrityLevel":"System","ProcessGuid":"{515cd0d1-41ff-615d-d587-000000008b00}","ProcessId":"400","ProcessThreatScore":"91","RuleName":"-","Services":"N/A","TargetFilename":"C:\\Program Files\\Google\\Chrome\\Temp\\source400_1020262374\\Chrome-bin\\94.0.4606.71\\vk_swiftshader.dll","User":"NT AUTHORITY\\SYSTEM","UtcTime":"2021-10-06 06:28:31.109"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-LJRVE06","EventID":11,"Execution":{"ProcessID":3188,"ThreadID":3104},"Keywords":{"Value":9223372036854776000,"Name":""},"Level":{"Value":4,"Name":"Information"},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"TimeCreated":{"SystemTime":"2021-10-04T03:15:14.9259991Z"}},"EdrData":{"Endpoint":{"UUID":"03e31275-2277-d8e0-bb5f-480fac7ee4ef","IP":"192.168.56.110","Hostname":"DESKTOP-LJRVE06","Group":"HR"},"Event":{"Hash":"7f21f22e69db69f712798574f04baf28c8d44106","Detection":true,"ReceiptTime":"2021-10-06T06:28:32.368300493Z"}},"Detection":{"Signature":["ExecutableFileCreated"],"Criticality":7,"Actions":["brief","filedump","regdump"]}}}`,
+		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+9c524|C:\\Windows\\System32\\wow64.dll+17014|C:\\Windows\\System32\\wow64.dll+16c85|C:\\Windows\\System32\\wow64.dll+1723b|C:\\Windows\\System32\\wow64.dll+1e5b|C:\\Windows\\System32\\wow64.dll+301d|C:\\Windows\\System32\\wow64.dll+67e3|C:\\Windows\\System32\\wow64cpu.dll+1783|C:\\Windows\\System32\\wow64cpu.dll+1199|C:\\Windows\\System32\\wow64.dll+baea|C:\\Windows\\System32\\wow64.dll+b9a7|C:\\Windows\\SYSTEM32\\ntdll.dll+7190b|C:\\Windows\\SYSTEM32\\ntdll.dll+717f3|C:\\Windows\\SYSTEM32\\ntdll.dll+7179e|C:\\Windows\\SYSTEM32\\ntdll.dll+71ffc(wow64)|C:\\Windows\\System32\\KERNELBASE.dll+110926(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+f614(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+f89d(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12ef1(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12f58(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12e7b(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+12aa8(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+1cf31(wow64)|C:\\Program Files (x86)\\Google\\Update\\1.3.36.112\\goopdate.dll+1d691(wow64)","GrantedAccess":"0x1010","RuleName":"-","SourceHashes":"SHA1=12950D906FF703F3A1E0BD973FCA2B433E5AB207,MD5=9A66A3DE2589F7108426AF37AB7F6B41,SHA256=A913415626433D5D0F07D3EC4084A67FF6F5138C3C3F64E36DD0C1AE4C423C65,IMPHASH=7DF1816239C5BC855600D41210406C5B","SourceImage":"C:\\Program Files (x86)\\Google\\Update\\GoogleUpdate.exe","SourceIntegrityLevel":"System","SourceProcessGUID":"{515cd0d1-41e9-615d-a787-000000008b00}","SourceProcessId":"5368","SourceProcessThreatScore":"50","SourceServices":"gupdate","SourceThreadId":"8284","SourceUser":"NT AUTHORITY\\SYSTEM","TargetHashes":"?","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetIntegrityLevel":"?","TargetParentProcessGuid":"?","TargetProcessGUID":"{515cd0d1-6dae-6154-0c00-000000008b00}","TargetProcessId":"708","TargetProcessThreatScore":"-1","TargetServices":"KeyIso,SamSs,VaultSvc","TargetUser":"?","UtcTime":"2021-10-06 06:28:42.590"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-LJRVE06","EventID":10,"Execution":{"ProcessID":3188,"ThreadID":3104},"Keywords":{"Value":9223372036854776000,"Name":""},"Level":{"Value":4,"Name":"Information"},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"TimeCreated":{"SystemTime":"2021-10-04T03:15:26.4082567Z"}},"EdrData":{"Endpoint":{"UUID":"03e31275-2277-d8e0-bb5f-480fac7ee4ef","IP":"192.168.56.110","Hostname":"DESKTOP-LJRVE06","Group":"HR"},"Event":{"Hash":"72241c0e9816fca5d44787752e87715db3ada5f4","Detection":true,"ReceiptTime":"2021-10-06T06:28:43.620696097Z"}},"Detection":{"Signature":["SuspiciousLsassAccess"],"Criticality":8,"Actions":["report","filedump","regdump","memdump"]}}}`,
+		`{"Event":{"EventData":{"CommandLine":"\"C:\\Program Files\\Mozilla Firefox\\firefox.exe\"","CurrentDirectory":"C:\\Program Files\\Mozilla Firefox\\","Image":"C:\\Program Files\\Mozilla Firefox\\firefox.exe","ImageHashes":"SHA1=6923508844E6FE0C1DEDD684FE299EBC26D778F3,MD5=988976B1058A1DAE198C93A5688142FD,SHA256=28BE8E0485DBA68F6A4B37F6A68D7AE542B0DA00925A69EA12A4E7AA3B477EC6,IMPHASH=AECE7B7E776840D7A7255A31B309B7E4","ImageSignature":"Mozilla Corporation","ImageSignatureStatus":"Valid","ImageSigned":"true","IntegrityLevel":"Medium","ProcessGuid":"{515cd0d1-c09c-615c-6886-000000008b00}","ProcessId":"9472","ProcessThreatScore":"30","QueryName":"analytics-collector-28944298.us-east-1.elb.amazonaws.com","QueryResults":"54.209.192.22;23.21.66.55;54.84.193.129;34.230.149.116;","QueryStatus":"0","RuleName":"-","Services":"N/A","User":"DESKTOP-LJRVE06\\Generic","UtcTime":"2021-10-04 03:46:23.070"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-LJRVE06","EventID":22,"Execution":{"ProcessID":3188,"ThreadID":1536},"Keywords":{"Value":9223372036854776000,"Name":""},"Level":{"Value":4,"Name":"Information"},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"TimeCreated":{"SystemTime":"2021-10-04T03:46:23.342471Z"}},"EdrData":{"Endpoint":{"UUID":"03e31275-2277-d8e0-bb5f-480fac7ee4ef","IP":"192.168.56.110","Hostname":"DESKTOP-LJRVE06","Group":"HR"},"Event":{"Hash":"5b74a882fba6a5a762d6e9cabfa1d3a9883ba203","Detection":true,"ReceiptTime":"2021-10-06T06:59:46.487128874Z"}},"Detection":{"Signature":["HeurSysmonLongDomain"],"Criticality":6,"Actions":["brief","filedump","regdump"]}}}`,
 	}
 
 	m, mc := prepareTest()
@@ -294,8 +299,7 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	euuid := getEndpointUUID()
-
+	euuid := mc.config.UUID
 	// creating a new endpoint
 	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
@@ -330,12 +334,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	// cleanup previous data
 	clean(&mconf, &fconf)
 
-	events := []string{
-		`{"Event":{"EventData":{"CreationUtcTime":"2018-02-26 16:28:13.169","Image":"C:\\Program Files\\cagent\\cagent.exe","ProcessGuid":"{49F1AF32-11B0-5A90-0000-0010594E0100}","ProcessId":"1216","TargetFilename":"C:\\commander.exe","UtcTime":"2018-02-26 16:28:13.169"},"GeneInfo":{"Criticality":10,"Signature":["ExecutableFileCreated","NewExeCreatedInRoot"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"11","EventRecordID":"1274413","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"11","TimeCreated":{"SystemTime":"` + time.Now().Add(-time.Hour).Format(time.RFC3339Nano) + `"},"Version":"2"}}}`,
-		`{"Event":{"EventData":{"CommandLine":"\"powershell\" -command -","Company":"Microsoft Corporation","CurrentDirectory":"C:\\Windows\\system32\\","Description":"Windows PowerShell","FileVersion":"6.1.7600.16385 (win7_rtm.090713-1255)","Hashes":"SHA1=5330FEDAD485E0E4C23B2ABE1075A1F984FDE9FC,MD5=852D67A27E454BD389FA7F02A8CBE23F,SHA256=A8FDBA9DF15E41B6F5C69C79F66A26A9D48E174F9E7018A371600B866867DAB8,IMPHASH=F2C0E8A5BD10DBC167455484050CD683","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","IntegrityLevel":"System","LogonGuid":"{49F1AF32-11AE-5A90-0000-0020E7030000}","LogonId":"0x3e7","ParentCommandLine":"C:\\commander.exe -f","ParentImage":"C:\\commander.exe","ParentProcessGuid":"{49F1AF32-359D-5A94-0000-0010A9530C00}","ParentProcessId":"3068","ProcessGuid":"{49F1AF32-35A0-5A94-0000-0010FE5E0C00}","ProcessId":"1244","Product":"Microsoft® Windows® Operating System","TerminalSessionId":"0","User":"NT AUTHORITY\\SYSTEM","UtcTime":"2018-02-26 16:28:16.514"},"GeneInfo":{"Criticality":10,"Signature":["HeurSpawnShell","PowershellStdin"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"1","EventRecordID":"1274784","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"1","TimeCreated":{"SystemTime":"` + time.Now().Add(-4*time.Minute).Format(time.RFC3339Nano) + `"},"Version":"5"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"GeneInfo":{"Criticality":10,"Signature":["HeurMaliciousAccess","MaliciousLsassAccess","SuspWriteAccess","SuspiciousLsassAccess"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-	}
-
+	n := 1000
 	m, mc := prepareTest()
 	mconfBak := mconf
 	defer func() {
@@ -345,14 +344,23 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	euuid := getEndpointUUID()
+	euuid := mc.config.UUID
 
 	// creating a new endpoint
 	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 
-	for _, e := range events {
-		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBufferString(e))
+	npivot := 0
+	for e := range emitEvents(n, false) {
+		switch rand.Int() % 3 {
+		case 0:
+			e.Event.System.TimeCreated.SystemTime = e.Event.System.TimeCreated.SystemTime.Add(-time.Hour)
+		case 1:
+			e.Event.System.TimeCreated.SystemTime = e.Event.System.TimeCreated.SystemTime.Add(time.Hour)
+		default:
+			npivot++
+		}
+		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBuffer(utils.Json(e)))
 		if err != nil {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
@@ -362,25 +370,16 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	// test retrieving all the logs
-	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs")
-	failOnAdminAPIError(t, r)
-	data := make([]evtx.GoEvtxMap, 0)
-	r.UnmarshalData(&data)
-	if len(data) != len(events) {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
-
 	// test pivoting
 	v := url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
+	v.Set("delta", "1m")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	data := make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != 2 {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), 2)
+	if len(data) != npivot {
+		t.Errorf("Wrong number of events %d instead of %d", len(data), npivot)
 		t.FailNow()
 	}
 
@@ -390,9 +389,9 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	v.Set("delta", "3h")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	data = make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != len(events) {
+	if len(data) != n {
 		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
 		t.FailNow()
 	}
@@ -400,12 +399,12 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	// test with start and stop
 	v = url.Values{}
 	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
-	v.Set("stop", time.Now().Format(time.RFC3339))
+	v.Set("stop", time.Now().Add(3*time.Hour).Format(time.RFC3339))
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	data = make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != len(events) {
+	if len(data) != n {
 		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
 		t.FailNow()
 	}
@@ -416,22 +415,6 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	// cleanup previous data
 	clean(&mconf, &fconf)
 
-	alerts := []string{
-		`{"Event":{"EventData":{"CreationUtcTime":"2018-02-26 16:28:13.169","Image":"C:\\Program Files\\cagent\\cagent.exe","ProcessGuid":"{49F1AF32-11B0-5A90-0000-0010594E0100}","ProcessId":"1216","TargetFilename":"C:\\commander.exe","UtcTime":"2018-02-26 16:28:13.169"},"GeneInfo":{"Criticality":10,"Signature":["ExecutableFileCreated","NewExeCreatedInRoot"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"11","EventRecordID":"1274413","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"11","TimeCreated":{"SystemTime":"` + time.Now().Add(-time.Hour).Format(time.RFC3339Nano) + `"},"Version":"2"}}}`,
-		`{"Event":{"EventData":{"CommandLine":"\"powershell\" -command -","Company":"Microsoft Corporation","CurrentDirectory":"C:\\Windows\\system32\\","Description":"Windows PowerShell","FileVersion":"6.1.7600.16385 (win7_rtm.090713-1255)","Hashes":"SHA1=5330FEDAD485E0E4C23B2ABE1075A1F984FDE9FC,MD5=852D67A27E454BD389FA7F02A8CBE23F,SHA256=A8FDBA9DF15E41B6F5C69C79F66A26A9D48E174F9E7018A371600B866867DAB8,IMPHASH=F2C0E8A5BD10DBC167455484050CD683","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","IntegrityLevel":"System","LogonGuid":"{49F1AF32-11AE-5A90-0000-0020E7030000}","LogonId":"0x3e7","ParentCommandLine":"C:\\commander.exe -f","ParentImage":"C:\\commander.exe","ParentProcessGuid":"{49F1AF32-359D-5A94-0000-0010A9530C00}","ParentProcessId":"3068","ProcessGuid":"{49F1AF32-35A0-5A94-0000-0010FE5E0C00}","ProcessId":"1244","Product":"Microsoft® Windows® Operating System","TerminalSessionId":"0","User":"NT AUTHORITY\\SYSTEM","UtcTime":"2018-02-26 16:28:16.514"},"GeneInfo":{"Criticality":10,"Signature":["HeurSpawnShell","PowershellStdin"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"1","EventRecordID":"1274784","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"1","TimeCreated":{"SystemTime":"` + time.Now().Add(-4*time.Minute).Format(time.RFC3339Nano) + `"},"Version":"5"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"GeneInfo":{"Criticality":10,"Signature":["HeurMaliciousAccess","MaliciousLsassAccess","SuspWriteAccess","SuspiciousLsassAccess"]},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-	}
-
-	events := []string{
-		// all following should not be in alerts
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-		`{"Event":{"EventData":{"CallTrace":"C:\\Windows\\SYSTEM32\\ntdll.dll+4d61a|C:\\Windows\\system32\\KERNELBASE.dll+19577|UNKNOWN(000000001ABD2A68)","GrantedAccess":"0x143a","SourceImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceProcessGUID":"{49F1AF32-3922-5A94-0000-0010E3581900}","SourceProcessId":"1916","SourceThreadId":"2068","TargetImage":"C:\\Windows\\system32\\lsass.exe","TargetProcessGUID":"{49F1AF32-11AD-5A90-0000-00102F6F0000}","TargetProcessId":"472","UtcTime":"2018-02-26 16:43:26.380"},"System":{"Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"CALDERA01.caldera.loc","Correlation":{},"EventID":"10","EventRecordID":"1293693","Execution":{"ProcessID":"1408","ThreadID":"1652"},"Keywords":"0x8000000000000000","Level":"4","Opcode":"0","Provider":{"Guid":"{5770385F-C22A-43E0-BF4C-06F5698FFBD9}","Name":"Microsoft-Windows-Sysmon"},"Security":{"UserID":"S-1-5-18"},"Task":"10","TimeCreated":{"SystemTime":"` + time.Now().Format(time.RFC3339Nano) + `"},"Version":"3"}}}`,
-	}
-
 	m, mc := prepareTest()
 	mconfBak := mconf
 	defer func() {
@@ -441,17 +424,26 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 		m.Shutdown()
 		m.Wait()
 	}()
-	euuid := getEndpointUUID()
+	euuid := mc.config.UUID
 
 	// creating a new endpoint
 	r := put(AdmAPIEndpointsPath)
 	failOnAdminAPIError(t, r)
 
-	tmp := make([]string, 0)
-	tmp = append(tmp, alerts...)
-	tmp = append(tmp, events...)
-	for _, e := range tmp {
-		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBufferString(e))
+	npivot := 0
+	n, ndet := 1000, 100
+	for e := range emitMixedEvents(n, ndet) {
+		if e.IsDetection() {
+			switch rand.Int() % 3 {
+			case 0:
+				e.Event.System.TimeCreated.SystemTime = e.Event.System.TimeCreated.SystemTime.Add(-time.Hour)
+			case 1:
+				e.Event.System.TimeCreated.SystemTime = e.Event.System.TimeCreated.SystemTime.Add(time.Hour)
+			default:
+				npivot++
+			}
+		}
+		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBuffer(utils.Json(e)))
 		if err != nil {
 			t.Logf("Failed to prepare request: %s", err)
 			t.FailNow()
@@ -461,25 +453,15 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	// test retrieving all the logs
-	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart)
-	failOnAdminAPIError(t, r)
-	data := make([]evtx.GoEvtxMap, 0)
-	r.UnmarshalData(&data)
-	if len(data) != len(alerts) {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
-
 	// test pivoting
 	v := url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
-	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	data := make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
-	if len(data) != 2 {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), 2)
+	if len(data) != npivot {
+		t.Errorf("Wrong number of events %d instead of %d", len(data), npivot)
 		t.FailNow()
 	}
 
@@ -487,11 +469,11 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	v = url.Values{}
 	v.Set("pivot", time.Now().Format(time.RFC3339))
 	v.Set("delta", "3h")
-	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
-	if len(data) != len(alerts) {
+	if len(data) != ndet {
 		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
 		t.FailNow()
 	}
@@ -499,12 +481,12 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	// test with start and stop
 	v = url.Values{}
 	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
-	v.Set("stop", time.Now().Format(time.RFC3339))
-	r = get(AdmAPIEndpointsPath + "/" + euuid + "/alerts?" + v.Encode())
+	v.Set("stop", time.Now().Add(3*time.Hour).Format(time.RFC3339))
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
-	if len(data) != len(alerts) {
+	if len(data) != ndet {
 		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
 		t.FailNow()
 	}

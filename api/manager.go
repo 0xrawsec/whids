@@ -181,6 +181,7 @@ type MispConfig struct {
 // ManagerConfig defines manager's configuration structure
 type ManagerConfig struct {
 	// TOML strings need to be first otherwise issue parsing back config
+	Database      string            `toml:"db" comment:"Path to store database"`
 	RulesDir      string            `toml:"rules-dir" comment:"Gene rule directory\n See: https://github.com/0xrawsec/gene-rules"`
 	DumpDir       string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
 	ContainersDir string            `toml:"containers-dir" comment:"Gene rules' containers directory\n (c.f. Gene documentation https://github.com/0xrawsec/gene)"`
@@ -261,7 +262,8 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	m.detectionSearcher = logger.NewEventSearcher(detectionDir)
 
 	// database initialization
-	m.db = sod.Open("database")
+	m.db = sod.Open(c.Database)
+
 	// Create a new streamer
 	m.eventStreamer = NewEventStreamer()
 

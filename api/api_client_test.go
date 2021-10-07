@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	cconf = ClientConfig{
+cconf = ClientConfig{
 		Proto:             "https",
 		Host:              "localhost",
 		Port:              8000,
