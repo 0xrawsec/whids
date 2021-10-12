@@ -17,6 +17,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"
+	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -145,11 +146,15 @@ func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(wt http.ResponseWriter, rq *http.Request) {
 
 		auth := rq.Header.Get(AuthKeyHeader)
-		if _, ok := m.users.GetByKey(auth); !ok {
+
+		// Key is unique and thus indexed, doing this way we only query
+		// index in memory for authorization
+		if m.db.Search(&AdminAPIUser{}, "Key", "=", auth).Len() == 1 {
+			next.ServeHTTP(wt, rq)
+		} else {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			return
 		}
-		next.ServeHTTP(wt, rq)
 	})
 }
 
@@ -174,9 +179,16 @@ func (m *Manager) adminRespHeaderMiddleware(next http.Handler) http.Handler {
 func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 
+	identifier := rq.URL.Query().Get("identifier")
+
 	switch rq.Method {
 	case "GET":
-		wt.Write(admJSONResp(m.users.List()))
+		if users, err := m.db.All(&AdminAPIUser{}); err != nil {
+			wt.Write(admErr(err))
+			return
+		} else {
+			wt.Write(admJSONResp(users))
+		}
 	case "POST":
 		var user AdminAPIUser
 
@@ -185,19 +197,28 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 			return
 		}
 
+		// verify that we have at least an identifier to create the user
+		if identifier == "" && user.Identifier == "" {
+			wt.Write(admErr("At least an identifier is needed to create user"))
+			return
+		}
+
+		// identifier provided in the POST data takes precedence over URL parameter
+		if identifier != "" && user.Identifier == "" {
+			user.Identifier = identifier
+		}
+
 		// we generate a new UUID anyway
 		user.Uuid = UUIDGen().String()
 		// we generate a new key if needed
 		if user.Key == "" {
 			user.Key = KeyGen(DefaultKeySize)
 		}
-		if err = m.users.Add(&user); err != nil {
+
+		if err = m.CreateNewAdminAPIUser(&user); err != nil {
 			wt.Write(admErr(err))
 			return
 		}
-
-		// save new user to database
-		m.db.InsertOrUpdate(&user)
 
 		wt.Write(admJSONResp(user))
 	}
@@ -210,10 +231,11 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 	newKey, _ := strconv.ParseBool(rq.URL.Query().Get("newkey"))
 
 	if uuid, err = muxGetVar(rq, "uuuid"); err == nil {
-		if user, ok := m.users.GetByUUID(uuid); ok {
+		if o, err := m.db.Search(&AdminAPIUser{}, "Uuid", "=", uuid).One(); err == nil {
+			// we sucessfully retrieved object from DB
+			user := o.(*AdminAPIUser)
 			switch rq.Method {
 			case "DELETE":
-				m.users.Delete(user)
 				if err := m.db.Delete(user); err != nil {
 					wt.Write(admErr(err))
 					return
@@ -231,6 +253,10 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 					user.Key = KeyGen(DefaultKeySize)
 				}
 
+				if new.Key != "" {
+					user.Key = new.Key
+				}
+
 				if new.Group != "" {
 					user.Group = new.Group
 				}
@@ -240,13 +266,19 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 				}
 
 				// save new user to database
-				m.db.InsertOrUpdate(user)
-
+				if err := m.db.InsertOrUpdate(user); err != nil {
+					wt.Write(admErr(err))
+					return
+				}
 			}
 			// return user anyway
 			wt.Write(admJSONResp(user))
-		} else {
+		} else if sod.IsNoObjectFound(err) {
 			wt.Write(admErr(format("Unknown user for uuid: %s", uuid)))
+		} else {
+			msg := format("Failed to search user in database: %s", err)
+			log.Error(msg)
+			wt.Write(admErr(msg))
 		}
 	} else {
 		wt.Write(admErr(err))

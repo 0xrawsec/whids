@@ -7,6 +7,7 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -232,7 +233,6 @@ type Manager struct {
 	endpointAPI       *http.Server
 	endpoints         Endpoints
 	adminAPI          *http.Server
-	users             *Users
 	stop              chan bool
 	done              bool
 	// Gene related members
@@ -294,18 +294,6 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 		m.endpoints.Add(ept)
 	}
 
-	// Users initialization
-	m.users = NewUsers()
-	if objects, err = m.db.All(&AdminAPIUser{}); err != nil {
-		return nil, err
-	}
-	for _, o := range objects {
-		user := o.(*AdminAPIUser)
-		if err = m.users.Add(user); err != nil {
-			return nil, err
-		}
-	}
-
 	m.stop = make(chan bool)
 	if err = c.TLS.Verify(); err != nil && !c.TLS.Empty() {
 		return nil, err
@@ -334,21 +322,39 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 }
 
 func (m *Manager) initializeDB() (err error) {
-	if err = m.db.Create(&Endpoint{}, &sod.DefaultSchema); err != nil {
+	if err = m.db.Create(&Endpoint{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
-	if err = m.db.Create(&AdminAPIUser{}, &sod.DefaultSchema); err != nil {
+	if err = m.db.Create(&AdminAPIUser{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
+	// we need to set indexed fields manually here as we don't
+	// have access to ReducedStats structure
 	archivedReportSchema := sod.DefaultSchema
-	archivedReportSchema.ObjectsIndex = sod.NewIndex("Identifier", "ArchivedTimestamp")
-	if err = m.db.Create(&ArchivedReport{}, &archivedReportSchema); err != nil {
+	descriptors := []sod.FieldDescriptor{
+		{Name: "Identifier", Index: true},
+		{Name: "ArchivedTimestamp", Index: true}}
+	archivedReportSchema.ObjectsIndex = sod.NewIndex(descriptors...)
+	if err = m.db.Create(&ArchivedReport{}, archivedReportSchema); err != nil {
 		return
 	}
 
 	return
+}
+
+// CreateNewAdminAPIUser creates a new user in the user able to access admin API in database.
+func (m *Manager) CreateNewAdminAPIUser(user *AdminAPIUser) (err error) {
+	if err = m.db.InsertOrUpdate(user); err != nil && !sod.IsUnique(err) {
+		return err
+	} else if sod.IsUnique(err) {
+		err = errors.New("user with same Identifier or Uuid or Key already exists in database")
+		return
+	}
+
+	return
+
 }
 
 // LoadGeneEngine make the manager update the gene rules it has to serve

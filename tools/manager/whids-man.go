@@ -21,6 +21,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api"
+	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 )
 
@@ -36,6 +37,7 @@ var (
 	certgen     bool
 	dumpConfig  bool
 	fingerprint string
+	user        string
 
 	managerConf api.ManagerConfig
 	manager     *api.Manager
@@ -203,6 +205,7 @@ func main() {
 		"The certificate gets generated for the IP address specified in the configuration file.")
 	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
 	flag.StringVar(&fingerprint, "fingerprint", fingerprint, "Retrieve fingerprint of certificate to set in client configuration")
+	flag.StringVar(&user, "user", user, "Creates a new user")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -242,6 +245,27 @@ func main() {
 	managerConf, err := api.LoadManagerConfig(config)
 	if err != nil {
 		log.Abort(exitFail, fmt.Errorf("Failed to load manager configuration: %s", err))
+	}
+
+	if user != "" {
+		u := &api.AdminAPIUser{
+			Uuid:       api.UUIDGen().String(),
+			Identifier: user,
+			Key:        api.KeyGen(api.DefaultKeySize),
+		}
+
+		manager, err = api.NewManager(managerConf)
+		if err != nil {
+			log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
+		}
+
+		if err = manager.CreateNewAdminAPIUser(u); err != nil {
+			log.Abort(exitFail, err)
+		}
+
+		log.Infof("New user successfully created: %s", utils.PrettyJson(u))
+
+		log.Abort(0, "User creation: SUCCESS")
 	}
 
 	if certgen {

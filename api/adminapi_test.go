@@ -110,7 +110,11 @@ func prepareTest() (m *Manager, c *ManagerClient) {
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)
 	}
-	m.users.Add(testAdminUser)
+
+	// we don't handle error as we don't care if user
+	// already exists
+	m.CreateNewAdminAPIUser(testAdminUser)
+
 	m.AddEndpoint(cconf.UUID, key)
 	m.Run()
 
@@ -512,7 +516,6 @@ func TestEventStream(t *testing.T) {
 	for i := float64(0); i < nclients; i++ {
 		u := url.URL{Scheme: "wss", Host: format("localhost:%d", 8001), Path: AdmAPIStreamEvents}
 		key := testAdminUser.Key
-		m.users.GetByIdentifier("Test")
 		dialer := *websocket.DefaultDialer
 		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		t.Logf("connecting to %s", u.String())

@@ -10,7 +10,7 @@ import (
 // Endpoint structure used to track and interact with endpoints
 type Endpoint struct {
 	sod.Item
-	Uuid           string    `json:"uuid"`
+	Uuid           string    `json:"uuid" sod:"unique"`
 	Hostname       string    `json:"hostname"`
 	IP             string    `json:"ip"`
 	Group          string    `json:"group"`
