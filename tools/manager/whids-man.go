@@ -60,10 +60,9 @@ var (
 			Root:        "./data/logs",
 			LogBasename: "forwarded",
 		},
-		ContainersDir: "./data/containers",
-		RulesDir:      "./data/rules",
-		DumpDir:       "./data/dumps",
-		Database:      "./data/database",
+		RulesDir: "./data/rules",
+		DumpDir:  "./data/dumps",
+		Database: "./data/database",
 	}
 )
 

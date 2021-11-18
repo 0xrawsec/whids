@@ -305,12 +305,12 @@ func (m *ManagerClient) GetRulesSha256() (string, error) {
 	return "", nil
 }
 
-// GetContainer retrieves a given container from the manager
-func (m *ManagerClient) GetContainer(name string) ([]string, error) {
+// GetIoCs get IoCs from manager
+func (m *ManagerClient) GetIoCs() ([]string, error) {
 	ctn := make([]string, 0)
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", strings.Replace(EptAPIContainerPath, "{name}", name, 1), nil)
+		req, err := m.Prepare("GET", EptAPIIoCsPath, nil)
 		if err != nil {
 			return ctn, fmt.Errorf("GetContainer failed to prepare request: %s", err)
 		}
@@ -334,40 +334,11 @@ func (m *ManagerClient) GetContainer(name string) ([]string, error) {
 	return ctn, nil
 }
 
-// GetContainersList retrieves the names of the containers available in the manager
-func (m *ManagerClient) GetContainersList() ([]string, error) {
-	ctn := make([]string, 0)
+// GetIoCsSha256 retrieves a sha256 from the IoCs available in the manager
+func (m *ManagerClient) GetIoCsSha256() (string, error) {
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", EptAPIContainerListPath, nil)
-		if err != nil {
-			return ctn, fmt.Errorf("GetContainersList failed to prepare request: %s", err)
-		}
-
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return ctn, fmt.Errorf("GetContainersList failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return ctn, fmt.Errorf("failed to retrieve containers list, unexpected HTTP status code %d", resp.StatusCode)
-			}
-			dec := json.NewDecoder(resp.Body)
-			if err = dec.Decode(&ctn); err != nil {
-				return ctn, fmt.Errorf("GetContainersList failed to decode container list")
-			}
-		}
-	}
-	return ctn, nil
-}
-
-// GetContainerSha256 retrieves a given container from the manager
-func (m *ManagerClient) GetContainerSha256(name string) (string, error) {
-
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", strings.Replace(EptAPIContainerSha256Path, "{name}", name, 1), nil)
+		req, err := m.Prepare("GET", EptAPIIoCsSha256Path, nil)
 		if err != nil {
 			return "", fmt.Errorf("GetContainerSha256 failed to prepare request: %s", err)
 		}

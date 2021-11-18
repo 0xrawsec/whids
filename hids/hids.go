@@ -41,8 +41,6 @@ const (
 var (
 	/** Public vars **/
 
-	DumpOptions = []string{"registry", "memory", "file", "all"}
-
 	ContainRuleName = "EDR containment"
 
 	/** Private vars **/
@@ -90,7 +88,7 @@ type HIDS struct {
 }
 
 func newActionnableEngine(c *Config) (e *engine.Engine) {
-	e = engine.NewEngine(false)
+	e = engine.NewEngine()
 	e.ShowActions = true
 	if c.Actions.Low != nil {
 		e.SetDefaultActions(actionLowLow, actionLowHigh, c.Actions.Low)
@@ -162,7 +160,7 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h.config.AuditConfig.Configure()
 
 	// tries to update the engine
-	if err := h.updateEngine(true); err != nil {
+	if err := h.update(true); err != nil {
 		return h, err
 	}
 	return h, nil
@@ -212,12 +210,10 @@ func (h *HIDS) initHooks(advanced bool) {
 	}
 }
 
-func (h *HIDS) updateEngine(force bool) error {
-	h.Lock()
-	defer h.Unlock()
+func (h *HIDS) update(force bool) (last error) {
 
 	reloadRules := h.needsRulesUpdate()
-	reloadContainers := h.needsContainersUpdate()
+	reloadContainers := h.needsIoCsUpdate()
 
 	// check if we need rule update
 	if reloadRules {
@@ -230,7 +226,7 @@ func (h *HIDS) updateEngine(force bool) error {
 
 	if reloadContainers {
 		log.Info("Updating WHIDS containers")
-		if err := h.fetchContainersFromManager(); err != nil {
+		if err := h.fetchIoCsFromManager(); err != nil {
 			log.Errorf("Failed to fetch containers from manager: %s", err)
 			reloadContainers = false
 		}
@@ -239,46 +235,72 @@ func (h *HIDS) updateEngine(force bool) error {
 	log.Debugf("reloading rules:%t containers:%t forced:%t", reloadRules, reloadContainers, force)
 	if reloadRules || reloadContainers || force {
 		// We need to create a new engine if we received a rule/containers update
-		h.Engine = newActionnableEngine(h.config)
+		newEngine := newActionnableEngine(h.config)
 
 		// containers must be loaded before the rules anyway
 		log.Infof("Loading HIDS containers (used in rules) from: %s", h.config.RulesConfig.ContainersDB)
-		if err := h.loadContainers(); err != nil {
-			return fmt.Errorf("error loading containers: %s", err)
+		if err := h.loadContainers(newEngine); err != nil {
+			err = fmt.Errorf("failed at loading containers: %s", err)
+			last = err
 		}
 
-		if reloadRules || force {
-			// Loading canary rules
-			if h.config.CanariesConfig.Enable {
-				log.Infof("Loading canary rules")
-				// Sysmon rule
-				sr := h.config.CanariesConfig.GenRuleSysmon()
-				if scr, err := sr.Compile(nil); err != nil {
-					log.Errorf("Failed to compile canary rule: %s", err)
-				} else {
-					h.Engine.AddRule(scr)
+		// Loading IOC container rules
+		for _, rule := range IoCRules {
+			if cr, err := rule.Compile(newEngine); err != nil {
+				err = fmt.Errorf("failed to compile IOC rule: %s", err)
+				last = err
+			} else {
+				if err = newEngine.AddRule(cr); err != nil {
+					last = err
 				}
+			}
+		}
 
-				// File System Audit Rule
-				fsr := h.config.CanariesConfig.GenRuleFSAudit()
-				if fscr, err := fsr.Compile(nil); err != nil {
-					log.Errorf("Failed to compile canary rule: %s", err)
-				} else {
-					h.Engine.AddRule(fscr)
+		// Loading canary rules
+		if h.config.CanariesConfig.Enable {
+			log.Infof("Loading canary rules")
+			// Sysmon rule
+			sr := h.config.CanariesConfig.GenRuleSysmon()
+			if scr, err := sr.Compile(nil); err != nil {
+				err = fmt.Errorf("failed to compile canary rule: %s", err)
+				last = err
+			} else {
+				if err = newEngine.AddRule(scr); err != nil {
+					last = err
 				}
 			}
 
-			log.Infof("Loading HIDS rules from: %s", h.config.RulesConfig.RulesDB)
-			if err := h.Engine.LoadDirectory(h.config.RulesConfig.RulesDB); err != nil {
-				return fmt.Errorf("failed to load rules: %s", err)
+			// File System Audit Rule
+			fsr := h.config.CanariesConfig.GenRuleFSAudit()
+			if fscr, err := fsr.Compile(nil); err != nil {
+				log.Errorf("Failed to compile canary rule: %s", err)
+			} else {
+				if err = newEngine.AddRule(fscr); err != nil {
+					last = err
+				}
 			}
-			log.Infof("Number of rules loaded in engine: %d", h.Engine.Count())
+		}
+
+		// Loading rules
+		log.Infof("Loading HIDS rules from: %s", h.config.RulesConfig.RulesDB)
+		if err := newEngine.LoadDirectory(h.config.RulesConfig.RulesDB); err != nil {
+			last = fmt.Errorf("failed to load rules: %s", err)
+		}
+		log.Infof("Number of rules loaded in engine: %d", newEngine.Count())
+
+		// updating engine if no error
+		if last == nil {
+			// we update engine only if there was no error
+			// no need to lock HIDS as newEngine is ready to use at this point
+			h.Engine = newEngine
+		} else {
+			log.Error("EDR engine not updated:", last)
 		}
 	} else {
 		log.Debug("Neither rules nor containers need to be updated")
 	}
 
-	return nil
+	return
 }
 
 // rules needs to be updated with the new ones available in manager
@@ -300,37 +322,17 @@ func (h *HIDS) needsRulesUpdate() bool {
 	return oldSha256 != sha256
 }
 
-// at least one container needs to be updated
-func (h *HIDS) needsContainersUpdate() bool {
-	var containers []string
-	var err error
-
-	cl := h.forwarder.Client
-
-	if h.forwarder.Local {
-		return false
-	}
-
-	if containers, err = cl.GetContainersList(); err != nil {
-		return false
-	}
-
-	for _, cont := range containers {
-		if h.needsContainerUpdate(cont) {
-			return true
-		}
-	}
-	return false
-}
-
 // returns true if a container needs to be updated
-func (h *HIDS) needsContainerUpdate(remoteCont string) bool {
+func (h *HIDS) needsIoCsUpdate() bool {
 	var localSha256, remoteSha256 string
-	_, locContSha256Path := h.containerPaths(remoteCont)
+
+	container := api.IoCContainerName
+	_, locContSha256Path := h.containerPaths(container)
+
 	// means that remoteCont is also a local container
-	remoteSha256, _ = h.forwarder.Client.GetContainerSha256(remoteCont)
+	remoteSha256, _ = h.forwarder.Client.GetIoCsSha256()
 	localSha256, _ = utils.ReadFileString(locContSha256Path)
-	log.Infof("container %s: remote=%s local=%s", remoteCont, remoteSha256, localSha256)
+	log.Infof("container %s: remote=%s local=%s", container, remoteSha256, localSha256)
 	return localSha256 != remoteSha256
 }
 
@@ -368,8 +370,8 @@ func (h *HIDS) containerPaths(container string) (path, sha256Path string) {
 	return
 }
 
-func (h *HIDS) fetchContainersFromManager() (err error) {
-	var containers []string
+func (h *HIDS) fetchIoCsFromManager() (err error) {
+	var iocs []string
 	cl := h.forwarder.Client
 
 	// if we are not connected to a manager we return
@@ -377,47 +379,51 @@ func (h *HIDS) fetchContainersFromManager() (err error) {
 		return
 	}
 
-	if containers, err = cl.GetContainersList(); err != nil {
+	if iocs, err = cl.GetIoCs(); err != nil {
 		return
 	}
 
-	for _, contName := range containers {
-		// if container needs to be updated
-		if h.needsContainerUpdate(contName) {
-			cont, err := cl.GetContainer(contName)
-			if err != nil {
-				return err
-			}
+	// we compare the integrity of the container received
+	compSha256 := utils.Sha256StringArray(iocs)
 
-			// we compare the integrity of the container received
-			compSha256 := utils.Sha256StringArray(cont)
-			sha256, _ := cl.GetContainerSha256(contName)
-			if compSha256 != sha256 {
-				return fmt.Errorf("failed to verify container \"%s\" integrity", contName)
-			}
+	if sha256, err := cl.GetIoCsSha256(); err != nil {
+		return fmt.Errorf("failed to get IoCs sha256: %s", err)
+	} else if compSha256 != sha256 {
+		return fmt.Errorf("failed to verify container \"%s\" integrity", api.IoCContainerName)
+	}
 
-			// we dump the container
-			contPath, contSha256Path := h.containerPaths(contName)
-			fd, err := os.Create(contPath)
-			if err != nil {
-				return err
-			}
-			w := gzip.NewWriter(fd)
-			for _, e := range cont {
-				w.Write([]byte(fmt.Sprintln(e)))
-			}
-			w.Flush()
-			w.Close()
-			fd.Close()
-			// Dump current container sha256 to a file
-			ioutil.WriteFile(contSha256Path, []byte(compSha256), 0600)
+	// we dump the container
+	contPath, contSha256Path := h.containerPaths(api.IoCContainerName)
+	fd, err := utils.HidsCreateFile(contPath)
+	if err != nil {
+		return err
+	}
+	// closing underlying file
+	defer fd.Close()
+
+	w := gzip.NewWriter(fd)
+	// closing gzip writer
+	defer w.Close()
+	for _, ioc := range iocs {
+		if _, err = w.Write([]byte(fmt.Sprintln(ioc))); err != nil {
+			return
 		}
 	}
-	return nil
+
+	if err = w.Close(); err != nil {
+		return
+	}
+
+	if err = fd.Close(); err != nil {
+		return
+	}
+
+	// Dump current container sha256 to a file
+	return ioutil.WriteFile(contSha256Path, []byte(compSha256), 0600)
 }
 
 // loads containers found in container database directory
-func (h *HIDS) loadContainers() (lastErr error) {
+func (h *HIDS) loadContainers(engine *engine.Engine) (lastErr error) {
 	for wi := range fswalker.Walk(h.config.RulesConfig.ContainersDB) {
 		for _, fi := range wi.Files {
 			path := filepath.Join(wi.Dirpath, fi.Name())
@@ -436,8 +442,11 @@ func (h *HIDS) loadContainers() (lastErr error) {
 					fd.Close()
 					continue
 				}
-				log.Infof("Loading container: %s", cont)
-				h.Engine.LoadContainer(cont, r)
+				log.Infof("Loading container %s from path %s", cont, path)
+				if err = engine.LoadContainer(cont, r); err != nil {
+					lastErr = fmt.Errorf("failed to load container %s: %s", cont, err)
+					log.Error(lastErr)
+				}
 				r.Close()
 				fd.Close()
 			}
@@ -547,7 +556,7 @@ func (h *HIDS) updateRoutine() bool {
 			go func() {
 				t := time.NewTimer(d)
 				for range t.C {
-					if err := h.updateEngine(false); err != nil {
+					if err := h.update(false); err != nil {
 						log.Error(err)
 					}
 					t.Reset(d)

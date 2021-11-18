@@ -74,7 +74,7 @@ func HidsMkdirAll(dir string) error {
 
 // HidsCreateFile creates a file with the good permissions
 func HidsCreateFile(filename string) (*os.File, error) {
-	return os.OpenFile(filename, os.O_CREATE|os.O_RDWR, DefaultPerms)
+	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultPerms)
 }
 
 // HidsWriteData is a wrapper around ioutil.WriteFile to write a file

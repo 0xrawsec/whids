@@ -10,12 +10,11 @@ const (
 	EptAPIRulesPath = "/rules"
 	// EptAPIRulesSha256Path API route used to retrieve sha256 of latest batch of Gene rules
 	EptAPIRulesSha256Path = "/rules/sha256"
-	// EptAPIContainerListPath API route to serve the list of containers available in the Manager
-	EptAPIContainerListPath = "/containers"
-	// EptAPIContainerPath API route to get a container
-	EptAPIContainerPath = "/container/{name}"
-	// EptAPIContainerSha256Path API route to serve sha256 of the different containers
-	EptAPIContainerSha256Path = "/container/sha256/{name}"
+
+	// EptAPIIoCsPath API route used to serve IOC container
+	EptAPIIoCsPath = "/iocs"
+	// EptAPIIoCsSha256Path API route used to serve sha256 of IOC container
+	EptAPIIoCsSha256Path = "/iocs/sha256"
 
 	// POST based API routes
 
@@ -35,7 +34,6 @@ var (
 		EptAPIServerKeyPath,
 		EptAPICommandPath,
 		EptAPIRulesSha256Path,
-		EptAPIContainerListPath,
 	}
 )
 
@@ -47,6 +45,7 @@ const (
 	AdmAPIUserByID = AdmAPIUsers + "/{uuuid:" + uuidRe + "}"
 
 	AdmAPIStatsPath         = "/stats"
+	AdmAPIIocsPath          = "/iocs"
 	AdmAPIRulesPath         = "/rules"
 	AdmAPIRulesReloadPath   = "/rules/reload"
 	AdmAPIRulesSavePath     = "/rules/save"

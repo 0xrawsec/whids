@@ -19,6 +19,7 @@ import (
 	"github.com/0xrawsec/gene/v2/reducer"
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/ioc"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
@@ -1000,6 +1001,79 @@ func (m *Manager) admAPIStats(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write(NewAdminAPIResponse(s).ToJSON())
 }
 
+func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
+
+	source := rq.URL.Query().Get("source")
+	key := rq.URL.Query().Get("key")
+	value := rq.URL.Query().Get("value")
+	itype := rq.URL.Query().Get("type")
+
+	switch rq.Method {
+	case "GET":
+		if value == "" && source == "" && itype == "" && key == "" {
+			if objs, err := m.db.All(&ioc.IoC{}); err != nil {
+				wt.Write(admErr(err))
+			} else {
+				wt.Write(admJSONResp(objs))
+			}
+			return
+		} else {
+			// searching out IoCs
+			if objs, err := m.db.Search(&ioc.IoC{}, "Value", "=", value).
+				Or("Source", "=", source).
+				Or("Type", "=", itype).
+				Or("Key", "=", key).
+				Collect(); err != nil {
+				wt.Write(admErr(err))
+			} else {
+				wt.Write(admJSONResp(objs))
+			}
+			return
+		}
+
+	case "POST":
+		var iocs []*ioc.IoC
+		if err := readPostAsJSON(rq, &iocs); err != nil && rq.ContentLength > 0 {
+			wt.Write(admErr(err))
+		} else {
+			// Do bulk insertion
+			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(iocs)...); err != nil {
+				wt.Write(admErr(err))
+				return
+			}
+			// Add IoCs to sync with endpoints
+			m.iocs.Add(iocs...)
+		}
+
+	case "DELETE":
+		search := m.db.Search(&ioc.IoC{}, "Value", "=", value)
+		if source != "" {
+			search = search.Or("Source", "=", source)
+		}
+		if itype != "" {
+			search = search.Or("Type", "=", itype)
+		}
+		if key != "" {
+			search = search.Or("Key", "=", key)
+		}
+
+		if objs, err := search.Collect(); err != nil {
+			wt.Write(admErr(err))
+		} else {
+			// Deletes all the entries matching the search
+			if err := search.Delete(); err != nil {
+				wt.Write(admErr(err))
+			} else {
+				// deleting IoCs pushed to endpoints
+				m.iocs.Del(ioc.FromObjects(objs...)...)
+				// writing out deleted IoCs
+				wt.Write(admJSONResp(objs))
+			}
+		}
+		return
+	}
+}
+
 func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	// used in case of POST / DELETE
 	rulesBasename := "compiled-updated.gen"
@@ -1314,6 +1388,7 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
+		rt.HandleFunc(AdmAPIIocsPath, m.admAPIIocs).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesReloadPath, m.admAPIRulesReload).Methods("GET")
 		rt.HandleFunc(AdmAPIRulesSavePath, m.admAPIRulesSave).Methods("GET")

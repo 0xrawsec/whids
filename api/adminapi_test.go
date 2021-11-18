@@ -26,15 +26,40 @@ var (
 	}
 )
 
-func doRequest(method, url string) (r AdminAPIResponse) {
-	cl := http.Client{Transport: cconf.Transport()}
+func prepare(method, URL string, data []byte, params map[string]string) *http.Request {
 	key := testAdminUser.Key
-	uri := fmt.Sprintf("https://%s:%d%s", mconf.AdminAPI.Host, mconf.AdminAPI.Port, url)
-	req, err := http.NewRequest(method, uri, new(bytes.Buffer))
+	buf := new(bytes.Buffer)
+
+	// preparing request body
+	if data != nil {
+		if len(data) > 0 {
+			buf.Write(data)
+		}
+	}
+
+	// preparing parameters to be passed to the query
+	if params != nil {
+		v := url.Values{}
+		for param, value := range params {
+			v.Set(param, value)
+		}
+
+		if len(params) > 0 {
+			URL = fmt.Sprintf("%s?%s", URL, v.Encode())
+		}
+	}
+
+	uri := fmt.Sprintf("https://%s:%d%s", mconf.AdminAPI.Host, mconf.AdminAPI.Port, URL)
+	req, err := http.NewRequest(method, uri, buf)
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Add(AuthKeyHeader, key)
+	return req
+}
+
+func do(req *http.Request) (r AdminAPIResponse) {
+	cl := http.Client{Transport: cconf.Transport()}
 	resp, err := cl.Do(req)
 	if err != nil {
 		panic(err)
@@ -54,11 +79,11 @@ func doRequest(method, url string) (r AdminAPIResponse) {
 }
 
 func get(url string) (r AdminAPIResponse) {
-	return doRequest("GET", url)
+	return do(prepare("GET", url, nil, nil))
 }
 
 func put(url string) (r AdminAPIResponse) {
-	return doRequest("PUT", url)
+	return do(prepare("PUT", url, nil, nil))
 }
 
 func post(url string, data []byte) (r AdminAPIResponse) {
@@ -82,8 +107,10 @@ func post(url string, data []byte) (r AdminAPIResponse) {
 	if err != nil {
 		panic(err)
 	}
-	if err := json.Unmarshal(b, &r); err != nil {
-		panic(err)
+	if len(b) > 0 {
+		if err := json.Unmarshal(b, &r); err != nil {
+			panic(err)
+		}
 	}
 	return
 }
@@ -323,7 +350,7 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 
-	r = doRequest("DELETE", AdmAPIEndpointsPath+"/"+euuid+"/report")
+	r = do(prepare("DELETE", AdmAPIEndpointsPath+"/"+euuid+"/report", nil, nil))
 	failOnAdminAPIError(t, r)
 	t.Logf("received: %s", prettyJSON(r))
 

@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/0xrawsec/gene/v2/engine"
@@ -280,7 +279,6 @@ func main() {
 	flag.Usage = func() {
 		printInfo(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintf(os.Stderr, "\nAvailable Dump modes: %s\n", strings.Join(hids.DumpOptions, ", "))
 		flag.PrintDefaults()
 		os.Exit(exitSuccess)
 	}
@@ -383,7 +381,7 @@ func main() {
 		// TODO: add a stream handler to log facility
 		hidsConf.Logfile = ""
 		log.Infof("Importing rules from %s", importRules)
-		eng := engine.NewEngine(false)
+		eng := engine.NewEngine()
 		eng.SetDumpRaw(true)
 
 		if err := eng.LoadDirectory(importRules); err != nil {

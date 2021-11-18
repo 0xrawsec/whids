@@ -143,9 +143,8 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(EptAPIServerKeyPath, m.ServerKey).Methods("GET")
 		rt.HandleFunc(EptAPIRulesPath, m.Rules).Methods("GET")
 		rt.HandleFunc(EptAPIRulesSha256Path, m.RulesSha256).Methods("GET")
-		rt.HandleFunc(EptAPIContainerPath, m.Container).Methods("GET")
-		rt.HandleFunc(EptAPIContainerListPath, m.ContainerList).Methods("GET")
-		rt.HandleFunc(EptAPIContainerSha256Path, m.ContainerSha256).Methods("GET")
+		rt.HandleFunc(EptAPIIoCsPath, m.IoCs).Methods("GET")
+		rt.HandleFunc(EptAPIIoCsSha256Path, m.IoCsSha256).Methods("GET")
 
 		// GET and POST
 		rt.HandleFunc(EptAPICommandPath, m.Command).Methods("GET", "POST")
@@ -193,6 +192,19 @@ func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.rulesSha256))
 }
 
+func (m *Manager) IoCs(wt http.ResponseWriter, rq *http.Request) {
+	if data, err := json.Marshal(m.iocs.StringSlice()); err != nil {
+		log.Errorf("Failed to marshal IoCs: %s", err)
+		http.Error(wt, "Failed to marshal IoCs", http.StatusInternalServerError)
+	} else {
+		wt.Write(data)
+	}
+}
+
+func (m *Manager) IoCsSha256(wt http.ResponseWriter, rq *http.Request) {
+	wt.Write([]byte(m.iocs.Hash()))
+}
+
 // UploadDump HTTP handler used to upload dump files from client to manager
 func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 	defer rq.Body.Close()
@@ -225,55 +237,6 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 }
 
 // Container HTTP handler serves Gene containers to clients
-func (m *Manager) Container(wt http.ResponseWriter, rq *http.Request) {
-	m.RLock()
-	defer m.RUnlock()
-	vars := mux.Vars(rq)
-	if name, ok := vars["name"]; ok {
-		if cont, ok := m.containers[name]; ok {
-			b, err := json.Marshal(cont)
-			if err != nil {
-				log.Errorf("Container handler failed to JSON encode container")
-				http.Error(wt, "Failed to JSON encode container", http.StatusInternalServerError)
-			} else {
-				wt.Write(b)
-			}
-		} else {
-			http.Error(wt, "Unavailable container", http.StatusNotFound)
-		}
-	}
-}
-
-// ContainerList HTTP handler to server the list of available containers
-func (m *Manager) ContainerList(wt http.ResponseWriter, rq *http.Request) {
-	m.RLock()
-	defer m.RUnlock()
-	list := make([]string, 0, len(m.containers))
-	for cn := range m.containers {
-		list = append(list, cn)
-	}
-	b, err := json.Marshal(list)
-	if err == nil {
-		wt.Write(b)
-	} else {
-		log.Errorf("ContainerList handler failed to JSON encode list")
-		http.Error(wt, "Failed to JSON encode list", http.StatusInternalServerError)
-	}
-}
-
-// ContainerSha256 HTTP handler to server the Sha256 of a given container
-func (m *Manager) ContainerSha256(wt http.ResponseWriter, rq *http.Request) {
-	m.RLock()
-	defer m.RUnlock()
-	vars := mux.Vars(rq)
-	if name, ok := vars["name"]; ok {
-		if sha256, ok := m.containersSha256[name]; ok {
-			wt.Write([]byte(sha256))
-		} else {
-			http.Error(wt, "Unavailable container", http.StatusNotFound)
-		}
-	}
-}
 
 // Collect HTTP handler
 func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {

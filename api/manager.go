@@ -18,12 +18,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 
@@ -31,11 +30,8 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"
-	"github.com/0xrawsec/golang-misp/misp"
 	"github.com/0xrawsec/golang-utils/fsutil"
-	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/golang-utils/readers"
 	"github.com/0xrawsec/whids/logger"
 )
 
@@ -52,15 +48,14 @@ const (
 	AdmAPIDefaultPort = 1520
 	// DefaultMaxUploadSize default maximum upload size
 	DefaultMaxUploadSize = 100 * utils.Mega
+	// IoCContainerName default container name to store manager's IoCs
+	IoCContainerName = "edr_iocs"
 )
 
 var (
 	guidRe      = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`)
 	eventHashRe = regexp.MustCompile(`(?i:[a-f0-9]{32,})`) // at least md5
 	filenameRe  = regexp.MustCompile(`[\w\s\.-]+`)
-	// MISP container related
-	mispContName    = "misp"
-	mispTextExports = []string{"md5", "sha1", "sha256", "domain", "hostname"}
 )
 
 func init() {
@@ -172,26 +167,17 @@ type ManagerLogConfig struct {
 	VerboseHTTP bool   `toml:"verbose-http" comment:"Enables verbose HTTP logs\n When disabled beaconing requests are filtered out"`
 }
 
-// MispConfig with TOML tags
-type MispConfig struct {
-	Proto  string `toml:"protocol" comment:"HTTP protocol to use (http or https)"`
-	Host   string `toml:"host" comment:"Hostname or IP address of MISP server"`
-	APIKey string `toml:"api-key" comment:"MISP API key"`
-}
-
 // ManagerConfig defines manager's configuration structure
 type ManagerConfig struct {
 	// TOML strings need to be first otherwise issue parsing back config
-	Database      string            `toml:"db" comment:"Path to store database"`
-	RulesDir      string            `toml:"rules-dir" comment:"Gene rule directory\n See: https://github.com/0xrawsec/gene-rules"`
-	DumpDir       string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
-	ContainersDir string            `toml:"containers-dir" comment:"Gene rules' containers directory\n (c.f. Gene documentation https://github.com/0xrawsec/gene)"`
-	AdminAPI      AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
-	EndpointAPI   EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
-	Logging       ManagerLogConfig  `toml:"logging" comment:"Logging settings"`
-	TLS           TLSConfig         `toml:"tls" comment:"TLS settings. Leave empty, not to use TLS"`
-	MISP          MispConfig        `toml:"misp" comment:"MISP settings. Use this setting to push IOCs as containers on endpoints"`
-	path          string
+	Database    string            `toml:"db" comment:"Path to store database"`
+	RulesDir    string            `toml:"rules-dir" comment:"Gene rule directory\n See: https://github.com/0xrawsec/gene-rules"`
+	DumpDir     string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
+	AdminAPI    AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
+	EndpointAPI EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
+	Logging     ManagerLogConfig  `toml:"logging" comment:"Logging settings"`
+	TLS         TLSConfig         `toml:"tls" comment:"TLS settings. Leave empty, not to use TLS"`
+	path        string
 }
 
 // LoadManagerConfig loads the manager configuration from a file
@@ -236,12 +222,14 @@ type Manager struct {
 	stop              chan bool
 	done              bool
 	// Gene related members
-	geneEng          *engine.Engine
-	reducer          *reducer.Reducer
-	rules            string // to cache the rules concatenated
-	rulesSha256      string // rules integrity check and update
-	containers       map[string][]string
-	containersSha256 map[string]string
+	geneEng     *engine.Engine
+	reducer     *reducer.Reducer
+	rules       string // to cache the rules concatenated
+	rulesSha256 string // rules integrity check and update
+	//containers       map[string][]string
+	//containersSha256 map[string]string
+
+	iocs *ioc.IoCs
 
 	/* Public */
 	Config *ManagerConfig
@@ -252,7 +240,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	var err error
 	var objects []sod.Object
 
-	m := Manager{Config: c}
+	m := Manager{Config: c, iocs: ioc.NewIocs()}
 	//logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
 	eventDir := filepath.Join(c.Logging.Root, "events")
 	m.eventLogger = logger.NewEventLogger(eventDir, c.Logging.LogBasename, utils.Giga)
@@ -281,8 +269,9 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 
 	if err := m.initializeDB(); err != nil {
 		return nil, fmt.Errorf("failed to initialize manager's database: %w", err)
-
 	}
+	// initialize IoCs from db
+	m.iocs.FromDB(m.db)
 
 	// Endpoints initialization
 	m.endpoints = NewEndpoints()
@@ -297,11 +286,6 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	m.stop = make(chan bool)
 	if err = c.TLS.Verify(); err != nil && !c.TLS.Empty() {
 		return nil, err
-	}
-
-	// Containers initialization
-	if m.Config.ContainersDir != "" {
-		m.LoadContainers()
 	}
 
 	// Gene engine initialization
@@ -322,11 +306,18 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 }
 
 func (m *Manager) initializeDB() (err error) {
+	// Creating Endpoint table
 	if err = m.db.Create(&Endpoint{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
+	// Creating AdminAPIUser table
 	if err = m.db.Create(&AdminAPIUser{}, sod.DefaultSchema); err != nil {
+		return
+	}
+
+	// Creating IOC table
+	if err = m.db.Create(&ioc.IoC{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
@@ -359,7 +350,7 @@ func (m *Manager) CreateNewAdminAPIUser(user *AdminAPIUser) (err error) {
 
 // LoadGeneEngine make the manager update the gene rules it has to serve
 func (m *Manager) LoadGeneEngine() error {
-	e := engine.NewEngine(false)
+	e := engine.NewEngine()
 	e.SetDumpRaw(true)
 	// Make the engine load rules' directory
 	if err := e.LoadDirectory(m.Config.RulesDir); err != nil {
@@ -369,33 +360,6 @@ func (m *Manager) LoadGeneEngine() error {
 	m.geneEng = e
 	m.updateRules()
 	return nil
-}
-
-// LoadContainers loads the containers into the manager
-// the container names is given by the filename without the extension
-// Example: /some/random/abspath/blacklist.txt will give blacklist container
-func (m *Manager) LoadContainers() {
-	m.containers = make(map[string][]string)
-	m.containersSha256 = make(map[string]string)
-	for wi := range fswalker.Walk(m.Config.ContainersDir) {
-		for _, fi := range wi.Files {
-			sha256 := sha256.New()
-			container := make([]string, 0)
-			fp := filepath.Join(wi.Dirpath, fi.Name())
-			contName := strings.Split(fi.Name(), ".")[0]
-			log.Infof("Loading container \"%s\" from file: %s", contName, fp)
-			fd, err := os.Open(fp)
-			if err != nil {
-				log.Errorf("Failed to load container (%s): %s", fp, err)
-			}
-			for line := range readers.Readlines(fd) {
-				container = append(container, string(line))
-				sha256.Write(line)
-			}
-			m.containers[contName] = container
-			m.containersSha256[contName] = hex.EncodeToString(sha256.Sum(nil))
-		}
-	}
 }
 
 func (m *Manager) updateRules() {
@@ -408,24 +372,6 @@ func (m *Manager) updateRules() {
 	}
 	m.rules = buf.String()
 	m.rulesSha256 = hex.EncodeToString(sha256.Sum(nil))
-}
-
-func (m *Manager) updateMispContainer() {
-	c := misp.NewCon(m.Config.MISP.Proto, m.Config.MISP.Host, m.Config.MISP.APIKey)
-	mispContainer := make([]string, 0)
-	for _, expType := range mispTextExports {
-		log.Infof("Downloading %s attributes from MISP", expType)
-		exps, err := c.TextExport(expType)
-		if err != nil {
-			log.Errorf("MISP failed to export %s IDS attributes: %s", expType, err)
-			log.Errorf("Aborting MISP container update")
-			return
-		}
-		mispContainer = append(mispContainer, exps...)
-	}
-	// Update the MISP container
-	m.containers[mispContName] = mispContainer
-	m.containersSha256[mispContName] = utils.Sha256StringArray(mispContainer)
 }
 
 // AddEndpoint adds new endpoint to the manager
@@ -485,17 +431,6 @@ func (m *Manager) Shutdown() (lastErr error) {
 
 // Run starts a new thread spinning the receiver
 func (m *Manager) Run() {
-	go func() {
-		for !m.done {
-			if m.Config.MISP.Host != "" {
-				log.Infof("Starting MISP container update routine")
-				m.updateMispContainer()
-				log.Infof("MISP container update routine finished")
-			}
-			time.Sleep(time.Hour)
-		}
-	}()
-
 	m.runEndpointAPI()
 	m.runAdminAPI()
 }

@@ -46,10 +46,9 @@ var (
 			Root:        "./data/logs",
 			LogBasename: "alerts",
 		},
-		Database:      "./data/database",
-		RulesDir:      "./data",
-		DumpDir:       "./data/uploads/",
-		ContainersDir: "./data/containers",
+		Database: "./data/database",
+		RulesDir: "./data",
+		DumpDir:  "./data/uploads/",
 		TLS: TLSConfig{
 			Cert: "./data/cert.pem",
 			Key:  "./data/key.pem",

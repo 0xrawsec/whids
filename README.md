@@ -39,7 +39,7 @@
 * Built by an Incident Responder for all Incident Responders to make their job easier  
 * Low footprint (no process injection)
 * Can co-exist with **any antivirus** product (advised to run it along with **MS Defender**)
-* Designed for high thoughput. It can easily enrich and analyse 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
+* Designed for high throughput. It can easily enrich and analyze 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
 * Easily integrable with other tools (Splunk, ELK, MISP ...)
 * Integrated with [ATT&CK framework](https://attack.mitre.org/)
 
@@ -88,12 +88,12 @@ This section covers the installation of the agent on the endpoint.
 2. Run `manage.bat` as **administrator**
 3. Launch installation by selecting the appropriate option
 4. Verify that files have been created at the **installation directory**
-5. Edit configuration file by selecting the appropriate option in `manage.bat` or using your prefered text editor
+5. Edit configuration file by selecting the appropriate option in `manage.bat` or using your preferred text editor
 6. Skip this if running with a connection to a manager, because rules will be updated automatically. If there is nothing in the **rules directory** the tool will be useless, so make sure there are some **gene** rules in there. Some rules are packaged with WHIDS and you will be prompted to choose if you want to install those or not. If you want the last up to date rules, you can get those [here](https://raw.githubusercontent.com/0xrawsec/gene-rules/master/compiled.gen) (take the **compiled** ones)
 7. Start the **services** from appropriate option in `manage.bat` or just reboot (**preferred option** otherwise some enrichment fields will be incomplete leading to false alerts)
 8. If you configured a **manager** do not forget to run it in order to receive alerts and dumps
 
-**NB:** At installation time the **Sysmon service** will be made *dependant* of **WHIDS service** so that we are sure the EDR runs before **Sysmon** starts generating some events.
+**NB:** At installation time the **Sysmon service** will be made *dependent* of **WHIDS service** so that we are sure the EDR runs before **Sysmon** starts generating some events.
 
 ## EDR Manager
 
@@ -105,7 +105,7 @@ The EDR manager can be installed on several platforms, pre-built binaries are pr
 
 # Configuration Examples
 
-Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/master/doc/configuration.md)
+Please visit [doc/configuration.md](doc/configuration.md)
 
 # Further Documentation
 
@@ -141,7 +141,7 @@ Please visit [doc/configuration.md](https://github.com/0xrawsec/whids/blob/maste
         * Put the content of the clipboard data inside the event to allow creating rule on the content of the clipboard
     - Integrate ProcessTampering events
         * Enrich event with a diffing score between .text section on disk and in memory
-- Implemented certificate pinning on client to enhance security of the communiaction channel between endpoints and management server
+- Implemented certificate pinning on client to enhance security of the communication channel between endpoints and management server
 - Log filtering capabilities, allowing one to collect contextual events. Log filtering is achieved by creating Gene filtering rules (c.f. [Gene Documentation](https://github.com/0xrawsec/gene)).
 - Configuration files in TOML format for better readability
 - Better protection of the installation directory

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"math/rand"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,13 +10,13 @@ import (
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/crypto/file"
-	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
+	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/utils"
 )
 
 var (
-cconf = ClientConfig{
+	cconf = ClientConfig{
 		Proto:             "https",
 		Host:              "localhost",
 		Port:              8000,
@@ -100,13 +102,13 @@ func TestClientContainer(t *testing.T) {
 
 	key := KeyGen(DefaultKeySize)
 
-	r, err := NewManager(&mconf)
+	m, err := NewManager(&mconf)
 	if err != nil {
 		panic(err)
 	}
-	r.AddEndpoint(cconf.UUID, key)
-	r.Run()
-	defer r.Shutdown()
+	m.AddEndpoint(cconf.UUID, key)
+	m.Run()
+	defer m.Shutdown()
 
 	cconf.Key = key
 	c, err := NewManagerClient(&cconf)
@@ -114,33 +116,51 @@ func TestClientContainer(t *testing.T) {
 		panic(err)
 	}
 
-	containers, err := c.GetContainersList()
-	if err != nil {
+	niocs := 1000
+	iocs := make([]ioc.IoC, 0, niocs)
+	del := 0
+	for i := 0; i < niocs; i++ {
+		key := "test"
+		if rand.Int()%3 == 0 {
+			key = "to_delete"
+			del++
+		}
+
+		iocs = append(iocs, ioc.IoC{
+			Value: fmt.Sprintf("%d.random.com", i),
+			Key:   key})
+	}
+	post(AdmAPIIocsPath, JSON(iocs))
+
+	if iocs, err := c.GetIoCs(); err != nil {
 		t.Error(err)
-		t.FailNow()
-	}
-
-	verif := datastructs.NewInitSyncedSet(datastructs.ToInterfaceSlice(containers)...)
-	if !verif.Contains("blacklist") || !verif.Contains("whitelist") {
-		t.Error("Missing containers")
-		t.FailNow()
-	}
-
-	for _, cont := range containers {
-		bl, err := c.GetContainer(cont)
-		if err != nil {
-			t.Error(err)
+	} else {
+		if len(iocs) != niocs {
+			t.Error("Unexpected IOC length")
 		}
-
-		if sha256, err := c.GetContainerSha256(cont); sha256 != utils.Sha256StringArray(bl) || err != nil {
-			if err != nil {
-				t.Error(err)
-			} else {
-				t.Errorf("Failed to verify container integrity")
-			}
+		if rsha256, _ := c.GetIoCsSha256(); rsha256 != utils.Sha256StringArray(m.iocs.StringSlice()) {
+			t.Error("IOC container hash is not correct")
 		}
-		t.Logf("%v", bl)
 	}
+
+	// deleting iocs from admin API
+	r := prepare("DELETE",
+		AdmAPIIocsPath,
+		nil,
+		map[string]string{"key": "to_delete"})
+	do(r)
+
+	if iocs, err := c.GetIoCs(); err != nil {
+		t.Error(err)
+	} else {
+		if len(iocs) != niocs-del {
+			t.Errorf("Unexpected IOC length expected %d, got %d", niocs-del, len(iocs))
+		}
+		if rsha256, _ := c.GetIoCsSha256(); rsha256 != utils.Sha256StringArray(m.iocs.StringSlice()) {
+			t.Error("IOC container hash is not correct")
+		}
+	}
+
 }
 
 func TestClientExecuteCommand(t *testing.T) {
