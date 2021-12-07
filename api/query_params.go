@@ -1,0 +1,27 @@
+package api
+
+const (
+	qpIdentifier  = "identifier"
+	qpGroup       = "group"
+	qpStatus      = "status"
+	qpShowKey     = "showkey"
+	qpNewKey      = "newkey"
+	qpCriticality = "criticality"
+	qpWait        = "wait"
+	qpSince       = "since"
+	qpUntil       = "until"
+	qpLast        = "last"
+	qpLimit       = "limit"
+	qpPivot       = "pivot"
+	qpDelta       = "delta"
+	qpSkip        = "skip"
+	qpSource      = "source"
+	qpKey         = "key"
+	qpValue       = "value"
+	qpType        = "type"
+	qpName        = "name"
+	qpFilters     = "filters"
+	qpUpdate      = "update"
+	qpRaw         = "raw"
+	qpGunzip      = "gunzip"
+)

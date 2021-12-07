@@ -33,12 +33,6 @@ const (
 )
 
 var (
-	keygen      bool
-	certgen     bool
-	dumpConfig  bool
-	fingerprint string
-	user        string
-
 	managerConf api.ManagerConfig
 	manager     *api.Manager
 	osSignals   = make(chan os.Signal)
@@ -195,7 +189,14 @@ func printInfo(writer io.Writer) {
 	fmt.Fprintf(writer, "Version: %s (commit: %s)\nCopyright: %s\nLicense: %s\n\n", version, commitID, copyright, license)
 }
 
-var ()
+var (
+	keygen      bool
+	certgen     bool
+	dumpConfig  bool
+	openapi     bool
+	fingerprint string
+	user        string
+)
 
 func main() {
 
@@ -203,6 +204,7 @@ func main() {
 	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
 		"The certificate gets generated for the IP address specified in the configuration file.")
 	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
+	flag.BoolVar(&openapi, "openapi", openapi, "Prints JSON formatted OpenAPI definition")
 	flag.StringVar(&fingerprint, "fingerprint", fingerprint, "Retrieve fingerprint of certificate to set in client configuration")
 	flag.StringVar(&user, "user", user, "Creates a new user")
 
@@ -238,6 +240,11 @@ func main() {
 		if err := enc.Encode(simpleManagerConfig); err != nil {
 			panic(err)
 		}
+		os.Exit(0)
+	}
+
+	if openapi {
+		fmt.Println(api.OpenAPIDefinition)
 		os.Exit(0)
 	}
 

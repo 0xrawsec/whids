@@ -403,8 +403,8 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 
 	// test pivoting
 	v := url.Values{}
-	v.Set("pivot", time.Now().Format(time.RFC3339))
-	v.Set("delta", "1m")
+	v.Set(qpPivot, time.Now().Format(time.RFC3339))
+	v.Set(qpDelta, "1m")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data := make([]event.EdrEvent, 0)
@@ -416,8 +416,8 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 
 	// test pivoting with delta
 	v = url.Values{}
-	v.Set("pivot", time.Now().Format(time.RFC3339))
-	v.Set("delta", "3h")
+	v.Set(qpPivot, time.Now().Format(time.RFC3339))
+	v.Set(qpDelta, "3h")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]event.EdrEvent, 0)
@@ -429,8 +429,8 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 
 	// test with start and stop
 	v = url.Values{}
-	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
-	v.Set("stop", time.Now().Add(3*time.Hour).Format(time.RFC3339))
+	v.Set(qpSince, time.Now().Add(-3*time.Hour).Format(time.RFC3339))
+	v.Set(qpUntil, time.Now().Add(3*time.Hour).Format(time.RFC3339))
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]event.EdrEvent, 0)
@@ -486,8 +486,8 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 
 	// test pivoting
 	v := url.Values{}
-	v.Set("pivot", time.Now().Format(time.RFC3339))
-	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
+	v.Set(qpPivot, time.Now().Format(time.RFC3339))
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data := make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -498,9 +498,9 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 
 	// test pivoting with delta
 	v = url.Values{}
-	v.Set("pivot", time.Now().Format(time.RFC3339))
-	v.Set("delta", "3h")
-	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
+	v.Set(qpPivot, time.Now().Format(time.RFC3339))
+	v.Set(qpDelta, "3h")
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -511,9 +511,9 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 
 	// test with start and stop
 	v = url.Values{}
-	v.Set("start", time.Now().Add(-3*time.Hour).Format(time.RFC3339))
-	v.Set("stop", time.Now().Add(3*time.Hour).Format(time.RFC3339))
-	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionPart + "?" + v.Encode())
+	v.Set(qpSince, time.Now().Add(-3*time.Hour).Format(time.RFC3339))
+	v.Set(qpUntil, time.Now().Add(3*time.Hour).Format(time.RFC3339))
+	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
 	failOnAdminAPIError(t, r)
 	data = make([]evtx.GoEvtxMap, 0)
 	r.UnmarshalData(&data)
@@ -541,7 +541,11 @@ func TestEventStream(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	for i := float64(0); i < nclients; i++ {
-		u := url.URL{Scheme: "wss", Host: format("localhost:%d", 8001), Path: AdmAPIStreamEvents}
+
+		u := url.URL{
+			Scheme: "wss",
+			Host:   format("%s:%d", mconf.AdminAPI.Host, mconf.AdminAPI.Port),
+			Path:   AdmAPIStreamEvents}
 		key := testAdminUser.Key
 		dialer := *websocket.DefaultDialer
 		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}

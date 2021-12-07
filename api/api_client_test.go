@@ -19,7 +19,7 @@ var (
 	cconf = ClientConfig{
 		Proto:             "https",
 		Host:              "localhost",
-		Port:              8000,
+		Port:              mconf.EndpointAPI.Port,
 		UUID:              "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
 		Key:               "don'tcomplain",
 		ServerFingerprint: "511dc40cb2363974a97dfd47437feb8307cbd9d938645e1442775aa97ec14227",

@@ -180,7 +180,7 @@ func (m *Manager) adminRespHeaderMiddleware(next http.Handler) http.Handler {
 func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 
-	identifier := rq.URL.Query().Get("identifier")
+	identifier := rq.URL.Query().Get(qpIdentifier)
 
 	switch rq.Method {
 	case "GET":
@@ -190,6 +190,26 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 		} else {
 			wt.Write(admJSONResp(users))
 		}
+	case "PUT":
+		// verify that we have at least an identifier to create the user
+		if identifier == "" {
+			wt.Write(admErr("At least an identifier is needed to create user"))
+			return
+		}
+
+		user := AdminAPIUser{
+			Identifier: identifier,
+			Uuid:       UUIDGen().String(),
+			Key:        KeyGen(DefaultKeySize),
+		}
+
+		if err = m.CreateNewAdminAPIUser(&user); err != nil {
+			wt.Write(admErr(err))
+			return
+		}
+
+		wt.Write(admJSONResp(user))
+
 	case "POST":
 		var user AdminAPIUser
 
@@ -199,18 +219,18 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 		}
 
 		// verify that we have at least an identifier to create the user
-		if identifier == "" && user.Identifier == "" {
+		if user.Identifier == "" {
 			wt.Write(admErr("At least an identifier is needed to create user"))
 			return
 		}
 
-		// identifier provided in the POST data takes precedence over URL parameter
-		if identifier != "" && user.Identifier == "" {
-			user.Identifier = identifier
+		// we generate a new UUID if needed
+		// force UUID to lower case
+		user.Uuid = strings.ToLower(user.Uuid)
+		if !noBracketGuidRe.MatchString(user.Uuid) {
+			user.Uuid = UUIDGen().String()
 		}
 
-		// we generate a new UUID anyway
-		user.Uuid = UUIDGen().String()
 		// we generate a new key if needed
 		if user.Key == "" {
 			user.Key = KeyGen(DefaultKeySize)
@@ -229,7 +249,7 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 	var err error
 	var uuid string
 
-	newKey, _ := strconv.ParseBool(rq.URL.Query().Get("newkey"))
+	newKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpNewKey))
 
 	if uuid, err = muxGetVar(rq, "uuuid"); err == nil {
 		if o, err := m.db.Search(&AdminAPIUser{}, "Uuid", "=", uuid).One(); err == nil {
@@ -287,10 +307,10 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 }
 
 func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
-	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
-	group := rq.URL.Query().Get("group")
-	status := rq.URL.Query().Get("status")
-	criticality, _ := strconv.ParseInt(rq.URL.Query().Get("criticality"), 10, 8)
+	showKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpShowKey))
+	group := rq.URL.Query().Get(qpGroup)
+	status := rq.URL.Query().Get(qpStatus)
+	criticality, _ := strconv.ParseInt(rq.URL.Query().Get(qpCriticality), 10, 8)
 
 	switch {
 	case rq.Method == "GET":
@@ -335,8 +355,8 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
 
-	showKey, _ := strconv.ParseBool(rq.URL.Query().Get("showkey"))
-	newKey, _ := strconv.ParseBool(rq.URL.Query().Get("newkey"))
+	showKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpShowKey))
+	newKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpNewKey))
 
 	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
 		if endpt, ok := m.endpoints.GetMutByUUID(euuid); ok {
@@ -438,7 +458,7 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 
 	switch rq.Method {
 	case "GET":
-		wait, _ := strconv.ParseBool(rq.URL.Query().Get("wait"))
+		wait, _ := strconv.ParseBool(rq.URL.Query().Get(qpWait))
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(NewAdminAPIRespError(err).ToJSON())
 		} else {
@@ -525,15 +545,15 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	limit := 1000
 
 	logs := make([]*event.EdrEvent, 0)
-	pStart := rq.URL.Query().Get("start")
-	pStop := rq.URL.Query().Get("stop")
-	pLast := rq.URL.Query().Get("last")
+	pStart := rq.URL.Query().Get(qpSince)
+	pStop := rq.URL.Query().Get(qpUntil)
+	pLast := rq.URL.Query().Get(qpLast)
 
-	pPivot := rq.URL.Query().Get("pivot")
-	pDelta := rq.URL.Query().Get("delta")
+	pPivot := rq.URL.Query().Get(qpPivot)
+	pDelta := rq.URL.Query().Get(qpDelta)
 
-	pLimit := rq.URL.Query().Get("limit")
-	pSkip := rq.URL.Query().Get("skip")
+	pLimit := rq.URL.Query().Get(qpLimit)
+	pSkip := rq.URL.Query().Get(qpSkip)
 
 	now := time.Now()
 
@@ -633,7 +653,7 @@ searchLogs:
 	} else {
 		searcher := m.eventSearcher
 
-		if strings.HasSuffix(rq.URL.Path, AdmAPIDetectionPart) {
+		if strings.HasSuffix(rq.URL.Path, AdmAPIDetectionSuffix) {
 			searcher = m.detectionSearcher
 		}
 
@@ -702,10 +722,10 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 	var last time.Duration
 	var limit uint64
 
-	pSince := rq.URL.Query().Get("since")
-	pUntil := rq.URL.Query().Get("until")
-	pLast := rq.URL.Query().Get("last")
-	pLimit := rq.URL.Query().Get("limit")
+	pSince := rq.URL.Query().Get(qpSince)
+	pUntil := rq.URL.Query().Get(qpUntil)
+	pLast := rq.URL.Query().Get(qpLast)
+	pLimit := rq.URL.Query().Get(qpLimit)
 
 	if pSince != "" {
 		if since, err = admApiParseTime(pSince); err != nil {
@@ -797,7 +817,7 @@ func listEndpointDumps(root, uuid string, since time.Time) (dumps []EndpointDump
 	var procGUIDs, eventHashes, eventDumps []fs.DirEntry
 
 	dumps = make([]EndpointDumps, 0)
-	urlPath := fmt.Sprintf("%s/%s%s", AdmAPIEndpointsPath, uuid, admAPIArtifactsPart)
+	urlPath := fmt.Sprintf("%s/%s%s", AdmAPIEndpointsPath, uuid, AdmAPIArticfactsSuffix)
 
 	path := filepath.Join(root, uuid)
 	if procGUIDs, err = os.ReadDir(path); err != nil {
@@ -924,8 +944,8 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 
 func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Request) {
 
-	raw, _ := strconv.ParseBool(rq.URL.Query().Get("raw"))
-	gunzip, _ := strconv.ParseBool(rq.URL.Query().Get("gunzip"))
+	raw, _ := strconv.ParseBool(rq.URL.Query().Get(qpRaw))
+	gunzip, _ := strconv.ParseBool(rq.URL.Query().Get(qpGunzip))
 
 	if euuid, err := muxGetVar(rq, "euuid"); err == nil {
 		if pguid, err := muxGetVar(rq, "pguid"); err == nil {
@@ -1077,8 +1097,10 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	// used in case of POST / DELETE
 	rulesBasename := "compiled-updated.gen"
-	name := rq.URL.Query().Get("name")
-	filters, _ := strconv.ParseBool(rq.URL.Query().Get("filters"))
+
+	name := rq.URL.Query().Get(qpName)
+	filters, _ := strconv.ParseBool(rq.URL.Query().Get(qpFilters))
+	paramUpdate := rq.URL.Query().Get(qpUpdate)
 
 	switch rq.Method {
 	case "GET":
@@ -1151,7 +1173,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 		m.Lock()
 		defer m.Unlock()
 		defer rq.Body.Close()
-		paramUpdate := rq.URL.Query().Get("update")
+
 		b, err := ioutil.ReadAll(rq.Body)
 		if err != nil {
 			wt.Write(admErr(format("Failed to read request body: %s", err)))
@@ -1373,25 +1395,25 @@ func (m *Manager) runAdminAPI() {
 
 		// Routes initialization
 
-		rt.HandleFunc(AdmAPIUsers, m.admAPIUsers).Methods("GET", "POST")
+		rt.HandleFunc(AdmAPIUsers, m.admAPIUsers).Methods("GET", "PUT", "POST")
 		rt.HandleFunc(AdmAPIUserByID, m.admAPIUser).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointsPath, m.admAPIEndpoints).Methods("GET", "PUT")
 		rt.HandleFunc(AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointCommandPath, m.admAPIEndpointCommand).Methods("GET", "POST")
 		rt.HandleFunc(AdmAPIEndpointCommandFieldPath, m.admAPIEndpointCommandField).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointsReportsPath, m.admAPIEndpointsReports).Methods("GET")
-		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
-		rt.HandleFunc(AdmAPIEndpointDetectionsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointReportPath, m.admAPIEndpointReport).Methods("GET", "DELETE")
 		rt.HandleFunc(AdmAPIEndpointReportArchivePath, m.admAPIEndpointReportArchive).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointLogsPath, m.admAPIEndpointLogs).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointDetectionsPath, m.admAPIEndpointLogs).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointsArtifactsPath, m.admAPIArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
-		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
 		rt.HandleFunc(AdmAPIIocsPath, m.admAPIIocs).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesReloadPath, m.admAPIRulesReload).Methods("GET")
 		rt.HandleFunc(AdmAPIRulesSavePath, m.admAPIRulesSave).Methods("GET")
+		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")
 		// WebSocket handlers
 		rt.HandleFunc(AdmAPIStreamEvents, m.admAPIStreamEvents)
 		rt.HandleFunc(AdmAPIStreamDetections, m.admAPIStreamDetections)

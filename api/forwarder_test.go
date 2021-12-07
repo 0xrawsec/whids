@@ -36,11 +36,11 @@ var (
 	mconf = ManagerConfig{
 		AdminAPI: AdminAPIConfig{
 			Host: "localhost",
-			Port: 8001,
+			Port: AdmAPIDefaultPort,
 		},
 		EndpointAPI: EndpointAPIConfig{
 			Host: "",
-			Port: 8000,
+			Port: EptAPIDefaultPort,
 		},
 		Logging: ManagerLogConfig{
 			Root:        "./data/logs",

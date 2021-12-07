@@ -53,9 +53,10 @@ const (
 )
 
 var (
-	guidRe      = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`)
-	eventHashRe = regexp.MustCompile(`(?i:[a-f0-9]{32,})`) // at least md5
-	filenameRe  = regexp.MustCompile(`[\w\s\.-]+`)
+	noBracketGuidRe = regexp.MustCompile(`(?i:[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12})`)
+	guidRe          = regexp.MustCompile(`(?i:\{[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}\})`)
+	eventHashRe     = regexp.MustCompile(`(?i:[a-f0-9]{32,})`) // at least md5
+	filenameRe      = regexp.MustCompile(`[\w\s\.-]+`)
 )
 
 func init() {
@@ -195,6 +196,26 @@ func LoadManagerConfig(path string) (*ManagerConfig, error) {
 // SetPath exposes the path member for changes
 func (mc *ManagerConfig) SetPath(path string) {
 	mc.path = path
+}
+
+// EndpointAPIUrl returns the URL of the Endpoint API
+func (mc *ManagerConfig) EndpointAPIUrl() string {
+	proto := "https"
+	if mc.TLS.Empty() {
+		proto = "http"
+	}
+
+	return fmt.Sprintf("%s://%s:%d", proto, mc.EndpointAPI.Host, mc.EndpointAPI.Port)
+}
+
+// EndpointAPIUrl returns the URL of the Admin API
+func (mc *ManagerConfig) AdminAPIUrl() string {
+	proto := "https"
+	if mc.TLS.Empty() {
+		proto = "http"
+	}
+
+	return fmt.Sprintf("%s://%s:%d", proto, mc.AdminAPI.Host, mc.AdminAPI.Port)
 }
 
 // Save saves the configuration to a path specified by the path member of the structure

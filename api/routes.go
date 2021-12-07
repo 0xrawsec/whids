@@ -52,20 +52,24 @@ const (
 	AdmAPIEndpointsPath     = "/endpoints"
 	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related
-	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + "/command"
+	AdmAPICommandSuffix            = "/command"
+	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + AdmAPICommandSuffix
 	AdmAPIEndpointCommandFieldPath = AdmAPIEndpointCommandPath + "/{field}"
 	// Logs related
-	AdmAPIEndpointLogsPath       = AdmAPIEndpointsByIDPath + "/logs"
-	AdmAPIDetectionPart          = "/detections"
-	AdmAPIEndpointDetectionsPath = AdmAPIEndpointsByIDPath + AdmAPIDetectionPart
+	AdmAPILogsSuffix             = "/logs"
+	AdmAPIEndpointLogsPath       = AdmAPIEndpointsByIDPath + AdmAPILogsSuffix
+	AdmAPIDetectionSuffix        = "/detections"
+	AdmAPIEndpointDetectionsPath = AdmAPIEndpointsByIDPath + AdmAPIDetectionSuffix
 	// Reports related
+	AdmAPIReportSuffix              = "/report"
 	AdmAPIEndpointsReportsPath      = AdmAPIEndpointsPath + "/reports"
-	AdmAPIEndpointReportPath        = AdmAPIEndpointsByIDPath + "/report"
-	AdmAPIEndpointReportArchivePath = AdmAPIEndpointReportPath + "/archive"
+	AdmAPIEndpointReportPath        = AdmAPIEndpointsByIDPath + AdmAPIReportSuffix
+	AdmAPIArchiveSuffix             = "/archive"
+	AdmAPIEndpointReportArchivePath = AdmAPIEndpointReportPath + AdmAPIArchiveSuffix
 	// Dumps related
-	admAPIArtifactsPart          = "/artifacts"
-	AdmAPIEndpointsArtifactsPath = AdmAPIEndpointsPath + admAPIArtifactsPart
-	AdmAPIEndpointArtifacts      = AdmAPIEndpointsByIDPath + admAPIArtifactsPart
+	AdmAPIArticfactsSuffix       = "/artifacts"
+	AdmAPIEndpointsArtifactsPath = AdmAPIEndpointsPath + AdmAPIArticfactsSuffix
+	AdmAPIEndpointArtifacts      = AdmAPIEndpointsByIDPath + AdmAPIArticfactsSuffix
 	AdmAPIEndpointArtifact       = AdmAPIEndpointArtifacts + "/{pguid:" + uuidRe + "}/{ehash:[[:xdigit:]]+}/{fname:.*}"
 
 	//Websockets
