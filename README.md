@@ -3,6 +3,7 @@
 <p align="center">
   <img src="./doc/img/logo.png" alt="logo" width="40%">
 </p>
+![coverage](.github/coverage/badge.svg)
 
 ## What
 
