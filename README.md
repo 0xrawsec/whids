@@ -111,7 +111,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 # Further Documentation
 
-* [Endpoint Manager REST API documentation](doc/apis.md)
+* [Endpoint Manager REST API documentation](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
 * [How to write rules](https://rawsec.lu/doc/gene/1.6/)
 * [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
 * [Overview of events enrichment](https://github.com/0xrawsec/whids/blob/master/doc/events-table.md)
