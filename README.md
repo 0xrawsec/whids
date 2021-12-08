@@ -4,7 +4,8 @@
   <img src="./doc/img/logo.png" alt="logo" width="40%">
 </p>
 
-![coverage](.github/coverage/badge.svg)
+[![Coverage](.github/coverage/badge.svg)](https://raw.githubusercontent.com/0xrawsec/whids/master/.github/coverage/coverage.txt)
+[![Latest Commit](https://badgen.net/github/last-commit/0xrawsec/whids)](https://github.com/0xrawsec/whids/commits/master)
 
 ## What
 
