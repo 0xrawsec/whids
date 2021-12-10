@@ -73,6 +73,7 @@ var (
 				"Microsoft-Windows-Sysmon",
 				"Microsoft-Windows-Windows Defender",
 				"Microsoft-Windows-PowerShell",
+				"Microsoft-Windows-Kernel-File",
 			},
 			Traces: []string{"Eventlog-Security"},
 		},

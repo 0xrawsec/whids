@@ -294,7 +294,7 @@ func hookUpdateGeneScore(h *HIDS, e *event.EdrEvent) {
 		return
 	}
 
-	if t := processTrackFromEvent(h, e); t != nil {
+	if t := processTrackFromEvent(h, e); !t.IsZero() {
 		if d := e.GetDetection(); d != nil {
 			t.ThreatScore.Update(d)
 		}
@@ -681,6 +681,51 @@ func hookClipboardEvents(h *HIDS, e *event.EdrEvent) {
 					}
 				}
 			}
+		}
+	}
+}
+
+var (
+	pathKernelFileFileObject = engine.Path("/Event/EventData/FileObject")
+	pathKernelFileFileName   = engine.Path("/Event/EventData/FileName")
+)
+
+func hookKernelFiles(h *HIDS, e *event.EdrEvent) {
+
+	// Enrich all events with Sysmon Info
+	pt := h.processTracker.GetByPID(int64(e.Event.System.Execution.ProcessID))
+
+	// We enrich event with other data
+	e.SetIfOr(pathSysmonProcessGUID, pt.ProcessGUID, !pt.IsZero(), "?")
+	e.SetIfOr(pathSysmonImage, pt.Image, !pt.IsZero(), "?")
+	e.SetIfOr(pathSysmonCommandLine, pt.CommandLine, !pt.IsZero(), "?")
+	// put hashes in ImageHashes field to avoid confusion in analyst's mind
+	// not to think it is file content hashes
+	e.SetIfOr(pathImageHashes, pt.hashes, !pt.IsZero(), "?")
+	e.SetIfOr(pathSysmonProcessId, toString(pt.PID), !pt.IsZero(), toString(-1))
+	e.SetIfOr(pathSysmonIntegrityLevel, pt.IntegrityLevel, !pt.IsZero(), "?")
+	e.SetIfOr(pathSysmonUser, pt.User, !pt.IsZero(), "?")
+	e.SetIfOr(pathServices, pt.Services, !pt.IsZero(), "?")
+	e.Set(pathSysmonEventType, KernelFileOperations[e.EventID()])
+
+	if e.EventID() == KernelFileCreate {
+		// We track file
+		h.processTracker.AddKernelFile(KernelFileFromEvent(e))
+	} else {
+		var fo uint64
+		var ok bool
+
+		// We correlate with the filename
+		if fo, ok = e.GetUint(pathKernelFileFileObject); ok {
+			fileName := "?"
+			if kf, ok := h.processTracker.GetKernelFile(fo); ok {
+				fileName = kf.FileName
+			}
+			e.Set(pathKernelFileFileName, fileName)
+		}
+		// We delete entry in tracking structure
+		if e.EventID() == KernelFileClose {
+			h.processTracker.DelKernelFile(fo)
 		}
 	}
 }

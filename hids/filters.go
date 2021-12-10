@@ -5,11 +5,10 @@ import (
 	"github.com/0xrawsec/whids/event"
 )
 
+//Sysmon related
 var (
 	// sysmonChannel Sysmon windows event log channel
 	sysmonChannel = "Microsoft-Windows-Sysmon/Operational"
-	// securityChannel Security windows event log channel
-	securityChannel = "Security"
 
 	// Filters definitions
 	fltAnyEvent = NewFilter([]int64{}, "")
@@ -40,9 +39,28 @@ var (
 		SysmonFileDelete,
 		SysmonFileDeleteDetected},
 		sysmonChannel)
+)
 
+// Security channel related
+var (
+	// securityChannel Security windows event log channel
+	securityChannel = "Security"
 	// Security filters
 	fltFSObjectAccess = NewFilter([]int64{SecurityAccessObject}, securityChannel)
+)
+
+// ETW Kernel File related
+var (
+	kernelFileChannel = "Microsoft-Windows-Kernel-File/Analytic"
+	/*fltKernelFile     = NewFilter([]int64{
+	KernelFileCreate,
+	KernelFileClose,
+	KernelFileRead,
+	KernelFileWrite},
+	kernelFileChannel)
+	*/
+	fltKernelFile = NewFilter([]int64{},
+		kernelFileChannel)
 )
 
 // Filter structure

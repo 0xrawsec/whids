@@ -81,8 +81,33 @@ func (e *EdrEvent) GetInt(p engine.XPath) (i int64, ok bool) {
 			return
 		}
 	}
-
 	return
+}
+
+func (e *EdrEvent) GetIntOr(p engine.XPath, or int64) (i int64, ok bool) {
+	if i, ok = e.GetInt(p); ok {
+		return
+	}
+	return or, ok
+}
+
+func (e *EdrEvent) GetUint(p engine.XPath) (i uint64, ok bool) {
+	var s string
+	var err error
+
+	if s, ok = e.GetString(p); ok {
+		if i, err = strconv.ParseUint(s, 0, 64); err == nil {
+			return
+		}
+	}
+	return
+}
+
+func (e *EdrEvent) GetUintOr(p engine.XPath, or uint64) (i uint64, ok bool) {
+	if i, ok = e.GetUint(p); ok {
+		return
+	}
+	return or, ok
 }
 
 func (e *EdrEvent) GetBool(p engine.XPath) (b bool, ok bool) {

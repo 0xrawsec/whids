@@ -72,6 +72,7 @@ var (
 	pathSysmonTargetImage       = engine.Path("/Event/EventData/TargetImage")
 
 	// EventID 12,13,14: Registry
+	pathSysmonEventType    = engine.Path("/Event/EventData/EventType")
 	pathSysmonTargetObject = engine.Path("/Event/EventData/TargetObject")
 	pathSysmonDetails      = engine.Path("/Event/EventData/Details")
 

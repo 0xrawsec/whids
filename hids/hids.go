@@ -159,10 +159,11 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	// fixing local audit policies if necessary
 	h.config.AuditConfig.Configure()
 
-	// tries to update the engine
+	// update and load engine
 	if err := h.update(true); err != nil {
 		return h, err
 	}
+
 	return h, nil
 }
 
@@ -194,26 +195,22 @@ func (h *HIDS) initHooks(advanced bool) {
 		h.preHooks.Hook(hookFileSystemAudit, fltFSObjectAccess)
 		// Must be run the last as it depends on other filters
 		h.preHooks.Hook(hookEnrichAnySysmon, fltAnySysmon)
-		// Not sastifying results with Sysmon 11.11 we should try enabling this on newer versions
-		//h.preHooks.Hook(HookDNS, fltDNS)
-		//h.preHooks.Hook(hookEnrichDNSSysmon, fltNetworkConnect)
-		// Experimental
-		//h.preHooks.Hook(hookSetValueSize, fltRegSetValue)
+		h.preHooks.Hook(hookKernelFiles, fltKernelFile)
 
 		// This hook must run before action handling as we want
 		// the gene score to be set before an eventual reporting
 		h.postHooks.Hook(hookUpdateGeneScore, fltAnyEvent)
-		// Handles actions defined in rules for any Sysmon event
-		/*if h.config.Endpoint {
-			h.postHooks.Hook(hookHandleActions, fltAnyEvent)
-		}*/
 	}
 }
 
 func (h *HIDS) update(force bool) (last error) {
+	var reloadRules, reloadContainers bool
 
-	reloadRules := h.needsRulesUpdate()
-	reloadContainers := h.needsIoCsUpdate()
+	// check that we are connected to any manager
+	if h.config.IsForwardingEnabled() {
+		reloadRules = h.needsRulesUpdate()
+		reloadContainers = h.needsIoCsUpdate()
+	}
 
 	// check if we need rule update
 	if reloadRules {
@@ -309,7 +306,8 @@ func (h *HIDS) needsRulesUpdate() bool {
 	var oldSha256, sha256 string
 	_, rulesSha256Path := h.config.RulesConfig.RulesPaths()
 
-	if h.forwarder.Local {
+	// Don't need update if not connected to a manager
+	if h.config.IsForwardingEnabled() {
 		return false
 	}
 
@@ -325,6 +323,11 @@ func (h *HIDS) needsRulesUpdate() bool {
 // returns true if a container needs to be updated
 func (h *HIDS) needsIoCsUpdate() bool {
 	var localSha256, remoteSha256 string
+
+	// Don't need update if not connected to a manager
+	if h.config.IsForwardingEnabled() {
+		return false
+	}
 
 	container := api.IoCContainerName
 	_, locContSha256Path := h.containerPaths(container)

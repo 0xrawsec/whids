@@ -126,6 +126,7 @@ func sysmonHashesToMap(hashes string) map[string]string {
 type ProcessTrack struct {
 	/* Private */
 	hashes string
+	empty  bool
 
 	/* Public */
 	Image                  string            `json:"image"`
@@ -162,6 +163,22 @@ type ProcessTrack struct {
 
 // NewProcessTrack creates a new processTrack structure enforcing
 // that minimal information is encoded (image, guid, pid)
+func EmptyProcessTrack() *ProcessTrack {
+	return &ProcessTrack{
+		empty:           true,
+		Signature:       "?",
+		SignatureStatus: "?",
+		PID:             -1,
+		Ancestors:       make([]string, 0),
+		Modules:         make([]*ModuleInfo, 0),
+		Integrity:       -1.0,
+		Stats:           NewProcStats(),
+		ThreatScore:     NewGeneScore(),
+	}
+}
+
+// NewProcessTrack creates a new processTrack structure enforcing
+// that minimal information is encoded (image, guid, pid)
 func NewProcessTrack(image, pguid, guid string, pid int64) *ProcessTrack {
 	return &ProcessTrack{
 		Image:             image,
@@ -176,6 +193,10 @@ func NewProcessTrack(image, pguid, guid string, pid int64) *ProcessTrack {
 		Stats:             NewProcStats(),
 		ThreatScore:       NewGeneScore(),
 	}
+}
+
+func (t *ProcessTrack) IsZero() bool {
+	return t.empty
 }
 
 func (t *ProcessTrack) SetHashes(hashes string) {
@@ -267,6 +288,20 @@ func DriverInfoFromEvent(e *event.EdrEvent) (i *DriverInfo) {
 	return
 }
 
+type KernelFile struct {
+	FileName   string
+	FileObject uint64
+}
+
+func KernelFileFromEvent(e *event.EdrEvent) (f *KernelFile) {
+	f = &KernelFile{}
+
+	f.FileName, _ = e.GetStringOr(pathKernelFileFileName, "?")
+	f.FileObject, _ = e.GetUintOr(pathKernelFileFileObject, 0)
+
+	return
+}
+
 type ActivityTracker struct {
 	sync.RWMutex
 	// to store process track by parent process GUID
@@ -277,6 +312,8 @@ type ActivityTracker struct {
 	tpids       map[int64]*ProcessTrack // for terminated processes
 	blacklisted *datastructs.SyncedSet
 	free        *datastructs.Fifo
+	// Kernel-Files
+	files map[uint64]*KernelFile
 	// modules loaded
 	modules map[string]*ModuleInfo
 	// driver loaded
@@ -291,8 +328,9 @@ func NewActivityTracker() *ActivityTracker {
 		tpids:       make(map[int64]*ProcessTrack),
 		blacklisted: datastructs.NewSyncedSet(),
 		free:        &datastructs.Fifo{},
-		Drivers:     make([]DriverInfo, 0),
+		files:       make(map[uint64]*KernelFile),
 		modules:     make(map[string]*ModuleInfo),
+		Drivers:     make([]DriverInfo, 0),
 	}
 	// startup the routine to free resources
 	pt.freeRtn()
@@ -403,12 +441,19 @@ func (pt *ActivityTracker) GetParentByGuid(guid string) *ProcessTrack {
 	return nil
 }
 
+// GetByPID get a process track by process GUID. If none is found an
+// empty ProcessTrack is returned
 func (pt *ActivityTracker) GetByGuid(guid string) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
-	return pt.guids[guid]
+	if t := pt.guids[guid]; t != nil {
+		return t
+	}
+	return EmptyProcessTrack()
 }
 
+// GetByPID get a process track by PID. If none is found an empty ProcessTrack
+// is returned
 func (pt *ActivityTracker) GetByPID(pid int64) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
@@ -417,7 +462,11 @@ func (pt *ActivityTracker) GetByPID(pid int64) *ProcessTrack {
 		return t
 	}
 	// if we find process in terminated processes
-	return pt.tpids[pid]
+	if t := pt.tpids[pid]; t != nil {
+		return t
+	}
+
+	return EmptyProcessTrack()
 }
 
 func (pt *ActivityTracker) ContainsGuid(guid string) bool {
@@ -440,6 +489,25 @@ func (pt *ActivityTracker) Modules() (s []ModuleInfo) {
 		s = append(s, *m)
 	}
 	return
+}
+
+func (pt *ActivityTracker) AddKernelFile(f *KernelFile) {
+	pt.Lock()
+	defer pt.Unlock()
+	pt.files[f.FileObject] = f
+}
+
+func (pt *ActivityTracker) GetKernelFile(key uint64) (f *KernelFile, ok bool) {
+	pt.RLock()
+	defer pt.RUnlock()
+	f, ok = pt.files[key]
+	return
+}
+
+func (pt *ActivityTracker) DelKernelFile(key uint64) {
+	pt.Lock()
+	defer pt.Unlock()
+	delete(pt.files, key)
 }
 
 // GetModuleOrUpdate retrieves an already existing ModuleInfo or updates
