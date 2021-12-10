@@ -74,9 +74,9 @@ var OpenAPIDefinition = `
                       "group": "",
                       "hostname": "OpenHappy",
                       "ip": "127.0.0.1",
-                      "key": "K2hV6CCUtPsuY6rlN5IdtFtur0vFMv1zolmN9EKOyg5dvH6IrgysIHq99JrcS7wS",
-                      "last-connection": "2021-12-07T21:04:21.717332856Z",
-                      "last-detection": "2021-12-07T22:04:20.618672476+01:00",
+                      "key": "UJYWoN5eHeL2ade7i7Q96fUYD73ioohyUG5b89zsr618T5MwxiCvuEUL2r6eMClJ",
+                      "last-connection": "2021-12-10T14:57:53.736740431Z",
+                      "last-detection": "2021-12-10T15:57:52.656748907+01:00",
                       "score": 100,
                       "status": "",
                       "uuid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
@@ -106,12 +106,12 @@ var OpenAPIDefinition = `
                     "group": "",
                     "hostname": "",
                     "ip": "",
-                    "key": "FskhPV6hPkXHWGlT6vESKX2F2fDgDdmLbnWaIGDV83rGDm7e6vbTBw66I84hYGwo",
+                    "key": "NwYzrlynQ0JPojtgJJkh1tJsydgaCjy0KcnMNmscvGzK6Et5TsiMzFDdcdiQEqHv",
                     "last-connection": "0001-01-01T00:00:00Z",
                     "last-detection": "0001-01-01T00:00:00Z",
                     "score": 0,
                     "status": "",
-                    "uuid": "70e11981-d9e8-3002-b5a7-c1cf214e1dc3"
+                    "uuid": "246cc048-49f6-48cf-e665-e816f82df4b8"
                   },
                   "error": "",
                   "message": "OK"
@@ -151,21 +151,21 @@ var OpenAPIDefinition = `
                     "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d": [
                       {
                         "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                        "creation": "2021-12-07T21:04:26.364179042Z",
+                        "creation": "2021-12-10T14:57:58.297934684Z",
                         "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                         "files": [
                           {
                             "name": "bar.txt",
                             "size": 4,
-                            "timestamp": "2021-12-07T21:04:26.374179041Z"
+                            "timestamp": "2021-12-10T14:57:58.307934683Z"
                           },
                           {
                             "name": "foo.txt",
                             "size": 4,
-                            "timestamp": "2021-12-07T21:04:26.364179042Z"
+                            "timestamp": "2021-12-10T14:57:58.297934684Z"
                           }
                         ],
-                        "modification": "2021-12-07T21:04:26.374179041Z",
+                        "modification": "2021-12-10T14:57:58.307934683Z",
                         "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                       }
                     ]
@@ -194,44 +194,44 @@ var OpenAPIDefinition = `
                   "data": {
                     "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d": {
                       "alert-count": 50,
-                      "alert-criticality-metric": 844,
-                      "avg-alert-criticality": 8.44,
-                      "avg-signature-criticality": 8.44,
+                      "alert-criticality-metric": 864,
+                      "avg-alert-criticality": 8.64,
+                      "avg-signature-criticality": 8.64,
                       "bounded-score": 100,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 5,
-                        "NewAutorun": 16,
-                        "SuspiciousService": 6,
-                        "UnknownServices": 8,
-                        "UntrustedDriverLoaded": 15
+                        "DefenderConfigChanged": 2,
+                        "NewAutorun": 11,
+                        "SuspiciousService": 7,
+                        "UnknownServices": 13,
+                        "UntrustedDriverLoaded": 17
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2021-12-07T22:04:22.993062162+01:00",
-                      "score": 884,
+                      "median-time": "2021-12-10T15:57:54.940294227+01:00",
+                      "score": 909,
                       "signature-count": 50,
-                      "signature-criticality-metric": 40,
+                      "signature-criticality-metric": 45,
                       "signature-diversity": 100,
                       "signatures": [
-                        "SuspiciousService",
                         "DefenderConfigChanged",
                         "UnknownServices",
+                        "UntrustedDriverLoaded",
                         "NewAutorun",
-                        "UntrustedDriverLoaded"
+                        "SuspiciousService"
                       ],
-                      "start-time": "2021-12-07T22:04:22.991844651+01:00",
-                      "std-dev-alert-criticality": 1.88,
-                      "std-dev-signature-criticality": 1.88,
-                      "stop-time": "2021-12-07T22:04:22.994279674+01:00",
-                      "sum-alert-criticality": 422,
-                      "sum-rule-criticality": 422,
+                      "start-time": "2021-12-10T15:57:54.939026336+01:00",
+                      "std-dev-alert-criticality": 2.05,
+                      "std-dev-signature-criticality": 2.05,
+                      "stop-time": "2021-12-10T15:57:54.941562119+01:00",
+                      "sum-alert-criticality": 432,
+                      "sum-rule-criticality": 432,
                       "tactics": [
                         "Defense Evasion",
                         "persistence"
                       ],
                       "techniques": [
-                        "T1060",
-                        "T1014"
+                        "T1014",
+                        "T1060"
                       ]
                     }
                   },
@@ -273,8 +273,8 @@ var OpenAPIDefinition = `
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2021-12-07T21:04:21.717332856Z",
-                    "last-detection": "2021-12-07T22:04:20.618672476+01:00",
+                    "last-connection": "2021-12-10T14:57:53.736740431Z",
+                    "last-detection": "2021-12-10T15:57:52.656748907+01:00",
                     "score": 100,
                     "status": "",
                     "uuid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
@@ -491,8 +491,8 @@ var OpenAPIDefinition = `
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2021-12-07T21:04:21.717332856Z",
-                    "last-detection": "2021-12-07T22:04:20.618672476+01:00",
+                    "last-connection": "2021-12-10T14:57:53.736740431Z",
+                    "last-detection": "2021-12-10T15:57:52.656748907+01:00",
                     "score": 100,
                     "status": "New Status",
                     "uuid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
@@ -533,8 +533,8 @@ var OpenAPIDefinition = `
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2021-12-07T21:04:21.717332856Z",
-                    "last-detection": "2021-12-07T22:04:20.618672476+01:00",
+                    "last-connection": "2021-12-10T14:57:53.736740431Z",
+                    "last-detection": "2021-12-10T15:57:52.656748907+01:00",
                     "score": 100,
                     "status": "New Status",
                     "uuid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
@@ -586,21 +586,21 @@ var OpenAPIDefinition = `
                   "data": [
                     {
                       "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                      "creation": "2021-12-07T21:04:26.364179042Z",
+                      "creation": "2021-12-10T14:57:58.297934684Z",
                       "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                       "files": [
                         {
                           "name": "bar.txt",
                           "size": 4,
-                          "timestamp": "2021-12-07T21:04:26.374179041Z"
+                          "timestamp": "2021-12-10T14:57:58.307934683Z"
                         },
                         {
                           "name": "foo.txt",
                           "size": 4,
-                          "timestamp": "2021-12-07T21:04:26.364179042Z"
+                          "timestamp": "2021-12-10T14:57:58.297934684Z"
                         }
                       ],
-                      "modification": "2021-12-07T21:04:26.374179041Z",
+                      "modification": "2021-12-10T14:57:58.307934683Z",
                       "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                     }
                   ],
@@ -745,11 +745,11 @@ var OpenAPIDefinition = `
                     "json": null,
                     "name": "/usr/bin/printf",
                     "sent": true,
-                    "sent-time": "2021-12-07T22:04:22.897939269+01:00",
+                    "sent-time": "2021-12-10T15:57:54.859940667+01:00",
                     "stderr": null,
                     "stdout": "SGVsbG8gV29ybGQ=",
                     "timeout": 0,
-                    "uuid": "c3268cac-df69-de5f-7cc1-8a51f7b7ee76"
+                    "uuid": "f8a7dbe6-f19b-21a7-84ca-a9d5e35beff1"
                   },
                   "error": "",
                   "message": "OK"
@@ -837,15 +837,15 @@ var OpenAPIDefinition = `
                       "stderr": null,
                       "stdout": null,
                       "timeout": 0,
-                      "uuid": "c3268cac-df69-de5f-7cc1-8a51f7b7ee76"
+                      "uuid": "f8a7dbe6-f19b-21a7-84ca-a9d5e35beff1"
                     },
                     "criticality": 0,
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "key": "66J0rFYrLrfmsRJF0l9hJR8dYEubTXFxQDfdolafXSouvOK1pqnhIVTv5hX6DVvw",
-                    "last-connection": "2021-12-07T21:04:22.887615258Z",
-                    "last-detection": "2021-12-07T22:04:21.76238799+01:00",
+                    "key": "3Ha7K2Nu0FeYhgSwmMFuE5zsoyofYLJLpmhYReSLvaL5JIxRu2pHeNsx9dDlMojJ",
+                    "last-connection": "2021-12-10T14:57:54.850227052Z",
+                    "last-detection": "2021-12-10T15:57:53.78271092+01:00",
                     "score": 0,
                     "status": "",
                     "uuid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
@@ -1019,7 +1019,7 @@ var OpenAPIDefinition = `
                           "Actions": [],
                           "Criticality": 8,
                           "Signature": [
-                            "DefenderConfigChanged"
+                            "NewAutorun"
                           ]
                         },
                         "EdrData": {
@@ -1031,106 +1031,34 @@ var OpenAPIDefinition = `
                           },
                           "Event": {
                             "Detection": true,
-                            "Hash": "a191542c9879a7c5c9372e75f81a66aa237caaaa",
-                            "ReceiptTime": "2021-12-07T21:04:20.518334599Z"
+                            "Hash": "1f35f33c6bad78f55b3dcbdff8c996cf0200732f",
+                            "ReceiptTime": "2021-12-10T14:57:52.549454322Z"
                           }
                         },
                         "EventData": {
-                          "New Value": "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\ServiceStartStates = 0x1",
-                          "Old Value": "Default\\ServiceStartStates = 0x0",
-                          "Product Name": "Windows Defender Antivirus",
-                          "Product Version": "4.18.2106.6"
-                        },
-                        "System": {
-                          "Channel": "Microsoft-Windows-Windows Defender/Operational",
-                          "Computer": "DESKTOP-LJRVE06",
-                          "EventID": 5007,
-                          "Execution": {
-                            "ProcessID": 3276,
-                            "ThreadID": 3592
-                          },
-                          "Keywords": {
-                            "Name": "",
-                            "Value": 9223372036854776000
-                          },
-                          "Level": {
-                            "Name": "Information",
-                            "Value": 4
-                          },
-                          "Opcode": {
-                            "Name": "",
-                            "Value": 0
-                          },
-                          "Provider": {
-                            "Guid": "{11CD958A-C507-4EF3-B3F2-5FD9DFBD2C78}",
-                            "Name": "Microsoft-Windows-Windows Defender"
-                          },
-                          "Task": {
-                            "Name": "",
-                            "Value": 0
-                          },
-                          "TimeCreated": {
-                            "SystemTime": "2021-12-07T22:04:19.473371347+01:00"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "Event": {
-                        "Detection": {
-                          "Actions": [],
-                          "Criticality": 10,
-                          "Signature": [
-                            "UnknownServices"
-                          ]
-                        },
-                        "EdrData": {
-                          "Endpoint": {
-                            "Group": "",
-                            "Hostname": "OpenHappy",
-                            "IP": "127.0.0.1",
-                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
-                          },
-                          "Event": {
-                            "Detection": true,
-                            "Hash": "612b997ee37e0d8f9f9d902ad42b1475adbd0032",
-                            "ReceiptTime": "2021-12-07T21:04:20.532091334Z"
-                          }
-                        },
-                        "EventData": {
-                          "Ancestors": "System|C:\\Windows\\System32\\smss.exe|C:\\Windows\\System32\\smss.exe|C:\\Windows\\System32\\wininit.exe|C:\\Windows\\System32\\services.exe",
-                          "CommandLine": "\"C:\\Program Files\\Common Files\\Microsoft Shared\\ClickToRun\\OfficeClickToRun.exe\" /service",
-                          "Company": "Microsoft Corporation",
+                          "CommandLine": "\"C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe\"",
                           "CurrentDirectory": "C:\\Windows\\system32\\",
-                          "Description": "Microsoft Office Click-to-Run (SxS)",
-                          "FileVersion": "16.0.14131.20326",
-                          "Hashes": "SHA1=B5A53D806C74F29FA027717243A852384F5FBE20,MD5=782FC534737EC5D85FA226B9B4B7E1C8,SHA256=1193B9810BB4842BC8E52C84E6D090AD7B42879D1090079EBF4E37376EF2CA88,IMPHASH=3D8E7CDBD0C9B2814F4D50FE16F5AE09",
-                          "Image": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe",
-                          "ImageSize": "9056672",
+                          "Details": "MpUx User Session Agent",
+                          "EventType": "SetValue",
+                          "Image": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe",
+                          "ImageHashes": "SHA1=FBF03B5D6DC1A7EDAB0BA8D4DD27291C739E5813,MD5=B1C15F9DB942B373B2FC468B7048E63F,SHA256=1DC05B6DD6281840CEB822604B0E403E499180D636D02EC08AD77B4EB56F1B9C,IMPHASH=8AA2B8727E6858A3557A4C09970B9A5D",
+                          "ImageSignature": "?",
+                          "ImageSignatureStatus": "?",
+                          "ImageSigned": "false",
                           "IntegrityLevel": "System",
-                          "LogonGuid": "{515cd0d1-7667-6123-e703-000000000000}",
-                          "LogonId": "0x3E7",
-                          "OriginalFileName": "OfficeClickToRun.exe",
-                          "ParentCommandLine": "C:\\Windows\\system32\\services.exe",
-                          "ParentImage": "C:\\Windows\\System32\\services.exe",
-                          "ParentIntegrityLevel": "System",
-                          "ParentProcessGuid": "{515cd0d1-7666-6123-0b00-000000007300}",
-                          "ParentProcessId": "692",
-                          "ParentServices": "N/A",
-                          "ParentUser": "NT AUTHORITY\\SYSTEM",
-                          "ProcessGuid": "{515cd0d1-7669-6123-4300-000000007300}",
-                          "ProcessId": "2336",
-                          "Product": "Microsoft Office",
+                          "ProcessGuid": "{515cd0d1-7669-6123-4e00-000000007300}",
+                          "ProcessId": "3276",
+                          "ProcessThreatScore": "0",
                           "RuleName": "-",
-                          "Services": "ClickToRunSvc",
-                          "TerminalSessionId": "0",
+                          "Services": "WinDefend",
+                          "TargetObject": "HKCR\\CLSID\\{2DCD7FDB-8809-48E4-8E4F-3157C57CF987}\\(Default)",
                           "User": "NT AUTHORITY\\SYSTEM",
-                          "UtcTime": "2021-08-23 10:20:25.342"
+                          "UtcTime": "2021-08-23 10:20:25.878"
                         },
                         "System": {
                           "Channel": "Microsoft-Windows-Sysmon/Operational",
                           "Computer": "DESKTOP-LJRVE06",
-                          "EventID": 1,
+                          "EventID": 13,
                           "Execution": {
                             "ProcessID": 3220,
                             "ThreadID": 3848
@@ -1156,7 +1084,73 @@ var OpenAPIDefinition = `
                             "Value": 0
                           },
                           "TimeCreated": {
-                            "SystemTime": "2021-12-07T22:04:19.474178717+01:00"
+                            "SystemTime": "2021-12-10T15:57:51.504663044+01:00"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "Event": {
+                        "Detection": {
+                          "Actions": [],
+                          "Criticality": 10,
+                          "Signature": [
+                            "UntrustedDriverLoaded"
+                          ]
+                        },
+                        "EdrData": {
+                          "Endpoint": {
+                            "Group": "",
+                            "Hostname": "OpenHappy",
+                            "IP": "127.0.0.1",
+                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
+                          },
+                          "Event": {
+                            "Detection": true,
+                            "Hash": "818c3e3a14da48f8217cc4a504e5caaf3acbb7ff",
+                            "ReceiptTime": "2021-12-10T14:57:52.552412347Z"
+                          }
+                        },
+                        "EventData": {
+                          "Hashes": "SHA1=11F6CFF4F8BAD13D982ABF21BC0E33F95A97DE82,MD5=4CD8560661E3695EEF104A280D4AB656,SHA256=77DA29156BC9536400CB7ADB742A5C331D7EACC93EA806D1C03E9D0FC8DAFA54,IMPHASH=1C4067E1C451E614D2A5000171502DD1",
+                          "ImageLoaded": "C:\\Windows\\System32\\drivers\\VBoxSF.sys",
+                          "ImageLoadedSize": "348104",
+                          "RuleName": "-",
+                          "Signature": "Oracle Corporation",
+                          "SignatureStatus": "Valid",
+                          "Signed": "true",
+                          "UtcTime": "2021-08-23 10:20:18.704"
+                        },
+                        "System": {
+                          "Channel": "Microsoft-Windows-Sysmon/Operational",
+                          "Computer": "DESKTOP-LJRVE06",
+                          "EventID": 6,
+                          "Execution": {
+                            "ProcessID": 3220,
+                            "ThreadID": 3584
+                          },
+                          "Keywords": {
+                            "Name": "",
+                            "Value": 9223372036854776000
+                          },
+                          "Level": {
+                            "Name": "Information",
+                            "Value": 4
+                          },
+                          "Opcode": {
+                            "Name": "Info",
+                            "Value": 0
+                          },
+                          "Provider": {
+                            "Guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
+                            "Name": "Microsoft-Windows-Sysmon"
+                          },
+                          "Task": {
+                            "Name": "",
+                            "Value": 0
+                          },
+                          "TimeCreated": {
+                            "SystemTime": "2021-12-10T15:57:51.505063518+01:00"
                           }
                         }
                       }
@@ -1273,68 +1267,6 @@ var OpenAPIDefinition = `
                   "data": [
                     {
                       "Event": {
-                        "Detection": {
-                          "Actions": [],
-                          "Criticality": 8,
-                          "Signature": [
-                            "DefenderConfigChanged"
-                          ]
-                        },
-                        "EdrData": {
-                          "Endpoint": {
-                            "Group": "",
-                            "Hostname": "OpenHappy",
-                            "IP": "127.0.0.1",
-                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
-                          },
-                          "Event": {
-                            "Detection": true,
-                            "Hash": "a191542c9879a7c5c9372e75f81a66aa237caaaa",
-                            "ReceiptTime": "2021-12-07T21:04:20.518334599Z"
-                          }
-                        },
-                        "EventData": {
-                          "New Value": "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\ServiceStartStates = 0x1",
-                          "Old Value": "Default\\ServiceStartStates = 0x0",
-                          "Product Name": "Windows Defender Antivirus",
-                          "Product Version": "4.18.2106.6"
-                        },
-                        "System": {
-                          "Channel": "Microsoft-Windows-Windows Defender/Operational",
-                          "Computer": "DESKTOP-LJRVE06",
-                          "EventID": 5007,
-                          "Execution": {
-                            "ProcessID": 3276,
-                            "ThreadID": 3592
-                          },
-                          "Keywords": {
-                            "Name": "",
-                            "Value": 9223372036854776000
-                          },
-                          "Level": {
-                            "Name": "Information",
-                            "Value": 4
-                          },
-                          "Opcode": {
-                            "Name": "",
-                            "Value": 0
-                          },
-                          "Provider": {
-                            "Guid": "{11CD958A-C507-4EF3-B3F2-5FD9DFBD2C78}",
-                            "Name": "Microsoft-Windows-Windows Defender"
-                          },
-                          "Task": {
-                            "Name": "",
-                            "Value": 0
-                          },
-                          "TimeCreated": {
-                            "SystemTime": "2021-12-07T22:04:19.473371347+01:00"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "Event": {
                         "EdrData": {
                           "Endpoint": {
                             "Group": "",
@@ -1344,8 +1276,8 @@ var OpenAPIDefinition = `
                           },
                           "Event": {
                             "Detection": false,
-                            "Hash": "4c83b076a6f386ab95cc66cc6afff3f2c90cfe2c",
-                            "ReceiptTime": "2021-12-07T21:04:20.52661507Z"
+                            "Hash": "5dd545744f01f3c7f569a8f69555bc31c7a6c315",
+                            "ReceiptTime": "2021-12-10T14:57:52.542027486Z"
                           }
                         },
                         "EventData": {
@@ -1364,9 +1296,9 @@ var OpenAPIDefinition = `
                           "ProcessThreatScore": "0",
                           "RuleName": "-",
                           "Services": "StateRepository",
-                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\ApplicationExtension\\Data\\402\\_IndexKeys",
+                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\PackageUser\\Data\\508\\_IndexKeys",
                           "User": "NT AUTHORITY\\SYSTEM",
-                          "UtcTime": "2021-08-23 10:20:30.684"
+                          "UtcTime": "2021-08-23 10:20:30.426"
                         },
                         "System": {
                           "Channel": "Microsoft-Windows-Sysmon/Operational",
@@ -1397,7 +1329,76 @@ var OpenAPIDefinition = `
                             "Value": 0
                           },
                           "TimeCreated": {
-                            "SystemTime": "2021-12-07T22:04:19.473372328+01:00"
+                            "SystemTime": "2021-12-10T15:57:51.50423957+01:00"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "Event": {
+                        "EdrData": {
+                          "Endpoint": {
+                            "Group": "",
+                            "Hostname": "OpenHappy",
+                            "IP": "127.0.0.1",
+                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
+                          },
+                          "Event": {
+                            "Detection": false,
+                            "Hash": "1f2e4a47acafcf98797c641bcb3b0af68dc006cc",
+                            "ReceiptTime": "2021-12-10T14:57:52.545843Z"
+                          }
+                        },
+                        "EventData": {
+                          "CommandLine": "\"C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe\"",
+                          "CurrentDirectory": "C:\\Windows\\system32\\",
+                          "Details": "IMpUxUserSessionAgent",
+                          "EventType": "SetValue",
+                          "Image": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe",
+                          "ImageHashes": "SHA1=FBF03B5D6DC1A7EDAB0BA8D4DD27291C739E5813,MD5=B1C15F9DB942B373B2FC468B7048E63F,SHA256=1DC05B6DD6281840CEB822604B0E403E499180D636D02EC08AD77B4EB56F1B9C,IMPHASH=8AA2B8727E6858A3557A4C09970B9A5D",
+                          "ImageSignature": "?",
+                          "ImageSignatureStatus": "?",
+                          "ImageSigned": "false",
+                          "IntegrityLevel": "System",
+                          "ProcessGuid": "{515cd0d1-7669-6123-4e00-000000007300}",
+                          "ProcessId": "3276",
+                          "ProcessThreatScore": "56",
+                          "RuleName": "-",
+                          "Services": "WinDefend",
+                          "TargetObject": "HKCR\\Interface\\{5A776536-75B3-4A16-9AAF-B2E61395209B}\\(Default)",
+                          "User": "NT AUTHORITY\\SYSTEM",
+                          "UtcTime": "2021-08-23 10:20:25.878"
+                        },
+                        "System": {
+                          "Channel": "Microsoft-Windows-Sysmon/Operational",
+                          "Computer": "DESKTOP-LJRVE06",
+                          "EventID": 13,
+                          "Execution": {
+                            "ProcessID": 3220,
+                            "ThreadID": 3848
+                          },
+                          "Keywords": {
+                            "Name": "",
+                            "Value": 9223372036854776000
+                          },
+                          "Level": {
+                            "Name": "Information",
+                            "Value": 4
+                          },
+                          "Opcode": {
+                            "Name": "Info",
+                            "Value": 0
+                          },
+                          "Provider": {
+                            "Guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
+                            "Name": "Microsoft-Windows-Sysmon"
+                          },
+                          "Task": {
+                            "Name": "",
+                            "Value": 0
+                          },
+                          "TimeCreated": {
+                            "SystemTime": "2021-12-10T15:57:51.504240123+01:00"
                           }
                         }
                       }
@@ -1438,44 +1439,44 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": {
                     "alert-count": 50,
-                    "alert-criticality-metric": 844,
-                    "avg-alert-criticality": 8.44,
-                    "avg-signature-criticality": 8.44,
+                    "alert-criticality-metric": 864,
+                    "avg-alert-criticality": 8.64,
+                    "avg-signature-criticality": 8.64,
                     "bounded-score": 100,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 5,
-                      "NewAutorun": 16,
-                      "SuspiciousService": 6,
-                      "UnknownServices": 8,
-                      "UntrustedDriverLoaded": 15
+                      "DefenderConfigChanged": 2,
+                      "NewAutorun": 11,
+                      "SuspiciousService": 7,
+                      "UnknownServices": 13,
+                      "UntrustedDriverLoaded": 17
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2021-12-07T22:04:22.993062162+01:00",
-                    "score": 884,
+                    "median-time": "2021-12-10T15:57:54.940294227+01:00",
+                    "score": 909,
                     "signature-count": 50,
-                    "signature-criticality-metric": 40,
+                    "signature-criticality-metric": 45,
                     "signature-diversity": 100,
                     "signatures": [
-                      "NewAutorun",
+                      "UnknownServices",
                       "UntrustedDriverLoaded",
+                      "NewAutorun",
                       "SuspiciousService",
-                      "DefenderConfigChanged",
-                      "UnknownServices"
+                      "DefenderConfigChanged"
                     ],
-                    "start-time": "2021-12-07T22:04:22.991844651+01:00",
-                    "std-dev-alert-criticality": 1.88,
-                    "std-dev-signature-criticality": 1.88,
-                    "stop-time": "2021-12-07T22:04:22.994279674+01:00",
-                    "sum-alert-criticality": 422,
-                    "sum-rule-criticality": 422,
+                    "start-time": "2021-12-10T15:57:54.939026336+01:00",
+                    "std-dev-alert-criticality": 2.05,
+                    "std-dev-signature-criticality": 2.05,
+                    "stop-time": "2021-12-10T15:57:54.941562119+01:00",
+                    "sum-alert-criticality": 432,
+                    "sum-rule-criticality": 432,
                     "tactics": [
-                      "persistence",
-                      "Defense Evasion"
+                      "Defense Evasion",
+                      "persistence"
                     ],
                     "techniques": [
-                      "T1060",
-                      "T1014"
+                      "T1014",
+                      "T1060"
                     ]
                   },
                   "error": "",
@@ -1511,44 +1512,44 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": {
                     "alert-count": 50,
-                    "alert-criticality-metric": 844,
-                    "avg-alert-criticality": 8.44,
-                    "avg-signature-criticality": 8.44,
+                    "alert-criticality-metric": 864,
+                    "avg-alert-criticality": 8.64,
+                    "avg-signature-criticality": 8.64,
                     "bounded-score": 100,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 5,
-                      "NewAutorun": 16,
-                      "SuspiciousService": 6,
-                      "UnknownServices": 8,
-                      "UntrustedDriverLoaded": 15
+                      "DefenderConfigChanged": 2,
+                      "NewAutorun": 11,
+                      "SuspiciousService": 7,
+                      "UnknownServices": 13,
+                      "UntrustedDriverLoaded": 17
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2021-12-07T22:04:22.993062162+01:00",
-                    "score": 884,
+                    "median-time": "2021-12-10T15:57:54.940294227+01:00",
+                    "score": 909,
                     "signature-count": 50,
-                    "signature-criticality-metric": 40,
+                    "signature-criticality-metric": 45,
                     "signature-diversity": 100,
                     "signatures": [
-                      "UnknownServices",
                       "NewAutorun",
-                      "UntrustedDriverLoaded",
                       "SuspiciousService",
-                      "DefenderConfigChanged"
+                      "DefenderConfigChanged",
+                      "UnknownServices",
+                      "UntrustedDriverLoaded"
                     ],
-                    "start-time": "2021-12-07T22:04:22.991844651+01:00",
-                    "std-dev-alert-criticality": 1.88,
-                    "std-dev-signature-criticality": 1.88,
-                    "stop-time": "2021-12-07T22:04:22.994279674+01:00",
-                    "sum-alert-criticality": 422,
-                    "sum-rule-criticality": 422,
+                    "start-time": "2021-12-10T15:57:54.939026336+01:00",
+                    "std-dev-alert-criticality": 2.05,
+                    "std-dev-signature-criticality": 2.05,
+                    "stop-time": "2021-12-10T15:57:54.941562119+01:00",
+                    "sum-alert-criticality": 432,
+                    "sum-rule-criticality": 432,
                     "tactics": [
-                      "persistence",
-                      "Defense Evasion"
+                      "Defense Evasion",
+                      "persistence"
                     ],
                     "techniques": [
-                      "T1060",
-                      "T1014"
+                      "T1014",
+                      "T1060"
                     ]
                   },
                   "error": "",
@@ -1630,45 +1631,45 @@ var OpenAPIDefinition = `
                   "data": [
                     {
                       "alert-count": 50,
-                      "alert-criticality-metric": 844,
-                      "archived-time": "2021-12-07T22:04:24.110153517+01:00",
-                      "avg-alert-criticality": 8.44,
-                      "avg-signature-criticality": 8.44,
+                      "alert-criticality-metric": 864,
+                      "archived-time": "2021-12-10T15:57:56.054016846+01:00",
+                      "avg-alert-criticality": 8.64,
+                      "avg-signature-criticality": 8.64,
                       "bounded-score": 100,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 5,
-                        "NewAutorun": 16,
-                        "SuspiciousService": 6,
-                        "UnknownServices": 8,
-                        "UntrustedDriverLoaded": 15
+                        "DefenderConfigChanged": 2,
+                        "NewAutorun": 11,
+                        "SuspiciousService": 7,
+                        "UnknownServices": 13,
+                        "UntrustedDriverLoaded": 17
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2021-12-07T22:04:22.993062162+01:00",
-                      "score": 884,
+                      "median-time": "2021-12-10T15:57:54.940294227+01:00",
+                      "score": 909,
                       "signature-count": 50,
-                      "signature-criticality-metric": 40,
+                      "signature-criticality-metric": 45,
                       "signature-diversity": 100,
                       "signatures": [
-                        "UnknownServices",
                         "NewAutorun",
-                        "UntrustedDriverLoaded",
                         "SuspiciousService",
-                        "DefenderConfigChanged"
+                        "DefenderConfigChanged",
+                        "UnknownServices",
+                        "UntrustedDriverLoaded"
                       ],
-                      "start-time": "2021-12-07T22:04:22.991844651+01:00",
-                      "std-dev-alert-criticality": 1.88,
-                      "std-dev-signature-criticality": 1.88,
-                      "stop-time": "2021-12-07T22:04:22.994279674+01:00",
-                      "sum-alert-criticality": 422,
-                      "sum-rule-criticality": 422,
+                      "start-time": "2021-12-10T15:57:54.939026336+01:00",
+                      "std-dev-alert-criticality": 2.05,
+                      "std-dev-signature-criticality": 2.05,
+                      "stop-time": "2021-12-10T15:57:54.941562119+01:00",
+                      "sum-alert-criticality": 432,
+                      "sum-rule-criticality": 432,
                       "tactics": [
-                        "persistence",
-                        "Defense Evasion"
+                        "Defense Evasion",
+                        "persistence"
                       ],
                       "techniques": [
-                        "T1060",
-                        "T1014"
+                        "T1014",
+                        "T1060"
                       ]
                     }
                   ],
@@ -1737,7 +1738,7 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": [
                     {
-                      "key": "bc3aa838-b92f-ac9d-dcd9-2e4e65f867cc",
+                      "key": "fca13c28-c70d-79c7-4645-d667d616a461",
                       "source": "XyzTIProvider",
                       "type": "domain",
                       "value": "some.random.domain"
@@ -1785,7 +1786,7 @@ var OpenAPIDefinition = `
               "example": [
                 {
                   "source": "XyzTIProvider",
-                  "key": "bc3aa838-b92f-ac9d-dcd9-2e4e65f867cc",
+                  "key": "fca13c28-c70d-79c7-4645-d667d616a461",
                   "value": "some.random.domain",
                   "type": "domain"
                 }
@@ -1864,7 +1865,7 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": [
                     {
-                      "key": "bc3aa838-b92f-ac9d-dcd9-2e4e65f867cc",
+                      "key": "fca13c28-c70d-79c7-4645-d667d616a461",
                       "source": "XyzTIProvider",
                       "type": "domain",
                       "value": "some.random.domain"
@@ -2277,8 +2278,8 @@ var OpenAPIDefinition = `
                     "description": "",
                     "group": "",
                     "identifier": "TestAdminUser",
-                    "key": "GYBK6mqDBt9NRhTIbIUgOGaXI0NLyO2oT6wEOy4JhLo18RIKK6eIwpvXvJaRz448",
-                    "uuid": "783881a8-2818-2ee2-c684-26ffd88328d9"
+                    "key": "cSRngvCGmtT1X3WSHzslBbeMLikR8HiVlNSFlGCOgOnf4WpnrUro4VfGFy3n1iKC",
+                    "uuid": "1f729524-8a38-d9c1-96f0-c7a423d067cb"
                   },
                   "error": "",
                   "message": "OK"
@@ -2321,7 +2322,7 @@ var OpenAPIDefinition = `
                 }
               },
               "example": {
-                "uuid": "e80b268f-8b72-c6b1-9dbd-5c14b3104a5f",
+                "uuid": "49615f8c-2f1f-be1d-f21a-8c59691082c6",
                 "identifier": "SecondTestAdmin",
                 "key": "ChangeMe",
                 "group": "CSIRT",
@@ -2342,7 +2343,7 @@ var OpenAPIDefinition = `
                     "group": "CSIRT",
                     "identifier": "SecondTestAdmin",
                     "key": "ChangeMe",
-                    "uuid": "e80b268f-8b72-c6b1-9dbd-5c14b3104a5f"
+                    "uuid": "49615f8c-2f1f-be1d-f21a-8c59691082c6"
                   },
                   "error": "",
                   "message": "OK"
@@ -2430,7 +2431,7 @@ var OpenAPIDefinition = `
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "e80b268f-8b72-c6b1-9dbd-5c14b3104a5f"
+                    "uuid": "49615f8c-2f1f-be1d-f21a-8c59691082c6"
                   },
                   "error": "",
                   "message": "OK"
@@ -2468,7 +2469,7 @@ var OpenAPIDefinition = `
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "e80b268f-8b72-c6b1-9dbd-5c14b3104a5f"
+                    "uuid": "49615f8c-2f1f-be1d-f21a-8c59691082c6"
                   },
                   "error": "",
                   "message": "OK"
