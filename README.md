@@ -8,6 +8,7 @@
 [![Latest Commit](https://badgen.net/github/last-commit/0xrawsec/whids)](https://github.com/0xrawsec/whids/commits/master)
 [![Latest Release](https://badgen.net/github/release/0xrawsec/whids)](https://github.com/0xrawsec/whids/releases)
 [![License](https://badgen.net/github/license/0xrawsec/whids)](https://raw.githubusercontent.com/0xrawsec/whids/master/LICENSE)
+[<img src="https://validator.swagger.io/validator?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json" style="height:20px">](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
 
 ## What
 
@@ -114,7 +115,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 # Further Documentation
 
-* [Endpoint Manager REST API documentation](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
+* [Endpoint Manager REST API documentation](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
 * [How to write rules](https://rawsec.lu/doc/gene/1.6/)
 * [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
 * [Overview of events enrichment](https://github.com/0xrawsec/whids/blob/master/doc/events-table.md)
