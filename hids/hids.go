@@ -42,6 +42,8 @@ var (
 	/** Public vars **/
 
 	ContainRuleName = "EDR containment"
+	MaxEPS          = float64(300)
+	MaxEPSDuration  = 30 * time.Second
 
 	/** Private vars **/
 
@@ -60,27 +62,28 @@ type HIDS struct {
 	cancel       context.CancelFunc
 
 	eventProvider   *etw.Consumer
+	stats           *EventStats
 	preHooks        *HookManager
 	postHooks       *HookManager
 	forwarder       *api.Forwarder
 	channels        *datastructs.SyncedSet // Windows log channels to listen to
 	channelsSignals chan bool
 	config          *Config
-	eventScanned    uint64
-	alertReported   uint64
-	startTime       time.Time
-	waitGroup       sync.WaitGroup
+	//eventScanned    uint64
+	//alertReported   uint64
+	//startTime time.Time
+	waitGroup sync.WaitGroup
 
 	flagProcTermEn bool
 	bootCompleted  bool
 	// Sysmon GUID of HIDS process
-	guid           string
-	processTracker *ActivityTracker
-	actionHandler  *ActionHandler
-	memdumped      *datastructs.SyncedSet
-	dumping        *datastructs.SyncedSet
-	filedumped     *datastructs.SyncedSet
-	hookSemaphore  semaphore.Semaphore
+	guid          string
+	tracker       *ActivityTracker
+	actionHandler *ActionHandler
+	memdumped     *datastructs.SyncedSet
+	dumping       *datastructs.SyncedSet
+	filedumped    *datastructs.SyncedSet
+	hookSemaphore semaphore.Semaphore
 
 	Engine   *engine.Engine
 	DryRun   bool
@@ -114,13 +117,14 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 		ctx:             ctx,
 		cancel:          cancel,
 		eventProvider:   etw.NewRealTimeConsumer(ctx),
+		stats:           NewEventStats(MaxEPS, MaxEPSDuration),
 		preHooks:        NewHookMan(),
 		postHooks:       NewHookMan(),
 		channels:        datastructs.NewSyncedSet(),
 		channelsSignals: make(chan bool),
 		config:          c,
 		waitGroup:       sync.WaitGroup{},
-		processTracker:  NewActivityTracker(),
+		tracker:         NewActivityTracker(),
 		memdumped:       datastructs.NewSyncedSet(),
 		dumping:         datastructs.NewSyncedSet(),
 		filedumped:      datastructs.NewSyncedSet(),
@@ -152,7 +156,7 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h.cleanup()
 
 	// initialization
-	h.initChannels()
+	h.initEventProvider()
 	h.initHooks(c.EnableHooks)
 	// initializing canaries
 	h.config.CanariesConfig.Configure()
@@ -169,7 +173,18 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 
 /** Private Methods **/
 
-func (h *HIDS) initChannels() {
+func (h *HIDS) initEventProvider() {
+
+	// parses the providers and init filters
+	for _, sprov := range h.config.EtwConfig.UnifiedProviders() {
+		if prov, err := etw.ProviderFromString(sprov); err != nil {
+			log.Errorf("Error while parsing provider %s: %s", sprov, err)
+		} else {
+			h.eventProvider.Filter.FromProvider(&prov)
+		}
+	}
+
+	// open traces
 	for _, trace := range h.config.EtwConfig.UnifiedTraces() {
 		if err := h.eventProvider.OpenTrace(trace); err != nil {
 			log.Errorf("Failed to open trace %s: %s", trace, err)
@@ -273,6 +288,16 @@ func (h *HIDS) update(force bool) (last error) {
 				log.Errorf("Failed to compile canary rule: %s", err)
 			} else {
 				if err = newEngine.AddRule(fscr); err != nil {
+					last = err
+				}
+			}
+
+			// File System Audit Rule
+			kfr := h.config.CanariesConfig.GenRuleKernelFile()
+			if kfcr, err := kfr.Compile(nil); err != nil {
+				log.Errorf("Failed to compile canary rule: %s", err)
+			} else {
+				if err = newEngine.AddRule(kfcr); err != nil {
 					last = err
 				}
 			}
@@ -744,23 +769,23 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		cmd.Json = h.Report(false)
 	case "processes":
-		h.processTracker.RLock()
+		h.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.processTracker.PS()
-		h.processTracker.RUnlock()
+		cmd.Json = h.tracker.PS()
+		h.tracker.RUnlock()
 	case "modules":
-		h.processTracker.RLock()
+		h.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.processTracker.Modules()
-		h.processTracker.RUnlock()
+		cmd.Json = h.tracker.Modules()
+		h.tracker.RUnlock()
 	case "drivers":
-		h.processTracker.RLock()
+		h.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.processTracker.Drivers
-		h.processTracker.RUnlock()
+		cmd.Json = h.tracker.Drivers
+		h.tracker.RUnlock()
 	}
 
 	// we finally run the command
@@ -828,7 +853,7 @@ func (h *HIDS) IsHIDSEvent(e *event.EdrEvent) bool {
 			return true
 		}
 		// search for parent in processTracker
-		if pt := h.processTracker.GetByGuid(guid); pt != nil {
+		if pt := h.tracker.GetByGuid(guid); !pt.IsZero() {
 			if pt.ParentProcessGUID == h.guid {
 				return true
 			}
@@ -839,7 +864,7 @@ func (h *HIDS) IsHIDSEvent(e *event.EdrEvent) bool {
 			return true
 		}
 		// search for parent in processTracker
-		if pt := h.processTracker.GetByGuid(sguid); pt != nil {
+		if pt := h.tracker.GetByGuid(sguid); !pt.IsZero() {
 			if pt.ParentProcessGUID == h.guid {
 				return true
 			}
@@ -855,13 +880,13 @@ func (h *HIDS) Report(light bool) (r Report) {
 
 	// generate a report for running processes or those terminated still having one child or more
 	// do this step first not to polute report with commands to run
-	r.Processes = h.processTracker.PS()
+	r.Processes = h.tracker.PS()
 
 	// Modules ever loaded
-	r.Modules = h.processTracker.Modules()
+	r.Modules = h.tracker.Modules()
 
 	// Drivers loaded
-	r.Drivers = h.processTracker.Drivers
+	r.Drivers = h.tracker.Drivers
 
 	// if this is a light report, we don't run the commands
 	if !light {
@@ -905,7 +930,9 @@ func (h *HIDS) Run() {
 	// Starting event provider
 	h.eventProvider.Start()
 
-	h.startTime = time.Now()
+	// start stats monitoring
+	h.stats.Start()
+
 	h.waitGroup.Add(1)
 	go func() {
 		defer h.waitGroup.Done()
@@ -918,8 +945,18 @@ func (h *HIDS) Run() {
 		for e := range h.eventProvider.Events {
 			event := event.NewEdrEvent(e)
 
+			if yes, eps := h.stats.HasPerfIssue(); yes {
+				log.Warnf("Average event rate above limit of %.2f e/s in the last %s: %.2f e/s", h.stats.Threshold(), h.stats.Duration(), eps)
+
+				if h.stats.HasCriticalPerfIssue() {
+					log.Critical("Event throughput too high for too long, consider filtering out events")
+				} else if crit := h.stats.CriticalEPS(); eps > crit {
+					log.Criticalf("Event throughput above %.0fx the limit, if repeated consider filtering out events", eps/h.stats.Threshold())
+				}
+			}
+
 			// Warning message in certain circumstances
-			if h.config.EnableHooks && !h.flagProcTermEn && h.eventScanned > 0 && h.eventScanned%1000 == 0 {
+			if h.config.EnableHooks && !h.flagProcTermEn && h.stats.Events() > 0 && int64(h.stats.Events())%1000 == 0 {
 				log.Warn("Sysmon process termination events seem to be missing. WHIDS won't work as expected.")
 			}
 
@@ -936,7 +973,13 @@ func (h *HIDS) Run() {
 				if h.PrintAll {
 					fmt.Println(utils.JsonString(event))
 				}
-				goto LoopTail
+				goto Continue
+			}
+
+			// if event is skipped we don't log it even with PrintAll
+			if event.IsSkipped() {
+				h.stats.Update(event)
+				goto Continue
 			}
 
 			// if the event has matched at least one signature or is filtered
@@ -949,7 +992,7 @@ func (h *HIDS) Run() {
 					// Pipe the event to be sent to the forwarder
 					// Run hooks post detection
 					h.postHooks.RunHooksOn(h, event)
-					h.alertReported++
+					h.stats.Update(event)
 				case filtered && h.config.EnableFiltering && !h.PrintAll && !h.config.LogAll:
 					//event.Del(&engine.GeneInfoPath)
 					// we pipe filtered event
@@ -970,9 +1013,9 @@ func (h *HIDS) Run() {
 				h.forwarder.PipeEvent(event)
 			}
 
-			h.eventScanned++
+			h.stats.Update(event)
 
-		LoopTail:
+		Continue:
 			h.RUnlock()
 		}
 		log.Infof("HIDS main loop terminated")
@@ -985,11 +1028,10 @@ func (h *HIDS) Run() {
 
 // LogStats logs whids statistics
 func (h *HIDS) LogStats() {
-	stop := time.Now()
-	log.Infof("Time Running: %s", stop.Sub(h.startTime))
-	log.Infof("Count Event Scanned: %d", h.eventScanned)
-	log.Infof("Average Event Rate: %.2f EPS", float64(h.eventScanned)/(stop.Sub(h.startTime).Seconds()))
-	log.Infof("Alerts Reported: %d", h.alertReported)
+	log.Infof("Time Running: %s", h.stats.SinceStart())
+	log.Infof("Count Event Scanned: %.0f", h.stats.Events())
+	log.Infof("Average Event Rate: %.2f EPS", h.stats.EPS())
+	log.Infof("Alerts Reported: %.0f", h.stats.Detections())
 	log.Infof("Count Rules Used (loaded + generated): %d", h.Engine.Count())
 }
 
@@ -1018,8 +1060,12 @@ func (h *HIDS) Stop() {
 
 	// updating autologger configuration
 	log.Infof("Updating autologger configuration")
+	if err := Autologger.Delete(); err != nil {
+		log.Errorf("Failed to delete autologger:", err)
+	}
+
 	if err := h.config.EtwConfig.ConfigureAutologger(); err != nil {
-		log.Errorf("Failed to update autologger configuration", err)
+		log.Errorf("Failed to update autologger configuration:", err)
 	}
 
 	log.Infof("HIDS stopped")

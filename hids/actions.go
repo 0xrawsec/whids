@@ -88,7 +88,7 @@ func (m *ActionHandler) prepare(e *event.EdrEvent, filename string) string {
 
 func (m *ActionHandler) shouldDump(e *event.EdrEvent) bool {
 	guid := srcGUIDFromEvent(e)
-	return m.hids.processTracker.CheckDumpCountOrInc(guid, m.hids.config.Dump.MaxDumps, m.hids.config.Dump.DumpUntracked)
+	return m.hids.tracker.CheckDumpCountOrInc(guid, m.hids.config.Dump.MaxDumps, m.hids.config.Dump.DumpUntracked)
 }
 
 func (m *ActionHandler) writeReader(dst string, reader io.Reader) error {
@@ -171,7 +171,7 @@ func listFilesFromCommandLine(cmdLine string, cwd string) []string {
 func (m *ActionHandler) filedumpSet(e *event.EdrEvent) *datastructs.Set {
 	s := datastructs.NewSet()
 
-	if pt := processTrackFromEvent(m.hids, e); pt != nil {
+	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
 		s.Add(pt.Image)
 		s.Add(pt.ParentImage)
 		// parse command line
@@ -233,7 +233,7 @@ func (m *ActionHandler) filedump(e *event.EdrEvent) {
 
 func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 	hash := e.Hash()
-	if pt := processTrackFromEvent(m.hids, e); pt != nil {
+	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
 		guid := srcGUIDFromEvent(e)
 		pid := int(pt.PID)
 		if kernel32.IsPIDRunning(pid) && pid != os.Getpid() && !m.hids.memdumped.Contains(guid) && !m.hids.dumping.Contains(guid) {
@@ -289,7 +289,7 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
-	if pt := processTrackFromEvent(m.hids, e); pt != nil {
+	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			// before we kill we suspend the process
@@ -299,7 +299,7 @@ func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) kill_process(e *event.EdrEvent) error {
-	if pt := processTrackFromEvent(m.hids, e); pt != nil {
+	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			if err := pt.TerminateProcess(); err != nil {
@@ -335,10 +335,10 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 
 		// handling blacklisting action
 		if det.Actions.Contains(ActionBlacklist) {
-			if pt := processTrackFromEvent(m.hids, e); pt != nil {
+			if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
 				// additional check not to blacklist agent
 				if int(pt.PID) != os.Getpid() {
-					m.hids.processTracker.Blacklist(pt.CommandLine)
+					m.hids.tracker.Blacklist(pt.CommandLine)
 				}
 			}
 		}

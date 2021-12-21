@@ -70,9 +70,9 @@ func srcGUIDFromEvent(e *event.EdrEvent) string {
 
 func processTrackFromEvent(h *HIDS, e *event.EdrEvent) *ProcessTrack {
 	if uuid := srcGUIDFromEvent(e); uuid != nullGUID {
-		return h.processTracker.GetByGuid(uuid)
+		return h.tracker.GetByGuid(uuid)
 	}
-	return nil
+	return EmptyProcessTrack()
 }
 
 func hasAction(e *event.EdrEvent, action string) bool {

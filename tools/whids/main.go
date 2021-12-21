@@ -73,7 +73,7 @@ var (
 				"Microsoft-Windows-Sysmon",
 				"Microsoft-Windows-Windows Defender",
 				"Microsoft-Windows-PowerShell",
-				"Microsoft-Windows-Kernel-File",
+				"Microsoft-Antimalware-Scan-Interface",
 			},
 			Traces: []string{"Eventlog-Security"},
 		},
@@ -120,8 +120,11 @@ var (
 					Delete:      true,
 				},
 			},
-			Actions:   []string{"kill", "memdump", "filedump", "blacklist", "report"},
-			Whitelist: []string{"C:\\Windows\\explorer.exe"},
+			Actions: []string{"kill", "memdump", "filedump", "blacklist", "report"},
+			Whitelist: []string{
+				"System",
+				"C:\\Windows\\explorer.exe",
+			},
 		},
 		CritTresh:       5,
 		Logfile:         filepath.Join(logDir, "whids.log"),
@@ -306,6 +309,11 @@ func main() {
 		conf, err := hids.LoadsHIDSConfig(config)
 		if err != nil {
 			log.Errorf("Failed to load configuration: %s", err)
+			os.Exit(exitFail)
+		}
+
+		if err := deleteAutologger(); err != nil {
+			log.Errorf("Failed to delete autologger: %s", err)
 			os.Exit(exitFail)
 		}
 

@@ -1,8 +1,18 @@
+//go:build windows
 // +build windows
 
 package utils
 
-import "syscall"
+import (
+	"regexp"
+	"syscall"
+
+	"github.com/0xrawsec/golang-win32/win32/kernel32"
+)
+
+var (
+	cDriveDeviceRe *regexp.Regexp
+)
 
 // ArgvFromCommandLine returns an argv slice given a command line
 // provided in argument
@@ -35,4 +45,27 @@ func HideFile(filename string) error {
 		return err
 	}
 	return nil
+}
+
+func ResolveCDrive(path string) string {
+	var devs []string
+	var err error
+
+	if cDriveDeviceRe == nil {
+		if devs, err = kernel32.QueryDosDevice("C:"); err != nil {
+			return path
+		}
+		if len(devs) > 0 {
+			if cDriveDeviceRe, err = regexp.Compile(regexp.QuoteMeta(devs[0])); err != nil {
+				return path
+			}
+		}
+	}
+
+	if cDriveDeviceRe != nil {
+		res := cDriveDeviceRe.ReplaceAllString(path, "C:")
+		return res
+	}
+
+	return path
 }

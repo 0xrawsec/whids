@@ -224,6 +224,22 @@ func (c *CanariesConfig) GenRuleSysmon() (r engine.Rule) {
 	return
 }
 
+// GenRuleSysmon generate a rule matching sysmon events for the configured canaries
+func (c *CanariesConfig) GenRuleKernelFile() (r engine.Rule) {
+	r = engine.NewRule()
+	r.Name = "Builtin:CanaryReadWrite"
+	// FileCreate, FileDeleted and FileDeletedDetected
+	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Kernel-File/Analytic": {15, 16}}
+	r.Meta.Criticality = 10
+	r.Matches = []string{
+		fmt.Sprintf("$wl_images: Image ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: FileName ~= '%s'", c.canaryRegexp()),
+	}
+	r.Condition = "!$wl_images and $canary"
+	r.Actions = append(r.Actions, c.Actions...)
+	return
+}
+
 // Clean cleans up the canaries
 func (c *CanariesConfig) Clean() {
 	if c.Enable {
