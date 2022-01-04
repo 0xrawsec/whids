@@ -54,7 +54,6 @@ var (
 			Root:        "./data/logs",
 			LogBasename: "forwarded",
 		},
-		RulesDir: "./data/rules",
 		DumpDir:  "./data/dumps",
 		Database: "./data/database",
 	}
@@ -196,6 +195,7 @@ var (
 	openapi     bool
 	fingerprint string
 	user        string
+	imprules    string
 )
 
 func main() {
@@ -207,6 +207,7 @@ func main() {
 	flag.BoolVar(&openapi, "openapi", openapi, "Prints JSON formatted OpenAPI definition")
 	flag.StringVar(&fingerprint, "fingerprint", fingerprint, "Retrieve fingerprint of certificate to set in client configuration")
 	flag.StringVar(&user, "user", user, "Creates a new user")
+	flag.StringVar(&imprules, "import", imprules, "Import Gene rules from a directory")
 
 	flag.Usage = func() {
 		printInfo(os.Stderr)
@@ -272,6 +273,19 @@ func main() {
 		log.Infof("New user successfully created: %s", utils.PrettyJson(u))
 
 		log.Abort(0, "User creation: SUCCESS")
+	}
+
+	if imprules != "" {
+		manager, err = api.NewManager(managerConf)
+		if err != nil {
+			log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
+		}
+
+		if err = manager.ImportRules(imprules); err != nil {
+			log.Abort(exitFail, err)
+		}
+
+		log.Abort(0, "Rules import: SUCCESS")
 	}
 
 	if certgen {

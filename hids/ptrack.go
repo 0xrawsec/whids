@@ -228,17 +228,17 @@ func ModuleInfoFromEvent(e *event.EdrEvent) (i *ModuleInfo) {
 	var ok bool
 
 	i = &ModuleInfo{}
-	i.Image, _ = e.GetStringOr(pathSysmonImageLoaded, "?")
-	i.FileVersion, _ = e.GetStringOr(pathSysmonFileVersion, "?")
-	i.Description, _ = e.GetStringOr(pathSysmonDescription, "?")
-	i.Product, _ = e.GetStringOr(pathSysmonProduct, "?")
-	i.Company, _ = e.GetStringOr(pathSysmonCompany, "?")
-	i.OriginalFileName, _ = e.GetStringOr(pathSysmonOriginalFileName, "?")
+	i.Image = e.GetStringOr(pathSysmonImageLoaded, "?")
+	i.FileVersion = e.GetStringOr(pathSysmonFileVersion, "?")
+	i.Description = e.GetStringOr(pathSysmonDescription, "?")
+	i.Product = e.GetStringOr(pathSysmonProduct, "?")
+	i.Company = e.GetStringOr(pathSysmonCompany, "?")
+	i.OriginalFileName = e.GetStringOr(pathSysmonOriginalFileName, "?")
 	if i.hashes, ok = e.GetString(pathSysmonHashes); ok {
 		i.Hashes = sysmonHashesToMap(i.hashes)
 	}
-	i.Signature, _ = e.GetStringOr(pathSysmonSignature, "?")
-	i.SignatureStatus, _ = e.GetStringOr(pathSysmonSignatureStatus, "?")
+	i.Signature = e.GetStringOr(pathSysmonSignature, "?")
+	i.SignatureStatus = e.GetStringOr(pathSysmonSignatureStatus, "?")
 	i.Signed, _ = e.GetBool(pathSysmonSigned)
 	i.LoadCount = 1
 	i.FirstLoad = e.Timestamp()
@@ -272,12 +272,12 @@ func DriverInfoFromEvent(e *event.EdrEvent) (i *DriverInfo) {
 
 	i = &DriverInfo{}
 
-	i.Image, _ = e.GetStringOr(pathSysmonImageLoaded, "?")
+	i.Image = e.GetStringOr(pathSysmonImageLoaded, "?")
 	if i.hashes, ok = e.GetString(pathSysmonHashes); ok {
 		i.HashesMap = sysmonHashesToMap(i.hashes)
 	}
-	i.Signature, _ = e.GetStringOr(pathSysmonSignature, "?")
-	i.SignatureStatus, _ = e.GetStringOr(pathSysmonSignatureStatus, "?")
+	i.Signature = e.GetStringOr(pathSysmonSignature, "?")
+	i.SignatureStatus = e.GetStringOr(pathSysmonSignatureStatus, "?")
 	i.Signed, _ = e.GetBool(pathSysmonSigned)
 
 	return
@@ -294,7 +294,7 @@ func KernelFileFromEvent(e *event.EdrEvent) (f *KernelFile) {
 		EventCount: make(map[int64]uint64),
 	}
 
-	f.FileName, _ = e.GetStringOr(pathKernelFileFileName, "?")
+	f.FileName = e.GetStringOr(pathKernelFileFileName, "?")
 	f.FileName = utils.ResolveCDrive(f.FileName)
 	f.FileObject = e.GetUintOr(pathKernelFileFileObject, 0)
 

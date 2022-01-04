@@ -34,6 +34,7 @@ var (
 		EptAPIServerKeyPath,
 		EptAPICommandPath,
 		EptAPIRulesSha256Path,
+		EptAPIIoCsSha256Path,
 	}
 )
 
@@ -47,8 +48,6 @@ const (
 	AdmAPIStatsPath         = "/stats"
 	AdmAPIIocsPath          = "/iocs"
 	AdmAPIRulesPath         = "/rules"
-	AdmAPIRulesReloadPath   = "/rules/reload"
-	AdmAPIRulesSavePath     = "/rules/save"
 	AdmAPIEndpointsPath     = "/endpoints"
 	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related

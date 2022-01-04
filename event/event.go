@@ -55,11 +55,11 @@ func (e *EdrEvent) Hash() string {
 	return utils.HashEventBytes(utils.Json(tmp))
 }
 
-func (e *EdrEvent) GetStringOr(p engine.XPath, or string) (s string, ok bool) {
-	if s, ok = e.GetString(p); ok {
-		return
+func (e *EdrEvent) GetStringOr(p engine.XPath, or string) string {
+	if s, ok := e.GetString(p); ok {
+		return s
 	}
-	return or, ok
+	return or
 }
 
 func (e *EdrEvent) GetString(p engine.XPath) (s string, ok bool) {
@@ -153,9 +153,25 @@ func (e *EdrEvent) Set(p engine.XPath, i interface{}) (err error) {
 }
 
 func (e *EdrEvent) SetDetection(d *engine.Detection) {
-	// we make the choice not to set detection when it is empty
-	if d.Criticality > 0 || d.Signature.Len() > 0 || d.Actions.Len() > 0 || len(d.ATTACK) > 0 {
-		e.Event.Detection = d
+	if d != nil {
+		// we make the choice not to set detection when it is empty
+		if d.Criticality > 0 || len(d.ATTACK) > 0 {
+			e.Event.Detection = d
+			return
+		}
+		if d.Signature != nil {
+			if d.Signature.Len() > 0 {
+				e.Event.Detection = d
+				return
+			}
+		}
+		if d.Actions != nil {
+			if d.Actions.Len() > 0 {
+				e.Event.Detection = d
+				return
+
+			}
+		}
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/readers"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -15,6 +16,7 @@ import (
 var (
 	eventFile = "./data/events.json"
 	events    = make([]EdrEvent, 0)
+	eventData = "/Event/EventData/"
 )
 
 const (
@@ -84,10 +86,144 @@ func TestEventHashStability(t *testing.T) {
 				t.Errorf("Event hashing function is not stable %s vs %s", h, event.Hash())
 				t.Error(string(b1))
 				t.Error(string(b2))
-				//t.Error(utils.PrettyJson(event))
 				break
 			}
 		}
 	}
+}
 
+func TestEventGetters(t *testing.T) {
+	str := `
+	{
+	"Event": {
+		"EventData": {
+		"Ancestors": "C:\\Windows\\System32\\services.exe",
+		"CommandLine": "\"C:\\Program Files (x86)\\Google\\Update\\GoogleUpdate.exe\" /svc",
+		"Company": "Google LLC",
+		"CurrentDirectory": "C:\\Windows\\system32\\",
+		"Description": "Google Installer",
+		"FileVersion": "1.3.36.81",
+		"Hashes": "SHA1=12950D906FF703F3A1E0BD973FCA2B433E5AB207,MD5=9A66A3DE2589F7108426AF37AB7F6B41,SHA256=A913415626433D5D0F07D3EC4084A67FF6F5138C3C3F64E36DD0C1AE4C423C65,IMPHASH=7DF1816239C5BC855600D41210406C5B",
+		"Image": "C:\\Program Files (x86)\\Google\\Update\\GoogleUpdate.exe",
+		"ImageSize": "154456",
+		"IntegrityLevel": "System",
+		"LogonGuid": "{515cd0d1-405a-6126-e703-000000000000}",
+		"LogonId": "0x3E7",
+		"OriginalFileName": "GoogleUpdate.exe",
+		"ParentCommandLine": "C:\\Windows\\system32\\services.exe",
+		"ParentImage": "C:\\Windows\\System32\\services.exe",
+		"ParentIntegrityLevel": "?",
+		"ParentProcessGuid": "{515cd0d1-405a-6126-0b00-000000008200}",
+		"ParentProcessId": "688",
+		"ParentServices": "?",
+		"ParentUser": "?",
+		"ProcessGuid": "{515cd0d1-322e-614e-9c12-000000008200}",
+		"ProcessId": "1928",
+		"Product": "Google Update",
+		"RuleName": "-",
+		"Services": "gupdate",
+		"TerminalSessionId": "0",
+		"User": "NT AUTHORITY\\SYSTEM",
+		"UtcTime": "2021-09-24 20:16:46.328"
+		},
+		"System": {
+		"Channel": "Microsoft-Windows-Sysmon/Operational",
+		"Computer": "DESKTOP-LJRVE06",
+		"EventID": 1,
+		"Execution": {
+			"ProcessID": 3296,
+			"ThreadID": 2628
+		},
+		"Keywords": {
+			"Value": 9223372036854776000,
+			"Name": ""
+		},
+		"Level": {
+			"Value": 4,
+			"Name": "Information"
+		},
+		"Opcode": {
+			"Value": 0,
+			"Name": "Info"
+		},
+		"Task": {
+			"Value": 0,
+			"Name": ""
+		},
+		"Provider": {
+			"Guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
+			"Name": "Microsoft-Windows-Sysmon"
+		},
+		"TimeCreated": {
+			"SystemTime": "2021-08-28T14:49:40.20152Z"
+		}
+		},
+		"EdrData": {
+		"Endpoint": {
+			"UUID": "03e31275-2277-d8e0-bb5f-480fac7ee4ef",
+			"IP": "192.168.56.110",
+			"Hostname": "DESKTOP-LJRVE06",
+			"Group": "HR"
+		},
+		"Event": {
+			"Hash": "e07dba161abdc26a7145b44019fb66ad6a6c26ed",
+			"Detection": true,
+			"ReceiptTime": "2021-09-24T20:16:47.84472107Z"
+		}
+		},
+		"Detection": {
+		"Signature": [
+			"UnknownServices"
+		],
+		"Criticality": 10,
+		"Actions": []
+		}
+	}
+	}
+	`
+	event := EdrEvent{}
+	if err := json.Unmarshal([]byte(str), &event); err != nil {
+		t.Error(err)
+	}
+
+	processId := engine.Path(eventData + "ProcessId")
+	description := engine.Path(eventData + "Description")
+	unknown := engine.Path(eventData + "Unknown")
+	assert(event.SetIfOr(processId, "666", true, "1928") == nil, "Failed to set field")
+	assert(event.SetIfOr(processId, "666", false, "1928") == nil, "Failed to set field")
+	assert(event.SetIf(processId, "42", true) == nil, "Failed to set field")
+	assert(event.SetIf(processId, "1928", true) == nil, "Failed to set field")
+	assert(event.GetIntOr(processId, -1) == 1928, "Wrong ProcessId value")
+	assert(event.GetIntOr(unknown, -1) == -1, "Wrong unknown field value")
+	assert(event.GetUintOr(processId, 0) == 1928, "Wrong ProcessId value")
+	assert(event.GetUintOr(unknown, 0) == 0, "Wrong unknown field value")
+	assert(event.GetStringOr(description, "?") == "Google Installer", "Wrong Description value")
+	assert(event.GetStringOr(unknown, "?") == "?", "Wrong unknown field value")
+
+	// skip event
+	assert(event.IsSkipped() == false, "Event should not be skipped")
+	event.Skip()
+	assert(event.IsSkipped(), "Event should be skipped")
+
+	assert(event.Channel() == "Microsoft-Windows-Sysmon/Operational", "Wrong channel")
+	assert(event.IsDetection(), "Event should be a detection")
+	assert(event.GetDetection().Criticality == 10, "Wrong criticality")
+	event.SetDetection(nil)
+	event.SetDetection(&engine.Detection{Criticality: 0})
+	event.Event.Detection = nil
+	assert(!event.IsDetection(), "Event should not be a detection")
+	assert(event.Computer() == "DESKTOP-LJRVE06", "Wrong computer name")
+	assert(event.EventID() == 1, "Wrong event ID")
+	ts, _ := time.Parse(time.RFC3339Nano, "2021-08-28T14:49:40.20152Z")
+	assert(event.Timestamp().Equal(ts), "Wrong timestamp")
+
+	assert(event.Event.EdrData.Endpoint.Hostname == event.Computer(), "Wrong computer name")
+	event.InitEdrData()
+	assert(event.Event.EdrData.Endpoint.Hostname == "", "Computer name must be empty")
+}
+
+func assert(test bool, message string) {
+	if !test {
+		panic(message)
+	}
 }

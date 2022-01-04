@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -34,7 +35,26 @@ var (
 func init() {
 	openAPI.AuthApiKey(AuthKeyHeader, testAdminUser.Key)
 	openAPI.Client = &http.Client{Transport: cconf.Transport()}
+	openAPI.ValidateOperation = validateOperation
 	Hostname = "OpenHappy"
+}
+
+func validateOperation(output interface{}) (err error) {
+	var data []byte
+	var resp AdminAPIResponse
+
+	if data, err = json.Marshal(output); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+
+	if err := resp.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func prep() (m *Manager, c *ManagerClient) {
@@ -566,19 +586,21 @@ func TestOpenApiRules(t *testing.T) {
 			},
 			RequestBody: openapi.JsonRequestBody(
 				"Rule to add to the manager",
-				engine.Rule{
-					Name: name,
-					Meta: engine.MetaSection{
-						Events:      map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {11, 23, 26}},
-						Criticality: 10,
-						Schema:      engine.ParseVersion("2.0.0"),
+				[]engine.Rule{
+					{
+						Name: name,
+						Meta: engine.MetaSection{
+							Events:      map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {11, 23, 26}},
+							Criticality: 10,
+							Schema:      engine.ParseVersion("2.0.0"),
+						},
+						Matches: []string{
+							fmt.Sprintf("$foo: Image ~= '%s'", `C:\\Malware.exe`),
+							fmt.Sprintf("$bar: TargetFilename ~= '%s'", `C:\\config.txt`),
+						},
+						Condition: "$foo or $bar",
+						Actions:   []string{"memdump", "kill"},
 					},
-					Matches: []string{
-						fmt.Sprintf("$foo: Image ~= '%s'", `C:\\Malware.exe`),
-						fmt.Sprintf("$bar: TargetFilename ~= '%s'", `C:\\config.txt`),
-					},
-					Condition: "$foo or $bar",
-					Actions:   []string{"memdump", "kill"},
 				},
 				true),
 			Output: AdminAPIResponse{},
@@ -603,24 +625,6 @@ func TestOpenApiRules(t *testing.T) {
 			},
 			Output: AdminAPIResponse{},
 		})
-
-		// Save
-		openAPI.Do(
-			openapi.PathItem{Summary: sum, Value: AdmAPIRulesSavePath},
-			openapi.Operation{
-				Method:  "GET",
-				Summary: "Save rules for persistence",
-				Output:  AdminAPIResponse{},
-			})
-
-		// Reload
-		openAPI.Do(
-			openapi.PathItem{Summary: sum, Value: AdmAPIRulesReloadPath},
-			openapi.Operation{
-				Method:  "GET",
-				Summary: "Reload rules to engine",
-				Output:  AdminAPIResponse{},
-			})
 
 	}
 

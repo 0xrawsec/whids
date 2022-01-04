@@ -16,13 +16,6 @@ const (
 	ContentTypeJson = "application/json"
 )
 
-type OpenAPIBuilder struct {
-	serverURL string
-	client    *http.Client
-
-	OpenAPI *OpenAPI
-}
-
 type OpenAPI struct {
 	OpenAPI    string                `json:"openapi,omitempty"`
 	Info       *Info                 `json:"info,omitempty"`
@@ -31,8 +24,9 @@ type OpenAPI struct {
 	Components Components            `json:"components,omitempty"`
 	Security   []SecurityRequirement `json:"security,omitempty"`
 	// Not in OpenAPI spec
-	Client *http.Client    `json:"-"`
-	ApiKey *SecurityScheme `json:"-"`
+	Client            *http.Client              `json:"-"`
+	ApiKey            *SecurityScheme           `json:"-"`
+	ValidateOperation func(i interface{}) error `json:"-"`
 }
 
 type Components struct {
@@ -170,6 +164,10 @@ func (oa *OpenAPI) Do(base PathItem, op Operation) {
 
 	body := new(bytes.Buffer)
 	URL := oa.ApiURL(base.Value)
+
+	if op.Validate == nil {
+		op.Validate = oa.ValidateOperation
+	}
 
 	if op.RequestBody != nil {
 		if data, err = op.RequestBody.ContentBytes(); err != nil {
@@ -373,8 +371,9 @@ type Operation struct {
 	Security   SecurityRequirement `json:"security,omitempty"`
 	Servers    []Server            `json:"servers,omitempty"`
 	// Not OpenAPI standard
-	Method string      `json:"-"`
-	Output interface{} `json:"-"`
+	Method   string                         `json:"-"`
+	Output   interface{}                    `json:"-"`
+	Validate func(output interface{}) error `json:"-"`
 }
 
 func (o *Operation) softInit() {
@@ -410,6 +409,12 @@ func (o *Operation) ParseResponse(r *http.Response) (err error) {
 				//Schema:  SchemaFrom(o.Output, ct),
 			},
 		},
+	}
+
+	if o.Validate != nil {
+		if err := o.Validate(o.Output); err != nil {
+			return err
+		}
 	}
 
 	return nil

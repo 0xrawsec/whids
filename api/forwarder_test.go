@@ -47,7 +47,6 @@ var (
 			LogBasename: "alerts",
 		},
 		Database: "./data/database",
-		RulesDir: "./data",
 		DumpDir:  "./data/uploads/",
 		TLS: TLSConfig{
 			Cert: "./data/cert.pem",

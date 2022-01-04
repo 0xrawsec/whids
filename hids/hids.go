@@ -258,13 +258,9 @@ func (h *HIDS) update(force bool) (last error) {
 
 		// Loading IOC container rules
 		for _, rule := range IoCRules {
-			if cr, err := rule.Compile(newEngine); err != nil {
-				err = fmt.Errorf("failed to compile IOC rule: %s", err)
+			if err := newEngine.LoadRule(&rule); err != nil {
+				log.Errorf("Failed to load IoC rule: %s", err)
 				last = err
-			} else {
-				if err = newEngine.AddRule(cr); err != nil {
-					last = err
-				}
 			}
 		}
 
@@ -273,33 +269,23 @@ func (h *HIDS) update(force bool) (last error) {
 			log.Infof("Loading canary rules")
 			// Sysmon rule
 			sr := h.config.CanariesConfig.GenRuleSysmon()
-			if scr, err := sr.Compile(nil); err != nil {
-				err = fmt.Errorf("failed to compile canary rule: %s", err)
+			if err := newEngine.LoadRule(&sr); err != nil {
+				log.Errorf("Failed to load canary rule: %s", err)
 				last = err
-			} else {
-				if err = newEngine.AddRule(scr); err != nil {
-					last = err
-				}
 			}
 
 			// File System Audit Rule
 			fsr := h.config.CanariesConfig.GenRuleFSAudit()
-			if fscr, err := fsr.Compile(nil); err != nil {
-				log.Errorf("Failed to compile canary rule: %s", err)
-			} else {
-				if err = newEngine.AddRule(fscr); err != nil {
-					last = err
-				}
+			if err := newEngine.LoadRule(&fsr); err != nil {
+				log.Errorf("Failed to load canary rule: %s", err)
+				last = err
 			}
 
 			// File System Audit Rule
 			kfr := h.config.CanariesConfig.GenRuleKernelFile()
-			if kfcr, err := kfr.Compile(nil); err != nil {
-				log.Errorf("Failed to compile canary rule: %s", err)
-			} else {
-				if err = newEngine.AddRule(kfcr); err != nil {
-					last = err
-				}
+			if err := newEngine.LoadRule(&kfr); err != nil {
+				log.Errorf("Failed to load canary rule: %s", err)
+				last = err
 			}
 		}
 
@@ -332,16 +318,22 @@ func (h *HIDS) needsRulesUpdate() bool {
 	_, rulesSha256Path := h.config.RulesConfig.RulesPaths()
 
 	// Don't need update if not connected to a manager
-	if h.config.IsForwardingEnabled() {
+	if !h.config.IsForwardingEnabled() {
 		return false
 	}
 
 	if sha256, err = h.forwarder.Client.GetRulesSha256(); err != nil {
+		log.Errorf("Failed to fetch rules sha256: %s", err)
 		return false
 	}
+
 	oldSha256, _ = utils.ReadFileString(rulesSha256Path)
 
-	log.Debugf("Rules: remote=%s local=%s", sha256, oldSha256)
+	// log message only if we need to update
+	if oldSha256 != sha256 {
+		log.Infof("Rules: remote=%s local=%s", sha256, oldSha256)
+	}
+
 	return oldSha256 != sha256
 }
 
@@ -350,7 +342,7 @@ func (h *HIDS) needsIoCsUpdate() bool {
 	var localSha256, remoteSha256 string
 
 	// Don't need update if not connected to a manager
-	if h.config.IsForwardingEnabled() {
+	if !h.config.IsForwardingEnabled() {
 		return false
 	}
 
@@ -360,7 +352,12 @@ func (h *HIDS) needsIoCsUpdate() bool {
 	// means that remoteCont is also a local container
 	remoteSha256, _ = h.forwarder.Client.GetIoCsSha256()
 	localSha256, _ = utils.ReadFileString(locContSha256Path)
-	log.Infof("container %s: remote=%s local=%s", container, remoteSha256, localSha256)
+
+	// log message only if we need to update
+	if localSha256 != remoteSha256 {
+		log.Infof("container %s: remote=%s local=%s", container, remoteSha256, localSha256)
+	}
+
 	return localSha256 != remoteSha256
 }
 
@@ -640,11 +637,13 @@ func (h *HIDS) uploadRoutine() bool {
 								shrink.Close()
 
 								if shrink.Err() == nil {
-									log.Infof("Dump file successfully sent to manager, deleting: %s (err=%s)", fullpath, os.Remove(fullpath))
+									log.Infof("Dump file successfully sent to manager, deleting: %s", fullpath)
+									if err := os.Remove(fullpath); err != nil {
+										log.Errorf("Failed to remove file %s: %s", fullpath, err)
+									}
 								} else {
 									log.Errorf("Failed to post dump file: %s", shrink.Err())
 								}
-
 							} else {
 								log.Errorf("Unexpected directory layout, cannot send dump to manager")
 							}

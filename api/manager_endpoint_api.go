@@ -182,14 +182,14 @@ func (m *Manager) ServerKey(wt http.ResponseWriter, rq *http.Request) {
 func (m *Manager) Rules(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
 	defer m.RUnlock()
-	wt.Write([]byte(m.rules))
+	wt.Write([]byte(m.gene.rules))
 }
 
 // RulesSha256 returns the sha256 of the latest set of rules loaded into the manager
 func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
 	defer m.RUnlock()
-	wt.Write([]byte(m.rulesSha256))
+	wt.Write([]byte(m.gene.sha256))
 }
 
 func (m *Manager) IoCs(wt http.ResponseWriter, rq *http.Request) {
