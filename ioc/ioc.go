@@ -3,29 +3,106 @@ package ioc
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"hash"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/sod"
+	"github.com/0xrawsec/whids/utils"
 )
 
-func FromObjects(obs ...sod.Object) (out []*IoC) {
-	out = make([]*IoC, len(obs))
+var (
+	reMd5    = regexp.MustCompile("(?i:[a-f0-9]{32})")
+	reSha1   = regexp.MustCompile("(?i:[a-f0-9]{40})")
+	reSha256 = regexp.MustCompile("(?i:[a-f0-9]{64})")
+	reAny    = regexp.MustCompile(".*")
+)
+
+func FromObjects(obs ...sod.Object) (out []*IOC) {
+	out = make([]*IOC, len(obs))
 
 	for i, o := range obs {
-		out[i] = o.(*IoC)
+		out[i] = o.(*IOC)
 	}
 	return
 }
 
-type IoC struct {
+const (
+	TypeMd5      = "md5"
+	TypeSha1     = "sha1"
+	TypeSha256   = "sha256"
+	TypeImphash  = "imphash"
+	TypeDomain   = "domain"
+	TypeHostname = "hostname"
+	TypeIpDst    = "ip-dst"
+)
+
+type IOC struct {
 	sod.Item
 	Source string `json:"source" sod:"index"`
-	// Key can be used to group IoCs
-	Key   string `json:"key" sod:"index"`
-	Value string `json:"value" sod:"index"`
-	Type  string `json:"type" sod:"index"`
+	// GroupUuid can be used to group IoCs
+	GroupUuid string `json:"guuid" sod:"index"`
+	Value     string `json:"value" sod:"index"`
+	Type      string `json:"type" sod:"index"`
+}
+
+func HasValidType(ioc *IOC) bool {
+	switch ioc.Type {
+	case TypeMd5,
+		TypeSha1, TypeSha256,
+		TypeImphash,
+		TypeDomain,
+		TypeHostname,
+		TypeIpDst:
+		return true
+	default:
+		return false
+	}
+}
+
+func (ioc *IOC) Transform() {
+	ioc.Type = strings.ToLower(ioc.Type)
+	ioc.GroupUuid = strings.ToLower(ioc.GroupUuid)
+
+	switch ioc.Type {
+	case TypeMd5, TypeSha1, TypeSha256, TypeImphash:
+		ioc.Value = strings.ToLower(ioc.Value)
+	}
+}
+
+func (ioc *IOC) Validate() error {
+	if ioc.Source == "" {
+		return fmt.Errorf("source must not be empty")
+	}
+	if !utils.IsValidUUID(ioc.GroupUuid) {
+		return fmt.Errorf("group uuid field not properly formatted")
+	}
+	if ioc.Value == "" {
+		return fmt.Errorf("value must not be empty")
+	}
+
+	// validating IoC types
+	if !HasValidType(ioc) {
+		return fmt.Errorf("unknown IoC type %s", ioc.Type)
+	} else {
+		validRe := reAny
+
+		switch ioc.Type {
+		case TypeMd5, TypeImphash:
+			validRe = reMd5
+		case TypeSha1:
+			validRe = reSha1
+		case TypeSha256:
+			validRe = reSha256
+		}
+		if !validRe.MatchString(ioc.Value) {
+			return fmt.Errorf("%s not valid", ioc.Type)
+		}
+	}
+	return nil
 }
 
 type IoCs struct {
@@ -50,11 +127,11 @@ func (i *IoCs) reHash() {
 }
 
 func (i *IoCs) FromDB(db *sod.DB) error {
-	if objects, err := db.All(&IoC{}); err != nil {
+	if objects, err := db.All(&IOC{}); err != nil {
 		return err
 	} else {
 		for _, o := range objects {
-			ioc := o.(*IoC)
+			ioc := o.(*IOC)
 			i.Add(ioc)
 		}
 	}
@@ -71,7 +148,7 @@ func (i *IoCs) StringSlice() (s []string) {
 	return
 }
 
-func (i *IoCs) Add(iocs ...*IoC) {
+func (i *IoCs) Add(iocs ...*IOC) {
 	i.Lock()
 	defer i.Unlock()
 	for _, ioc := range iocs {
@@ -85,7 +162,7 @@ func (i *IoCs) Add(iocs ...*IoC) {
 	}
 }
 
-func (i *IoCs) Del(iocs ...*IoC) {
+func (i *IoCs) Del(iocs ...*IOC) {
 	i.Lock()
 	defer i.Unlock()
 	for _, ioc := range iocs {

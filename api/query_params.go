@@ -24,4 +24,5 @@ const (
 	qpUpdate      = "update"
 	qpRaw         = "raw"
 	qpGunzip      = "gunzip"
+	qpGroupUuid   = "guuid"
 )

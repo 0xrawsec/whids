@@ -336,7 +336,7 @@ func (m *Manager) initializeDB() (err error) {
 	}
 
 	// Creating IOC table
-	if err = m.db.Create(&ioc.IoC{}, sod.DefaultSchema); err != nil {
+	if err = m.db.Create(&ioc.IOC{}, sod.DefaultSchema); err != nil {
 		return
 	}
 

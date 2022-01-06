@@ -21,16 +21,16 @@ func createIocDB(t *testing.T, size int) (db *sod.DB) {
 
 	schema := sod.DefaultSchema
 	schema.Cache = true
-	if err := db.Create(&IoC{}, sod.DefaultSchema); err != nil {
+	if err := db.Create(&IOC{}, sod.DefaultSchema); err != nil {
 		t.Error(err)
 	}
 
-	if n, err := db.Count(&IoC{}); err != nil {
+	if n, err := db.Count(&IOC{}); err != nil {
 		t.Error(err)
 		return
 	} else if n != size {
 		t.Logf("Dropping db n=%d size=%d", n, size)
-		db.DeleteAll(&IoC{})
+		db.DeleteAll(&IOC{})
 	} else {
 		t.Logf("Db size n=%d", n)
 		return
@@ -38,17 +38,17 @@ func createIocDB(t *testing.T, size int) (db *sod.DB) {
 
 	iocs := make([]sod.Object, 0)
 	for i := 0; i < size; i++ {
-		var ioc *IoC
+		var ioc *IOC
 		switch rand.Int() % 3 {
 		case 0:
-			ioc = &IoC{
+			ioc = &IOC{
 				Source: "Whatever",
 				Value:  fmt.Sprintf("%d.some.domain", i),
 				Type:   "domain",
 			}
 		case 1:
 			mod := i % 256
-			ioc = &IoC{
+			ioc = &IOC{
 				Source: "Whatever",
 				Value:  fmt.Sprintf("%d.%d.%d.%d", mod, mod, mod, mod),
 				Type:   "ip",
@@ -57,7 +57,7 @@ func createIocDB(t *testing.T, size int) (db *sod.DB) {
 			s := sha256.New()
 			v := fmt.Sprintf("random-value-%d", i)
 			s.Write([]byte(v))
-			ioc = &IoC{
+			ioc = &IOC{
 				Source: "Whatever",
 				Value:  hex.EncodeToString(s.Sum(nil)),
 				Type:   "domain",
@@ -87,10 +87,10 @@ func TestIocs(t *testing.T) {
 		t.Errorf("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice)
 	}
 
-	del := make([]*IoC, 0)
+	del := make([]*IOC, 0)
 	for _, v := range iocs.StringSlice() {
 		if rand.Int()%2 == 0 {
-			del = append(del, &IoC{Value: v})
+			del = append(del, &IOC{Value: v})
 		}
 	}
 	iocs.Del(del...)

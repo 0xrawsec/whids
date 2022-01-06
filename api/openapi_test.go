@@ -526,12 +526,12 @@ func TestOpenApiIoCs(t *testing.T) {
 			Method:  "POST",
 			Summary: "Add IoCs to be pushed on endpoints for detection",
 			RequestBody: openapi.JsonRequestBody("",
-				[]ioc.IoC{
+				[]ioc.IOC{
 					{
-						Source: provider,
-						Key:    UUIDGen().String(),
-						Value:  "some.random.domain",
-						Type:   "domain",
+						Source:    provider,
+						GroupUuid: UUIDGen().String(),
+						Value:     "some.random.domain",
+						Type:      "domain",
 					},
 				},
 				true),
@@ -539,8 +539,10 @@ func TestOpenApiIoCs(t *testing.T) {
 		})
 
 		openAPI.Do(iocsPath, openapi.Operation{
-			Method:  "GET",
-			Summary: "Query IoCs loaded on manager and currently pushed to endpoints",
+			Method: "GET",
+			Summary: `Query IoCs loaded on manager and currently pushed to endpoints.
+				Query parameters can be used to restrict the search. Search criteria are
+				ORed together.`,
 			Parameters: []*openapi.Parameter{
 				openapi.QueryParameter(qpSource, "Test", "Filter by source").Skip(),
 				openapi.QueryParameter(qpKey, "Test", "Filter by key").Skip(),
@@ -553,7 +555,8 @@ func TestOpenApiIoCs(t *testing.T) {
 		openAPI.Do(iocsPath, openapi.Operation{
 			Method: "DELETE",
 			Summary: `Delete IoCs from manager, modulo a synchronization delay, endpoints should 
-			stop using those for detection`,
+			stop using those for detection. Query parameters can be used to select IoCs to delete.
+			Deletion criteria are ANDed together.`,
 			Parameters: []*openapi.Parameter{
 				openapi.QueryParameter(qpSource, provider, "Filter by source"),
 				openapi.QueryParameter(qpKey, "Test", "Filter by key").Skip(),
@@ -621,7 +624,8 @@ func TestOpenApiRules(t *testing.T) {
 			Method:  "DELETE",
 			Summary: "Delete rules from manager",
 			Parameters: []*openapi.Parameter{
-				openapi.QueryParameter(qpName, name, "Regex matching the names of the rules to delete"),
+				openapi.QueryParameter(qpName, name, `Name of the rule to delete. To avoid mistakes, this
+				parameter cannot be a regex.`),
 			},
 			Output: AdminAPIResponse{},
 		})

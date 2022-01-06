@@ -117,20 +117,28 @@ func TestClientContainer(t *testing.T) {
 	}
 
 	niocs := 1000
-	iocs := make([]ioc.IoC, 0, niocs)
+	iocs := make([]ioc.IOC, 0, niocs)
 	del := 0
+	guuid := UUIDGen().String()
+	toDelGuuid := UUIDGen().String()
 	for i := 0; i < niocs; i++ {
-		key := "test"
+		key := guuid
 		if rand.Int()%3 == 0 {
-			key = "to_delete"
+			key = toDelGuuid
 			del++
 		}
 
-		iocs = append(iocs, ioc.IoC{
-			Value: fmt.Sprintf("%d.random.com", i),
-			Key:   key})
+		iocs = append(iocs, ioc.IOC{
+			Source:    "Test",
+			Value:     fmt.Sprintf("%d.random.com", i),
+			Type:      "domain",
+			GroupUuid: key})
 	}
-	post(AdmAPIIocsPath, JSON(iocs))
+
+	if r := post(AdmAPIIocsPath, JSON(iocs)); r.Err() != nil {
+		t.Error(r.Err())
+		t.FailNow()
+	}
 
 	if iocs, err := c.GetIoCs(); err != nil {
 		t.Error(err)
@@ -147,7 +155,7 @@ func TestClientContainer(t *testing.T) {
 	r := prepare("DELETE",
 		AdmAPIIocsPath,
 		nil,
-		map[string]string{"key": "to_delete"})
+		map[string]string{qpGroupUuid: toDelGuuid})
 	do(r)
 
 	if iocs, err := c.GetIoCs(); err != nil {

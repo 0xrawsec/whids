@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -20,6 +21,14 @@ import (
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils/powershell"
 )
+
+var (
+	RegexUuid = regexp.MustCompile(`^(?i:[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12})$`)
+)
+
+func IsValidUUID(uuid string) bool {
+	return RegexUuid.MatchString(uuid)
+}
 
 // EnableDNSLogs through wevutil command line
 func EnableDNSLogs() error {

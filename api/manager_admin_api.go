@@ -1030,15 +1030,15 @@ func (m *Manager) admAPIStats(wt http.ResponseWriter, rq *http.Request) {
 
 func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 
-	source := rq.URL.Query().Get("source")
-	key := rq.URL.Query().Get("key")
-	value := rq.URL.Query().Get("value")
-	itype := rq.URL.Query().Get("type")
+	source := rq.URL.Query().Get(qpSource)
+	guuid := rq.URL.Query().Get(qpGroupUuid)
+	value := rq.URL.Query().Get(qpValue)
+	itype := rq.URL.Query().Get(qpType)
 
 	switch rq.Method {
 	case "GET":
-		if value == "" && source == "" && itype == "" && key == "" {
-			if objs, err := m.db.All(&ioc.IoC{}); err != nil {
+		if value == "" && source == "" && itype == "" && guuid == "" {
+			if objs, err := m.db.All(&ioc.IOC{}); err != nil {
 				wt.Write(admErr(err))
 			} else {
 				wt.Write(admJSONResp(objs))
@@ -1046,10 +1046,10 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 			return
 		} else {
 			// searching out IoCs
-			if objs, err := m.db.Search(&ioc.IoC{}, "Value", "=", value).
+			if objs, err := m.db.Search(&ioc.IOC{}, "Value", "=", value).
 				Or("Source", "=", source).
 				Or("Type", "=", itype).
-				Or("Key", "=", key).
+				Or("GroupUuid", "=", guuid).
 				Collect(); err != nil {
 				wt.Write(admErr(err))
 			} else {
@@ -1059,29 +1059,39 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 		}
 
 	case "POST":
-		var iocs []*ioc.IoC
+		var iocs []*ioc.IOC
 		if err := readPostAsJSON(rq, &iocs); err != nil && rq.ContentLength > 0 {
 			wt.Write(admErr(err))
 		} else {
+
 			// Do bulk insertion
 			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(iocs)...); err != nil {
 				wt.Write(admErr(err))
 				return
 			}
+
 			// Add IoCs to sync with endpoints
 			m.iocs.Add(iocs...)
+			wt.Write(admJSONResp(iocs))
 		}
 
 	case "DELETE":
-		search := m.db.Search(&ioc.IoC{}, "Value", "=", value)
+		var search *sod.Search
+
+		if value != "" {
+			search = m.db.Search(&ioc.IOC{}, "Value", "=", value)
+		} else {
+			// we search accross all iocs
+			search = m.db.Search(&ioc.IOC{}, "Value", "~=", ".*")
+		}
 		if source != "" {
-			search = search.Or("Source", "=", source)
+			search = search.And("Source", "=", source)
 		}
 		if itype != "" {
-			search = search.Or("Type", "=", itype)
+			search = search.And("Type", "=", itype)
 		}
-		if key != "" {
-			search = search.Or("Key", "=", key)
+		if guuid != "" {
+			search = search.And("GroupUuid", "=", guuid)
 		}
 
 		if objs, err := search.Collect(); err != nil {
