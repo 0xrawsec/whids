@@ -1080,32 +1080,46 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 
 		if value != "" {
 			search = m.db.Search(&ioc.IOC{}, "Value", "=", value)
-		} else {
-			// we search accross all iocs
-			search = m.db.Search(&ioc.IOC{}, "Value", "~=", ".*")
-		}
-		if source != "" {
-			search = search.And("Source", "=", source)
-		}
-		if itype != "" {
-			search = search.And("Type", "=", itype)
-		}
-		if guuid != "" {
-			search = search.And("GroupUuid", "=", guuid)
 		}
 
-		if objs, err := search.Collect(); err != nil {
-			wt.Write(admErr(err))
-		} else {
-			// Deletes all the entries matching the search
-			if err := search.Delete(); err != nil {
+		if source != "" {
+			if search == nil {
+				search = m.db.Search(&ioc.IOC{}, "Source", "=", source)
+			} else {
+				search = search.And("Source", "=", source)
+			}
+		}
+		if itype != "" {
+			if search == nil {
+				search = m.db.Search(&ioc.IOC{}, "Type", "=", itype)
+			} else {
+				search = search.And("Type", "=", itype)
+			}
+		}
+		if guuid != "" {
+			if search == nil {
+				search = m.db.Search(&ioc.IOC{}, "GroupUuid", "=", guuid)
+			} else {
+				search = search.And("GroupUuid", "=", guuid)
+			}
+		}
+
+		if search != nil {
+			if objs, err := search.Collect(); err != nil {
 				wt.Write(admErr(err))
 			} else {
-				// deleting IoCs pushed to endpoints
-				m.iocs.Del(ioc.FromObjects(objs...)...)
-				// writing out deleted IoCs
-				wt.Write(admJSONResp(objs))
+				// Deletes all the entries matching the search
+				if err := search.Delete(); err != nil {
+					wt.Write(admErr(err))
+				} else {
+					// deleting IoCs pushed to endpoints
+					m.iocs.Del(ioc.FromObjects(objs...)...)
+					// writing out deleted IoCs
+					wt.Write(admJSONResp(objs))
+				}
 			}
+		} else {
+			wt.Write(admJSONResp(nil))
 		}
 		return
 	}
