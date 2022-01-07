@@ -1064,15 +1064,29 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 			wt.Write(admErr(err))
 		} else {
 
+			// we preprocess not to insert twice the same IoC per group
+			insert := make([]*ioc.IOC, 0, len(iocs))
+			for _, i := range iocs {
+				// we need to apply transformation before searching otherwise we
+				// might not find some values which have been transformed
+				i.Transform()
+				search := m.db.Search(&ioc.IOC{},
+					"GroupUuid", "=", i.GroupUuid).
+					And("Value", "=", i.Value)
+				if _, err := search.One(); err == sod.ErrNoObjectFound {
+					insert = append(insert, i)
+				}
+			}
+
 			// Do bulk insertion
-			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(iocs)...); err != nil {
+			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(insert)...); err != nil {
 				wt.Write(admErr(err))
 				return
 			}
 
 			// Add IoCs to sync with endpoints
-			m.iocs.Add(iocs...)
-			wt.Write(admJSONResp(iocs))
+			m.iocs.Add(insert...)
+			wt.Write(admJSONResp(insert))
 		}
 
 	case "DELETE":
