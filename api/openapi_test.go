@@ -528,8 +528,9 @@ func TestOpenApiIoCs(t *testing.T) {
 			RequestBody: openapi.JsonRequestBody("",
 				[]ioc.IOC{
 					{
-						Source:    provider,
+						Uuid:      UUIDGen().String(),
 						GroupUuid: UUIDGen().String(),
+						Source:    provider,
 						Value:     "some.random.domain",
 						Type:      "domain",
 					},
@@ -544,8 +545,10 @@ func TestOpenApiIoCs(t *testing.T) {
 				Query parameters can be used to restrict the search. Search criteria are
 				ORed together.`,
 			Parameters: []*openapi.Parameter{
+				openapi.QueryParameter(qpUuid, "Test", "Filter by uuid").Skip(),
+				openapi.QueryParameter(qpGroupUuid, "Test", `Filter by group uuid
+					(used to group IoCs, from the same event for example)`).Skip(),
 				openapi.QueryParameter(qpSource, "Test", "Filter by source").Skip(),
-				openapi.QueryParameter(qpKey, "Test", "Filter by key").Skip(),
 				openapi.QueryParameter(qpValue, "Test", "Filter by value").Skip(),
 				openapi.QueryParameter(qpType, "Test", "Filter by type").Skip(),
 			},
@@ -558,8 +561,10 @@ func TestOpenApiIoCs(t *testing.T) {
 			stop using those for detection. Query parameters can be used to select IoCs to delete.
 			Deletion criteria are ANDed together.`,
 			Parameters: []*openapi.Parameter{
-				openapi.QueryParameter(qpSource, provider, "Filter by source"),
-				openapi.QueryParameter(qpKey, "Test", "Filter by key").Skip(),
+				openapi.QueryParameter(qpUuid, "Test", "Filter by uuid").Skip(),
+				openapi.QueryParameter(qpGroupUuid, "Test", `Filter by group uuid
+					(used to group IoCs, from the same event for example)`).Skip(),
+				openapi.QueryParameter(qpSource, "Test", "Filter by source").Skip(),
 				openapi.QueryParameter(qpValue, "Test", "Filter by value").Skip(),
 				openapi.QueryParameter(qpType, "Test", "Filter by type").Skip(),
 			},

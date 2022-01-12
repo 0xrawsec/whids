@@ -129,10 +129,12 @@ func TestClientContainer(t *testing.T) {
 		}
 
 		iocs = append(iocs, ioc.IOC{
+			Uuid:      UUIDGen().String(),
+			GroupUuid: key,
 			Source:    "Test",
 			Value:     fmt.Sprintf("%d.random.com", i),
 			Type:      "domain",
-			GroupUuid: key})
+		})
 	}
 
 	if r := post(AdmAPIIocsPath, JSON(iocs)); r.Err() != nil {

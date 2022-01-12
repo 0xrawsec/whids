@@ -42,9 +42,10 @@ const (
 
 type IOC struct {
 	sod.Item
-	Source string `json:"source" sod:"index"`
+	Uuid string `json:"uuid" sod:"unique"`
 	// GroupUuid can be used to group IoCs
 	GroupUuid string `json:"guuid" sod:"index"`
+	Source    string `json:"source" sod:"index"`
 	Value     string `json:"value" sod:"index"`
 	Type      string `json:"type" sod:"index"`
 }
@@ -74,11 +75,14 @@ func (ioc *IOC) Transform() {
 }
 
 func (ioc *IOC) Validate() error {
-	if ioc.Source == "" {
-		return fmt.Errorf("source must not be empty")
+	if !utils.IsValidUUID(ioc.Uuid) {
+		return fmt.Errorf("uuid field is not properly formatted")
 	}
 	if !utils.IsValidUUID(ioc.GroupUuid) {
-		return fmt.Errorf("group uuid field not properly formatted")
+		return fmt.Errorf("group uuid field is not properly formatted")
+	}
+	if ioc.Source == "" {
+		return fmt.Errorf("source must not be empty")
 	}
 	if ioc.Value == "" {
 		return fmt.Errorf("value must not be empty")

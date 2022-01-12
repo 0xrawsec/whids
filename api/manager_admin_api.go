@@ -1032,12 +1032,13 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 
 	source := rq.URL.Query().Get(qpSource)
 	guuid := rq.URL.Query().Get(qpGroupUuid)
+	uuid := rq.URL.Query().Get(qpUuid)
 	value := rq.URL.Query().Get(qpValue)
 	itype := rq.URL.Query().Get(qpType)
 
 	switch rq.Method {
 	case "GET":
-		if value == "" && source == "" && itype == "" && guuid == "" {
+		if value == "" && source == "" && itype == "" && guuid == "" && uuid == "" {
 			if objs, err := m.db.All(&ioc.IOC{}); err != nil {
 				wt.Write(admErr(err))
 			} else {
@@ -1050,6 +1051,7 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 				Or("Source", "=", source).
 				Or("Type", "=", itype).
 				Or("GroupUuid", "=", guuid).
+				Or("Uuid", "=", uuid).
 				Collect(); err != nil {
 				wt.Write(admErr(err))
 			} else {
@@ -1064,18 +1066,20 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 			wt.Write(admErr(err))
 		} else {
 
-			// we preprocess not to insert twice the same IoC per group
+			// we preprocess to update existing IOCs
 			insert := make([]*ioc.IOC, 0, len(iocs))
 			for _, i := range iocs {
 				// we need to apply transformation before searching otherwise we
 				// might not find some values which have been transformed
 				i.Transform()
 				search := m.db.Search(&ioc.IOC{},
-					"GroupUuid", "=", i.GroupUuid).
-					And("Value", "=", i.Value)
-				if _, err := search.One(); err == sod.ErrNoObjectFound {
-					insert = append(insert, i)
+					"Uuid", "=", i.Uuid)
+				if o, err := search.One(); err == nil {
+					// in order to update existing IOCs
+					i.Initialize(o.UUID())
 				}
+
+				insert = append(insert, i)
 			}
 
 			// Do bulk insertion
@@ -1115,6 +1119,13 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 				search = m.db.Search(&ioc.IOC{}, "GroupUuid", "=", guuid)
 			} else {
 				search = search.And("GroupUuid", "=", guuid)
+			}
+		}
+		if uuid != "" {
+			if search == nil {
+				search = m.db.Search(&ioc.IOC{}, "Uuid", "=", uuid)
+			} else {
+				search = search.And("Uuid", "=", uuid)
 			}
 		}
 

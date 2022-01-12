@@ -122,12 +122,12 @@ github.com/0xrawsec/whids/api/manager_admin_api.go:890:		admAPIArtifacts			61.1%
 github.com/0xrawsec/whids/api/manager_admin_api.go:921:		admAPIEndpointArtifacts		61.1%
 github.com/0xrawsec/whids/api/manager_admin_api.go:952:		admAPIEndpointArtifact		62.9%
 github.com/0xrawsec/whids/api/manager_admin_api.go:1023:	admAPIStats			100.0%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1031:	admAPIIocs			67.3%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1142:	admAPIRules			62.5%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1241:	wsHandleControlMessage		100.0%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1251:	admAPIStreamEvents		71.4%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1274:	admAPIStreamDetections		0.0%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1299:	runAdminAPI			86.5%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1031:	admAPIIocs			62.1%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1153:	admAPIRules			62.5%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1252:	wsHandleControlMessage		100.0%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1262:	admAPIStreamEvents		71.4%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1285:	admAPIStreamDetections		0.0%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1310:	runAdminAPI			86.5%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:27:	endpointFromRequest		75.0%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:35:	mutEndpointFromRequest		75.0%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:45:	endpointAuthorizationMiddleware	76.2%
@@ -238,4 +238,4 @@ github.com/0xrawsec/whids/logger/search.go:187:			Events				89.7%
 github.com/0xrawsec/whids/logger/search.go:254:			Err				100.0%
 github.com/0xrawsec/whids/logger/search.go:258:			close				80.0%
 github.com/0xrawsec/whids/logger/search.go:269:			Close				100.0%
-total:								(statements)			71.5%
+total:								(statements)			71.4%
