@@ -40,7 +40,7 @@ const (
 	           Windows Host IDS
 	`
 	copyright = "WHIDS Copyright (C) 2017 RawSec SARL (@0xrawsec)"
-	license   = `License Apache 2.0: This program comes with ABSOLUTELY NO WARRANTY.`
+	license   = `AGPLv3: This program comes with ABSOLUTELY NO WARRANTY.`
 
 	svcName = "WHIDS"
 )
