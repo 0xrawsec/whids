@@ -22,6 +22,8 @@ const (
 	EptAPIPostLogsPath = "/logs"
 	// EptAPIPostDumpPath API route used to dump things
 	EptAPIPostDumpPath = "/upload/dumps"
+	// EptAPIPostSystemInfo API route used to send system information
+	EptAPIPostSystemInfo = "/info/system"
 
 	// GET and POST routes
 

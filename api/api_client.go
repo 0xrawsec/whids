@@ -19,6 +19,8 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/whids/hids/sysinfo"
+	"github.com/0xrawsec/whids/utils"
 )
 
 // ClientConfig structure definition
@@ -229,15 +231,14 @@ func (m *ManagerClient) IsServerUp() bool {
 	}
 	resp, err := m.HTTPClient.Do(get)
 	if err != nil {
-		log.Errorf("IsServerUp cannot issue server key request: %s", err)
 		return false
 	}
 
 	if resp != nil {
 		defer resp.Body.Close()
-		return resp.StatusCode == 200
 	}
-	return false
+
+	return resp.StatusCode == 200
 }
 
 // IsServerAuthenticated returns true if the server is authenticated and thus can be trusted
@@ -537,6 +538,31 @@ func (m *ManagerClient) FetchCommand() (*Command, error) {
 		return command, nil
 	}
 	return command, fmt.Errorf("FetchCommand failed, server cannot be authenticated")
+}
+
+func (m *ManagerClient) PostSystemInfo(info *sysinfo.SystemInfo) error {
+	funcName := utils.GetCurFuncName()
+	if auth, _ := m.IsServerAuthenticated(); auth {
+		if b, err := json.Marshal(info); err != nil {
+			return fmt.Errorf("%s failed to marshal data: %s", funcName, err)
+		} else {
+			if req, err := m.PrepareGzip("POST", EptAPIPostSystemInfo, bytes.NewBuffer(b)); err != nil {
+				return err
+			} else {
+				if resp, err := m.HTTPClient.Do(req); err != nil {
+					return fmt.Errorf("%s failed to issue HTTP request: %s", funcName, err)
+				} else {
+					defer resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						return fmt.Errorf("%s received bad status code %d: %s", funcName, resp.StatusCode, respBodyToString(resp))
+					} else {
+						return nil
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("%s failed, server cannot be authenticated", funcName)
 }
 
 // Close closes idle connections from underlying transport

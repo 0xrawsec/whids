@@ -11,6 +11,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/code/builder"
+	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/openapi"
 )
@@ -18,6 +19,51 @@ import (
 const (
 	guid      = "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
 	eventHash = "3d8441643c204ba9b9dcb5c414b25a3129f66f6c"
+
+	fakeSystemInfo = `
+		{
+		"system": {
+			"manufacturer": "innotek GmbH",
+			"name": "VirtualBox",
+			"virtual": true
+		},
+		"bios": {
+			"version": "VirtualBox",
+			"date": "12/01/2006"
+		},
+		"os": {
+			"name": "windows",
+			"build": "18362",
+			"version": "10.0.18362",
+			"product": "Windows 10 Pro",
+			"edition": "Enterprise"
+		},
+		"cpu": {
+			"name": "Intel(R) Core(TM) i7-8565U CPU @ 1.80GHz",
+			"count": 4
+		},
+		"sysmon": {
+			"version": "v13.23",
+			"service": {
+			"name": "Sysmon64",
+			"image": "C:\\Program Files\\Whids\\Sysmon64.exe",
+			"sha256": "b448cd80b09fa43a3848f5181362ac52ffcb283f88693b68f1a0e4e6ae932863"
+			},
+			"driver": {
+			"name": "SysmonDrv",
+			"image": "C:\\Windows\\SysmonDrv.sys",
+			"sha256": "e9ea8c0390c65c055d795b301ee50de8f8884313530023918c2eea56de37a525"
+			},
+			"config": {
+			"version": {
+				"schema": "4.70",
+				"binary": "15.0"
+			},
+			"hash": "2d1652d67b565cabf2e774668f2598188373e957ef06aa5653bf9bf6fe7fe837"
+			}
+		}
+	}
+	`
 )
 
 var (
@@ -30,6 +76,8 @@ var (
 		&openapi.Server{
 			URL: mconf.AdminAPIUrl(),
 		})
+
+	systemInfo = &sysinfo.SystemInfo{}
 )
 
 func init() {
@@ -37,6 +85,10 @@ func init() {
 	openAPI.Client = &http.Client{Transport: cconf.Transport()}
 	openAPI.ValidateOperation = validateOperation
 	Hostname = "OpenHappy"
+
+	if err := json.Unmarshal([]byte(fakeSystemInfo), systemInfo); err != nil {
+		panic(err)
+	}
 }
 
 func validateOperation(output interface{}) (err error) {
@@ -112,6 +164,11 @@ func runAdminApiTest(t *testing.T, f func(*testing.T)) {
 			Chunk:     1,
 			Total:     1,
 		})
+	}
+
+	// post fake system information
+	if err := c.PostSystemInfo(systemInfo); err != nil {
+		t.Error(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

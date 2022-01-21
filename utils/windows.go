@@ -4,9 +4,12 @@
 package utils
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 	"syscall"
 
+	"github.com/0xrawsec/golang-win32/win32/advapi32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
 )
 
@@ -68,4 +71,33 @@ func ResolveCDrive(path string) string {
 	}
 
 	return path
+}
+
+func RegValue(path string) (i interface{}, err error) {
+	var data []byte
+	var dtype uint32
+
+	if data, dtype, err = advapi32.RegGetValueFromString(path); err != nil {
+		return
+	} else {
+		if i, err = advapi32.ParseRegValue(data, dtype); err != nil {
+			return
+		} else {
+			return
+		}
+	}
+}
+
+func RegJoin(s ...string) string {
+	for i := range s {
+		s[i] = strings.Trim(s[i], `\`)
+	}
+	return strings.Join(s, `\`)
+}
+
+func RegValueToString(elems ...string) string {
+	if i, err := RegValue(RegJoin(elems...)); err == nil {
+		return fmt.Sprintf("%v", i)
+	}
+	return ""
 }

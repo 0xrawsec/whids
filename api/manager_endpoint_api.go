@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
@@ -138,6 +139,7 @@ func (m *Manager) runEndpointAPI() {
 		// POST based
 		rt.HandleFunc(EptAPIPostLogsPath, m.Collect).Methods("POST")
 		rt.HandleFunc(EptAPIPostDumpPath, m.UploadDump).Methods("POST")
+		rt.HandleFunc(EptAPIPostSystemInfo, m.SystemInfo).Methods("POST")
 
 		// GET based
 		rt.HandleFunc(EptAPIServerKeyPath, m.ServerKey).Methods("GET")
@@ -375,6 +377,23 @@ func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
 				} else {
 					log.Errorf("Command is already completed")
 				}
+			}
+		}
+	}
+}
+
+// Command HTTP handler
+func (m *Manager) SystemInfo(wt http.ResponseWriter, rq *http.Request) {
+	id := rq.Header.Get(EndpointUUIDHeader)
+	switch rq.Method {
+	case "POST":
+		if endpt, ok := m.endpoints.GetMutByUUID(id); ok {
+			info := sysinfo.SystemInfo{}
+			if err := readPostAsJSON(rq, &info); err != nil {
+				log.Errorf("Failed to receive system information for %s", endpt.Uuid)
+				http.Error(wt, "Failed to unmarshal data", http.StatusInternalServerError)
+			} else {
+				endpt.SystemInfo = &info
 			}
 		}
 	}

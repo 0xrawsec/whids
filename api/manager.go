@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
@@ -326,7 +327,9 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 
 func (m *Manager) initializeDB() (err error) {
 	// Creating Endpoint table
-	if err = m.db.Create(&Endpoint{}, sod.DefaultSchema); err != nil {
+	endpointSchema := sod.DefaultSchema
+	endpointSchema.Asynchrone(100, 10*time.Second)
+	if err = m.db.Create(&Endpoint{}, endpointSchema); err != nil {
 		return
 	}
 

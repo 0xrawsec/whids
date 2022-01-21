@@ -24,9 +24,9 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/golang-utils/sync/semaphore"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -69,10 +69,7 @@ type HIDS struct {
 	channels        *datastructs.SyncedSet // Windows log channels to listen to
 	channelsSignals chan bool
 	config          *Config
-	//eventScanned    uint64
-	//alertReported   uint64
-	//startTime time.Time
-	waitGroup sync.WaitGroup
+	waitGroup       sync.WaitGroup
 
 	flagProcTermEn bool
 	bootCompleted  bool
@@ -83,7 +80,8 @@ type HIDS struct {
 	memdumped     *datastructs.SyncedSet
 	dumping       *datastructs.SyncedSet
 	filedumped    *datastructs.SyncedSet
-	hookSemaphore semaphore.Semaphore
+
+	systemInfo *sysinfo.SystemInfo
 
 	Engine   *engine.Engine
 	DryRun   bool
@@ -128,7 +126,8 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 		memdumped:       datastructs.NewSyncedSet(),
 		dumping:         datastructs.NewSyncedSet(),
 		filedumped:      datastructs.NewSyncedSet(),
-		hookSemaphore:   semaphore.New(4),
+		// has to be empty to post structure the first time
+		systemInfo: &sysinfo.SystemInfo{},
 	}
 
 	// initializing action manager
@@ -573,6 +572,28 @@ func (h *HIDS) cleanArchivedRoutine() bool {
 	return false
 }
 
+func (h *HIDS) updateSystemInfo() (err error) {
+	var hnew, hold string
+
+	new := sysinfo.NewSystemInfo()
+	if hnew, err = utils.HashStruct(new); err != nil {
+		// we return cause we don't want to overwrite with
+		// a faulty structure
+		return
+	}
+
+	// if it returns an error we don't really care because
+	// it will be replaced by new
+	hold, _ = utils.HashStruct(h.systemInfo)
+
+	if hnew != hold {
+		h.systemInfo = new
+		return h.forwarder.Client.PostSystemInfo(h.systemInfo)
+	}
+
+	return
+}
+
 // returns true if the update routine is started
 func (h *HIDS) updateRoutine() bool {
 	d := h.config.RulesConfig.UpdateInterval
@@ -582,6 +603,9 @@ func (h *HIDS) updateRoutine() bool {
 				t := time.NewTimer(d)
 				for range t.C {
 					if err := h.update(false); err != nil {
+						log.Error(err)
+					}
+					if err := h.updateSystemInfo(); err != nil {
 						log.Error(err)
 					}
 					t.Reset(d)
