@@ -11,9 +11,9 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/code/builder"
+	"github.com/0xrawsec/whids/api/openapi"
 	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/ioc"
-	"github.com/0xrawsec/whids/openapi"
 )
 
 const (

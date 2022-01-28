@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+echo "Running coverage"
+./coverage.sh
+
+echo "Generating OpenAPI documentation"
+GOOS=linux go run tools/manager/*.go -openapi > ./doc/admin.openapi.json
+
+# adding openapi files to commit
+git add api/openapi_def.go
+git add doc/admin.openapi.json
+git add .github/coverage/coverage.txt
+
+git status
