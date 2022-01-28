@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -394,6 +396,25 @@ func (m *Manager) updateRulesCache() {
 	m.gene.sha256 = hex.EncodeToString(sha256.Sum(nil))
 }
 
+// AddCommand sets a command to be executed on endpoint specified by UUID
+func (m *Manager) AddCommand(uuid string, c *Command) error {
+	if endpt, ok := m.MutEndpoint(uuid); ok {
+		endpt.Command = c
+		return m.db.InsertOrUpdate(endpt)
+	}
+	return ErrUnkEndpoint
+}
+
+// GetCommand gets the command set for an endpoint specified by UUID
+func (m *Manager) GetCommand(uuid string) (*Command, error) {
+	if endpt, ok := m.MutEndpoint(uuid); ok {
+		// We return the command of an unmutable endpoint struct
+		// so if Command is modified this will not affect Endpoint
+		return endpt.Command, nil
+	}
+	return nil, ErrUnkEndpoint
+}
+
 // MutEndpoint returns an Endpoint pointer from database
 // Result must be handled with care as any change to the Endpoint
 // might be commited to the database. If an Endpoint needs to be
@@ -482,6 +503,18 @@ func (m *Manager) UpdateReducer(identifier string, e *event.EdrEvent) {
 			m.gene.reducer.Update(e.Timestamp(), identifier, sigs)
 		}
 	}
+}
+
+func (m *Manager) logAPIErrorf(fmt string, i ...interface{}) {
+	funcName := "unk.UnknownFunc"
+	if pc, _, _, ok := runtime.Caller(1); ok {
+		split := strings.Split(runtime.FuncForPC(pc).Name(), "/")
+		funcName = split[len(split)-1]
+	}
+
+	msg := format("%s: %s", funcName, format(fmt, i...))
+
+	log.Error(msg)
 }
 
 // Wait the Manager to Shutdown

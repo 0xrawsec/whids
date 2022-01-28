@@ -178,7 +178,7 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 	case "PUT":
 		// verify that we have at least an identifier to create the user
 		if identifier == "" {
-			wt.Write(admErr("At least an identifier is needed to create user"))
+			wt.Write(admErr("at least an identifier is needed to create user"))
 			return
 		}
 
@@ -205,7 +205,7 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 
 		// verify that we have at least an identifier to create the user
 		if user.Identifier == "" {
-			wt.Write(admErr("At least an identifier is needed to create user"))
+			wt.Write(admErr("at least an identifier is needed to create user"))
 			return
 		}
 
@@ -280,10 +280,10 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 			// return user anyway
 			wt.Write(admJSONResp(user))
 		} else if sod.IsNoObjectFound(err) {
-			wt.Write(admErr(format("Unknown user for uuid: %s", uuid)))
+			wt.Write(admErr(format("unknown user for uuid: %s", uuid)))
 		} else {
-			msg := format("Failed to search user in database: %s", err)
-			log.Error(msg)
+			msg := format("failed to search user in database: %s", err)
+			m.logAPIErrorf(msg)
 			wt.Write(admErr(msg))
 		}
 	} else {
@@ -292,11 +292,12 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 }
 
 func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
+
 	showKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpShowKey))
 	group := rq.URL.Query().Get(qpGroup)
 	status := rq.URL.Query().Get(qpStatus)
 	criticality, _ := strconv.ParseInt(rq.URL.Query().Get(qpCriticality), 10, 8)
-	log.Infof("showkey=%t", showKey)
+
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
@@ -335,9 +336,9 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 		m.db.InsertOrUpdate(endpt)
 		// save endpoint to database
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
-			log.Errorf("Failed to save new endpoint")
+			m.logAPIErrorf("failed to save new endpoint")
 		}
-		wt.Write(NewAdminAPIResponse(endpt).ToJSON())
+		wt.Write(admJSONResp(endpt))
 	}
 }
 
@@ -380,13 +381,13 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 
 				// save endpoint to database
 				if err = m.db.InsertOrUpdate(endpt); err != nil {
-					log.Errorf("Failed to save updated endpoint UUID=%s", euuid)
+					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
 				}
 
 			case "DELETE":
 				// deleting endpoints from live config
 				if err = m.db.Delete(endpt); err != nil {
-					log.Errorf("Failed to delete endpoint UUID=%s from database", euuid)
+					m.logAPIErrorf("failed to delete endpoint UUID=%s from database", euuid)
 				}
 			}
 
@@ -452,7 +453,7 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 	case "GET":
 		wait, _ := strconv.ParseBool(rq.URL.Query().Get(qpWait))
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-			wt.Write(NewAdminAPIRespError(err).ToJSON())
+			wt.Write(admErr(err))
 		} else {
 			if endpt, ok := m.MutEndpoint(euuid); ok {
 				if endpt.Command != nil {
@@ -460,7 +461,7 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 						time.Sleep(time.Millisecond * 50)
 					}
 				}
-				wt.Write(NewAdminAPIResponse(endpt.Command).ToJSON())
+				wt.Write(admJSONResp(endpt.Command))
 			} else {
 				wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 			}
@@ -498,25 +499,25 @@ func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Re
 	var err error
 
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-		wt.Write(NewAdminAPIRespError(err).ToJSON())
+		wt.Write(admErr(err))
 	} else {
 		if endpt, ok := m.MutEndpoint(euuid); ok {
 			if field, err = muxGetVar(rq, "field"); err != nil {
-				wt.Write(NewAdminAPIRespError(err).ToJSON())
+				wt.Write(admErr(err))
 			} else {
 				if endpt.Command != nil {
 					// success path
 					switch field {
 					case "stdout":
-						wt.Write(NewAdminAPIResponse(endpt.Command.Stdout).ToJSON())
+						wt.Write(admJSONResp(endpt.Command.Stdout))
 					case "stderr":
-						wt.Write(NewAdminAPIResponse(endpt.Command.Stderr).ToJSON())
+						wt.Write(admJSONResp(endpt.Command.Stderr))
 					case "error":
-						wt.Write(NewAdminAPIResponse(endpt.Command.Error).ToJSON())
+						wt.Write(admJSONResp(endpt.Command.Error))
 					case "completed":
-						wt.Write(NewAdminAPIResponse(endpt.Command.Completed).ToJSON())
+						wt.Write(admJSONResp(endpt.Command.Completed))
 					case "files", "fetch":
-						wt.Write(NewAdminAPIResponse(endpt.Command.Fetch).ToJSON())
+						wt.Write(admJSONResp(endpt.Command.Fetch))
 					default:
 						wt.Write(admErr(format("Field %s not handled", field)))
 					}
@@ -571,7 +572,6 @@ func (m *Manager) admAPIEndpointLogs(wt http.ResponseWriter, rq *http.Request) {
 	if pLast != "" {
 		if last, err = time.ParseDuration(pLast); err != nil {
 			if n, err := fmt.Sscanf(pLast, "%dd", &last); n != 1 || err != nil {
-				log.Infof("n=%d err=%s", n, err)
 				wt.Write(admErr("Failed to parse last parameter, it must be a valid Go time.Duration format"))
 				return
 			}
@@ -645,7 +645,7 @@ searchLogs:
 		return
 	}
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-		wt.Write(NewAdminAPIRespError(err).ToJSON())
+		wt.Write(admErr(err))
 	} else {
 		searcher := m.eventSearcher
 
@@ -655,7 +655,7 @@ searchLogs:
 
 		for rawEvent := range searcher.Events(start, stop, euuid, int(limit), int(skip)) {
 			if e, err := rawEvent.Event(); err != nil {
-				log.Errorf("Failed to encode event to JSON: %s", err)
+				m.logAPIErrorf("failed to encode event to JSON: %s", err)
 			} else {
 				logs = append(logs, e)
 			}
@@ -667,7 +667,7 @@ searchLogs:
 			return
 		}
 
-		wt.Write(NewAdminAPIResponse(logs).ToJSON())
+		wt.Write(admJSONResp(logs))
 	}
 }
 
@@ -676,7 +676,7 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 	var err error
 
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-		wt.Write(NewAdminAPIRespError(err).ToJSON())
+		wt.Write(admErr(err))
 	} else {
 		if endpt, ok := m.MutEndpoint(euuid); ok {
 			// we return the report anyway
@@ -694,7 +694,7 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 
 					// we archive the report in database
 					if err := m.db.InsertOrUpdate(&ar); err != nil {
-						resp = NewAdminAPIRespErrorString(fmt.Sprintf("Failed to save archive: %s", err))
+						resp.Error = fmt.Sprintf("failed to save archive: %s", err)
 					}
 
 					// we reset reducer
@@ -766,7 +766,7 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 	}
 
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-		wt.Write(NewAdminAPIRespError(err).ToJSON())
+		wt.Write(admErr(err))
 	} else {
 		if endpt, ok := m.MutEndpoint(euuid); ok {
 			search := m.db.Search(&ArchivedReport{}, "Identifier", "=", endpt.Uuid).
@@ -794,7 +794,7 @@ func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Reques
 		for _, e := range endpoints {
 			out[e.Uuid] = m.gene.reducer.ReduceCopy(e.Uuid)
 		}
-		wt.Write(NewAdminAPIResponse(out).ToJSON())
+		wt.Write(admJSONResp(out))
 	}
 }
 
@@ -927,7 +927,7 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 	}
 
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-		wt.Write(NewAdminAPIRespError(err).ToJSON())
+		wt.Write(admErr(err))
 	} else {
 		if _, ok := m.MutEndpoint(euuid); ok {
 			if dumps, err = listEndpointDumps(m.Config.DumpDir, euuid, since); err != nil {
@@ -1246,11 +1246,11 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 
 }
 
-func wsHandleControlMessage(c *websocket.Conn) {
+func (m *Manager) wsHandleControlMessage(c *websocket.Conn) {
 	for {
 		if _, _, err := c.NextReader(); err != nil {
 			c.Close()
-			log.Errorf("Error in WS control handler: %s", err)
+			m.logAPIErrorf("error in WS control handler: %s", err)
 			break
 		}
 	}
@@ -1259,7 +1259,7 @@ func wsHandleControlMessage(c *websocket.Conn) {
 func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Errorf("StreamLogs, failed to upgrade to websocket: %s", err)
+		m.logAPIErrorf("failed to upgrade to websocket: %s", err)
 		return
 	}
 	defer c.Close()
@@ -1268,12 +1268,12 @@ func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
 	stream.Stream()
 	defer stream.Close()
 
-	go wsHandleControlMessage(c)
+	go m.wsHandleControlMessage(c)
 
 	for e := range stream.S {
 		err = c.WriteJSON(e)
 		if err != nil {
-			log.Errorf("Error in WriteJSON: %s", err)
+			m.logAPIErrorf("error in WriteJSON: %s", err)
 			break
 		}
 	}
@@ -1282,7 +1282,7 @@ func (m *Manager) admAPIStreamEvents(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) admAPIStreamDetections(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Errorf("StreamLogs, failed to upgrade to websocket: %s", err)
+		m.logAPIErrorf("failed to upgrade to websocket: %s", err)
 		return
 	}
 	defer c.Close()
@@ -1291,7 +1291,7 @@ func (m *Manager) admAPIStreamDetections(w http.ResponseWriter, r *http.Request)
 	stream.Stream()
 	defer stream.Close()
 
-	go wsHandleControlMessage(c)
+	go m.wsHandleControlMessage(c)
 
 	for e := range stream.S {
 		// check if event is associated to a detection

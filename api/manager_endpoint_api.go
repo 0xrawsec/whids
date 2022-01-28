@@ -63,7 +63,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 		case endpt.Hostname == "":
 			endpt.Hostname = hostname
 		case endpt.Hostname != hostname:
-			log.Errorf("Two hosts are using the same credentials %s (%s) and %s (%s)", endpt.Hostname, endpt.IP, hostname, ip)
+			m.logAPIErrorf("two hosts are using the same credentials %s (%s) and %s (%s)", endpt.Hostname, endpt.IP, hostname, ip)
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			// we have to return not to reach ServeHTTP
 			return
@@ -72,7 +72,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 		// update last connection timestamp
 		endpt.UpdateLastConnection()
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
-			log.Errorf("Failed to commit endpoint changes")
+			m.logAPIErrorf("failed to commit endpoint changes")
 		}
 		next.ServeHTTP(wt, rq)
 	})
@@ -132,19 +132,19 @@ func (m *Manager) runEndpointAPI() {
 
 		// Routes initialization
 		// POST based
-		rt.HandleFunc(EptAPIPostLogsPath, m.Collect).Methods("POST")
-		rt.HandleFunc(EptAPIPostDumpPath, m.UploadDump).Methods("POST")
-		rt.HandleFunc(EptAPIPostSystemInfo, m.SystemInfo).Methods("POST")
+		rt.HandleFunc(EptAPIPostLogsPath, m.eptAPICollect).Methods("POST")
+		rt.HandleFunc(EptAPIPostDumpPath, m.eptAPIUploadDump).Methods("POST")
+		rt.HandleFunc(EptAPIPostSystemInfo, m.eptAPISystemInfo).Methods("POST")
 
 		// GET based
-		rt.HandleFunc(EptAPIServerKeyPath, m.ServerKey).Methods("GET")
-		rt.HandleFunc(EptAPIRulesPath, m.Rules).Methods("GET")
-		rt.HandleFunc(EptAPIRulesSha256Path, m.RulesSha256).Methods("GET")
-		rt.HandleFunc(EptAPIIoCsPath, m.IoCs).Methods("GET")
-		rt.HandleFunc(EptAPIIoCsSha256Path, m.IoCsSha256).Methods("GET")
+		rt.HandleFunc(EptAPIServerKeyPath, m.eptAPIServerKey).Methods("GET")
+		rt.HandleFunc(EptAPIRulesPath, m.eptAPIRules).Methods("GET")
+		rt.HandleFunc(EptAPIRulesSha256Path, m.eptAPIRulesSha256).Methods("GET")
+		rt.HandleFunc(EptAPIIoCsPath, m.eptAPIIoCs).Methods("GET")
+		rt.HandleFunc(EptAPIIoCsSha256Path, m.eptAPIIoCsSha256).Methods("GET")
 
 		// GET and POST
-		rt.HandleFunc(EptAPICommandPath, m.Command).Methods("GET", "POST")
+		rt.HandleFunc(EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
 
 		uri := fmt.Sprintf("%s:%d", m.Config.EndpointAPI.Host, m.Config.EndpointAPI.Port)
 		m.endpointAPI = &http.Server{
@@ -170,45 +170,44 @@ func (m *Manager) runEndpointAPI() {
 	}()
 }
 
-// ServerKey HTTP handler used to authenticate server on client side
-func (m *Manager) ServerKey(wt http.ResponseWriter, rq *http.Request) {
+// eptAPIServerKey HTTP handler used to authenticate server on client side
+func (m *Manager) eptAPIServerKey(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.Config.EndpointAPI.ServerKey))
 }
 
-// Rules HTTP handler used to serve the rules
-func (m *Manager) Rules(wt http.ResponseWriter, rq *http.Request) {
+// eptAPIRules HTTP handler used to serve the rules
+func (m *Manager) eptAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
 	defer m.RUnlock()
 	wt.Write([]byte(m.gene.rules))
 }
 
-// RulesSha256 returns the sha256 of the latest set of rules loaded into the manager
-func (m *Manager) RulesSha256(wt http.ResponseWriter, rq *http.Request) {
+// eptAPIRulesSha256 returns the sha256 of the latest set of rules loaded into the manager
+func (m *Manager) eptAPIRulesSha256(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
 	defer m.RUnlock()
 	wt.Write([]byte(m.gene.sha256))
 }
 
-func (m *Manager) IoCs(wt http.ResponseWriter, rq *http.Request) {
-	funcName := utils.GetCurFuncName()
+func (m *Manager) eptAPIIoCs(wt http.ResponseWriter, rq *http.Request) {
 	if data, err := json.Marshal(m.iocs.StringSlice()); err != nil {
-		log.Errorf("%s failed to marshal IoCs: %s", funcName, err)
+		m.logAPIErrorf("failed to marshal IoCs: %s", err)
 		http.Error(wt, "Failed to marshal IoCs", http.StatusInternalServerError)
 	} else {
 		wt.Write(data)
 	}
 }
 
-func (m *Manager) IoCsSha256(wt http.ResponseWriter, rq *http.Request) {
+func (m *Manager) eptAPIIoCsSha256(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.iocs.Hash()))
 }
 
-// UploadDump HTTP handler used to upload dump files from client to manager
-func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
+// eptAPIUploadDump HTTP handler used to upload dump files from client to manager
+func (m *Manager) eptAPIUploadDump(wt http.ResponseWriter, rq *http.Request) {
 	defer rq.Body.Close()
-	funcName := utils.GetCurFuncName()
+
 	if m.Config.DumpDir == "" {
-		log.Errorf("%s handler won't dump because no dump directory set", funcName)
+		m.logAPIErrorf("handler won't dump because no dump directory set")
 		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
 		return
 	}
@@ -218,42 +217,43 @@ func (m *Manager) UploadDump(wt http.ResponseWriter, rq *http.Request) {
 
 	if endpt := m.eptAPIMutEndpointFromRequest(rq); endpt != nil {
 		if err := dec.Decode(&fu); err != nil {
-			log.Errorf("%s handler failed to decode JSON", funcName)
+			m.logAPIErrorf("handler failed to decode JSON")
 			http.Error(wt, "Failed to decode JSON", http.StatusInternalServerError)
 			return
 		}
 
 		endptDumpDir := filepath.Join(m.Config.DumpDir, endpt.Uuid)
 		if err := fu.Dump(endptDumpDir); err != nil {
-			log.Errorf("%s handler failed to dump file (%s): %s", funcName, fu.Implode(), err)
+			m.logAPIErrorf("handler failed to dump file (%s): %s", fu.Implode(), err)
 			http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
 			return
 		}
 	} else {
-		log.Errorf("%s failed to retrieve endpoint from request", funcName)
+		m.logAPIErrorf("failed to retrieve endpoint from request")
 	}
 }
 
 // Container HTTP handler serves Gene containers to clients
 
-// Collect HTTP handler
-func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
+// eptAPICollect HTTP handler
+func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
+	defer rq.Body.Close()
+
+	funcName := utils.GetCurFuncName()
 	cnt := 0
 	uuid := rq.Header.Get(EndpointUUIDHeader)
 	endpt, _ := m.MutEndpoint(uuid)
-
-	defer rq.Body.Close()
 
 	etid := m.eventLogger.InitTransaction()
 	dtid := m.detectionLogger.InitTransaction()
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
 		tok := []byte(s.Text())
-		log.Debugf("Received Event: %s", string(tok))
+		log.Debugf("%s received Event: %s", funcName, string(tok))
 		e := event.EdrEvent{}
 
 		if err := json.Unmarshal(tok, &e); err != nil {
-			log.Errorf("Failed to unmarshal: %s", tok)
+			m.logAPIErrorf("failed to unmarshal: %s", tok)
 		} else {
 
 			// building up EdrData
@@ -285,12 +285,12 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 			// If it is an alert
 			if e.IsDetection() {
 				if _, err := m.detectionLogger.WriteEvent(dtid, uuid, &e); err != nil {
-					log.Errorf("Failed to write detection: %s", err)
+					m.logAPIErrorf("failed to write detection: %s", err)
 				}
 			}
 
 			if _, err := m.eventLogger.WriteEvent(etid, uuid, &e); err != nil {
-				log.Errorf("Failed to write event: %s", err)
+				m.logAPIErrorf("failed to write event: %s", err)
 			}
 
 			// we queue event for streaming
@@ -301,43 +301,24 @@ func (m *Manager) Collect(wt http.ResponseWriter, rq *http.Request) {
 
 	if endpt != nil {
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
-			log.Errorf("Failed to update endpoint UUID=%s: %s", endpt.Uuid, err)
+			m.logAPIErrorf("failed to update endpoint UUID=%s: %s", endpt.Uuid, err)
 		}
 	}
 
 	if err := m.eventLogger.CommitTransaction(); err != nil {
-		log.Errorf("Failed to commit event logger transaction: %s", err)
+		m.logAPIErrorf("failed to commit event logger transaction: %s", err)
 	}
 
 	if err := m.detectionLogger.CommitTransaction(); err != nil {
-		log.Errorf("Failed to commit detection logger transaction: %s", err)
+		m.logAPIErrorf("failed to commit detection logger transaction: %s", err)
 	}
-	log.Debugf("Count Event Received: %d", cnt)
+	log.Debugf("count Event Received: %d", cnt)
 
 }
 
-// AddCommand sets a command to be executed on endpoint specified by UUID
-func (m *Manager) AddCommand(uuid string, c *Command) error {
-	if endpt, ok := m.MutEndpoint(uuid); ok {
-		endpt.Command = c
-		return m.db.InsertOrUpdate(endpt)
-	}
-	return ErrUnkEndpoint
-}
+// eptAPICommand HTTP handler
+func (m *Manager) eptAPICommand(wt http.ResponseWriter, rq *http.Request) {
 
-// GetCommand gets the command set for an endpoint specified by UUID
-func (m *Manager) GetCommand(uuid string) (*Command, error) {
-	if endpt, ok := m.MutEndpoint(uuid); ok {
-		// We return the command of an unmutable endpoint struct
-		// so if Command is modified this will not affect Endpoint
-		return endpt.Command, nil
-	}
-	return nil, ErrUnkEndpoint
-}
-
-// Command HTTP handler
-func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
-	funcName := utils.GetCurFuncName()
 	switch rq.Method {
 	case "GET":
 		if endpt := m.eptAPIMutEndpointFromRequest(rq); endpt != nil {
@@ -346,14 +327,14 @@ func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
 				if !endpt.Command.Sent {
 					jsonCmd, err := json.Marshal(endpt.Command)
 					if err != nil {
-						log.Errorf("%s failed at serializing command to JSON: %s", funcName, err)
+						m.logAPIErrorf("failed at serializing command to JSON: %s", err)
 					} else {
 						wt.Write(jsonCmd)
 					}
 					endpt.Command.Sent = true
 					endpt.Command.SentTime = time.Now()
 					if err := m.db.InsertOrUpdate(endpt); err != nil {
-						log.Errorf("%s to update endpoint data: %s", funcName, err)
+						m.logAPIErrorf("failed to update endpoint data: %s", err)
 					}
 					return
 				}
@@ -369,22 +350,22 @@ func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
 					defer rq.Body.Close()
 					body, err := ioutil.ReadAll(rq.Body)
 					if err != nil {
-						log.Errorf("%s failed to read response body: %s", funcName, err)
+						m.logAPIErrorf("failed to read response body: %s", err)
 					} else {
 						rcmd := Command{}
 						err := json.Unmarshal(body, &rcmd)
 						if err != nil {
-							log.Errorf("%s failed to unmarshal received command: %s", funcName, err)
+							m.logAPIErrorf("failed to unmarshal received command: %s", err)
 						} else {
 							// we complete the command executed on the endpoint
 							endpt.Command.Complete(&rcmd)
 							if err := m.db.InsertOrUpdate(endpt); err != nil {
-								log.Errorf("%s to update endpoint data: %s", funcName, err)
+								m.logAPIErrorf("to update endpoint data: %s", err)
 							}
 						}
 					}
 				} else {
-					log.Errorf("%s command is already completed", funcName)
+					m.logAPIErrorf("command is already completed")
 				}
 			}
 		}
@@ -392,20 +373,19 @@ func (m *Manager) Command(wt http.ResponseWriter, rq *http.Request) {
 }
 
 // Command HTTP handler
-func (m *Manager) SystemInfo(wt http.ResponseWriter, rq *http.Request) {
-	funcName := utils.GetCurFuncName()
+func (m *Manager) eptAPISystemInfo(wt http.ResponseWriter, rq *http.Request) {
 	switch rq.Method {
 	case "POST":
 		if endpt := m.eptAPIMutEndpointFromRequest(rq); endpt != nil {
 			info := sysinfo.SystemInfo{}
 			if err := readPostAsJSON(rq, &info); err != nil {
-				log.Errorf("%s failed to receive system information for %s", funcName, endpt.Uuid)
+				m.logAPIErrorf("failed to receive system information for %s", endpt.Uuid)
 				http.Error(wt, "Failed to unmarshal data", http.StatusInternalServerError)
 			} else {
 				endpt.SystemInfo = &info
 				m.db.InsertOrUpdate(endpt)
 				if err := m.db.InsertOrUpdate(endpt); err != nil {
-					log.Errorf("%s to update endpoint data: %s", funcName, err)
+					m.logAPIErrorf("to update endpoint data: %s", err)
 				}
 			}
 		}
