@@ -8,8 +8,11 @@ echo "Generating OpenAPI documentation"
 GOOS=linux go run tools/manager/*.go -openapi > ./doc/admin.openapi.json
 
 # adding openapi files to commit
+# those will not be seen in the commit message shown by git in
+# in text editor but those files will be added to the index anyway
 git add api/openapi_def.go
 git add doc/admin.openapi.json
 git add .github/coverage/coverage.txt
+git add .github/coverage/badge.svg
 
 git status

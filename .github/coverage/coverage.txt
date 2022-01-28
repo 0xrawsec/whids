@@ -18,7 +18,7 @@ github.com/0xrawsec/whids/api/api_client.go:395:		IsFileAboveUploadLimit		0.0%
 github.com/0xrawsec/whids/api/api_client.go:406:		PostDump			65.0%
 github.com/0xrawsec/whids/api/api_client.go:442:		PostLogs			68.8%
 github.com/0xrawsec/whids/api/api_client.go:474:		PostCommand			76.5%
-github.com/0xrawsec/whids/api/api_client.go:508:		FetchCommand			73.7%
+github.com/0xrawsec/whids/api/api_client.go:508:		FetchCommand			78.9%
 github.com/0xrawsec/whids/api/api_client.go:547:		PostSystemInfo			61.5%
 github.com/0xrawsec/whids/api/api_client.go:573:		Close				100.0%
 github.com/0xrawsec/whids/api/command.go:48:			NewCommand			100.0%

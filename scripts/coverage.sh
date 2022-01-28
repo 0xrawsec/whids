@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# go to repo root directory
+ROOT=`git rev-parse --show-toplevel`
+cd ${ROOT}
+
 pkgs=("./logger" "./api" "./event")
 
 tmp=$(mktemp -d)
