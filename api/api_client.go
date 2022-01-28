@@ -525,17 +525,21 @@ func (m *ManagerClient) FetchCommand() (*Command, error) {
 			return command, ErrNothingToDo
 		}
 
-		jsonCommand, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return command, fmt.Errorf("FetchCommand failed to read HTTP response body: %s", err)
-		}
+		if resp.StatusCode == http.StatusOK {
+			jsonCommand, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return command, fmt.Errorf("FetchCommand failed to read HTTP response body: %s", err)
+			}
 
-		// unmarshal command to be executed
-		if err := json.Unmarshal(jsonCommand, &command); err != nil {
-			return command, fmt.Errorf("FetchCommand failed to unmarshal command: %s", err)
-		}
+			// unmarshal command to be executed
+			if err := json.Unmarshal(jsonCommand, &command); err != nil {
+				return command, fmt.Errorf("FetchCommand failed to unmarshal command: %s", err)
+			}
 
-		return command, nil
+			return command, nil
+		}
+		return command, fmt.Errorf("FetchCommand unexpected HTTP status %d", resp.StatusCode)
+
 	}
 	return command, fmt.Errorf("FetchCommand failed, server cannot be authenticated")
 }

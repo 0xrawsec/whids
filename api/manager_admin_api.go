@@ -296,38 +296,43 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	group := rq.URL.Query().Get(qpGroup)
 	status := rq.URL.Query().Get(qpStatus)
 	criticality, _ := strconv.ParseInt(rq.URL.Query().Get(qpCriticality), 10, 8)
-
+	log.Infof("showkey=%t", showKey)
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
-		endpoints := make([]*Endpoint, 0, m.endpoints.Len())
-		for _, endpt := range m.endpoints.Endpoints() {
-			// filter on group
-			if group != "" && endpt.Group != group {
-				continue
+		if endpoints, err := m.MutEndpoints(); err != nil {
+			wt.Write(admErr(err))
+		} else {
+			out := make([]*Endpoint, 0, len(endpoints))
+			for _, endpt := range endpoints {
+				// filter on group
+				if group != "" && endpt.Group != group {
+					continue
+				}
+				// filter on status
+				if status != "" && endpt.Status != status {
+					continue
+				}
+				if endpt.Criticality < int(criticality) {
+					continue
+				}
+				// never show command
+				endpt.Command = nil
+				if !showKey {
+					// to prevent modifying data in the db cache
+					endpt = endpt.Copy()
+					endpt.Key = ""
+				}
+				// score is updated at every call as it depends on all the other endpoints
+				endpt.Score = m.gene.reducer.BoundedScore(endpt.Uuid)
+				out = append(out, endpt)
 			}
-			// filter on status
-			if status != "" && endpt.Status != status {
-				continue
-			}
-			if endpt.Criticality < int(criticality) {
-				continue
-			}
-			// never show command
-			endpt.Command = nil
-			if !showKey {
-				endpt.Key = ""
-			}
-			// score is updated at every call as it depends on all the other endpoints
-			endpt.Score = m.gene.reducer.BoundedScore(endpt.Uuid)
-			// add endpoint to the list to return
-			endpoints = append(endpoints, endpt)
+			wt.Write(admJSONResp(out))
 		}
-		wt.Write(NewAdminAPIResponse(endpoints).ToJSON())
 
 	case rq.Method == "PUT":
 		endpt := NewEndpoint(UUIDGen().String(), KeyGen(DefaultKeySize))
-		m.endpoints.Add(endpt)
+		m.db.InsertOrUpdate(endpt)
 		// save endpoint to database
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
 			log.Errorf("Failed to save new endpoint")
@@ -344,7 +349,9 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	newKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpNewKey))
 
 	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
-		if endpt, ok := m.endpoints.GetMutByUUID(euuid); ok {
+		if endpt, ok := m.MutEndpoint(euuid); ok {
+			var err error
+
 			switch rq.Method {
 			case "POST":
 				new := Endpoint{Criticality: -1}
@@ -363,11 +370,6 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 				}
 
 				if new.Criticality != -1 {
-					// we have to do further checks on criticality
-					if new.Criticality < 0 || new.Criticality > 10 {
-						wt.Write(admErr("criticality field must be in [0;10]"))
-						return
-					}
 					endpt.Criticality = new.Criticality
 				}
 
@@ -377,27 +379,32 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 				}
 
 				// save endpoint to database
-				if err := m.db.InsertOrUpdate(endpt); err != nil {
-					log.Errorf("Failed to save updated endpoint")
+				if err = m.db.InsertOrUpdate(endpt); err != nil {
+					log.Errorf("Failed to save updated endpoint UUID=%s", euuid)
 				}
 
 			case "DELETE":
 				// deleting endpoints from live config
-				m.endpoints.DelByUUID(euuid)
-				if err := m.db.Delete(endpt); err != nil {
-					log.Errorf("Failed to delete endpoint from database")
+				if err = m.db.Delete(endpt); err != nil {
+					log.Errorf("Failed to delete endpoint UUID=%s from database", euuid)
 				}
 			}
 
-			// we have to use the copy of the endpoint has we modify the key
-			endpt = endpt.Copy()
-			// we return the endpoint anyway
-			if !showKey {
-				endpt.Key = ""
-			}
 			// score is updated at every call as it depends on all the other endpoints
 			endpt.Score = m.gene.reducer.BoundedScore(endpt.Uuid)
-			wt.Write(NewAdminAPIResponse(endpt).ToJSON())
+
+			// we return the endpoint anyway
+			if !showKey {
+				// to prevent modifying struct in db cache
+				endpt = endpt.Copy()
+				endpt.Key = ""
+			}
+
+			apiResp := NewAdminAPIResponse(endpt)
+			if err != nil {
+				apiResp.Error = err.Error()
+			}
+			wt.Write(apiResp.ToJSON())
 		} else {
 			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
 		}
@@ -447,7 +454,7 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(NewAdminAPIRespError(err).ToJSON())
 		} else {
-			if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+			if endpt, ok := m.MutEndpoint(euuid); ok {
 				if endpt.Command != nil {
 					for wait && !endpt.Command.Completed {
 						time.Sleep(time.Millisecond * 50)
@@ -460,19 +467,23 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 		}
 	case "POST":
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-			wt.Write(NewAdminAPIRespError(err).ToJSON())
+			wt.Write(admErr(err))
 		} else {
-			if endpt, ok := m.endpoints.GetMutByUUID(euuid); ok {
+			if endpt, ok := m.MutEndpoint(euuid); ok {
 				c := CommandAPI{}
 				if err = readPostAsJSON(rq, &c); err != nil {
-					wt.Write(NewAdminAPIRespError(err).ToJSON())
+					wt.Write(admErr(err))
 				} else {
 					tmpCmd, err := c.ToCommand()
 					if err != nil {
 						wt.Write(admErr(format("Failed to create command to execute: %s", err)))
 					} else {
 						endpt.Command = tmpCmd
-						wt.Write(NewAdminAPIResponse(endpt).ToJSON())
+						if err := m.db.InsertOrUpdate(endpt); err != nil {
+							wt.Write(admErr(err))
+						} else {
+							wt.Write(admJSONResp(endpt))
+						}
 					}
 				}
 			} else {
@@ -489,7 +500,7 @@ func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Re
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
-		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+		if endpt, ok := m.MutEndpoint(euuid); ok {
 			if field, err = muxGetVar(rq, "field"); err != nil {
 				wt.Write(NewAdminAPIRespError(err).ToJSON())
 			} else {
@@ -667,7 +678,7 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
-		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+		if endpt, ok := m.MutEndpoint(euuid); ok {
 			// we return the report anyway
 			rs := m.gene.reducer.ReduceCopy(endpt.Uuid)
 			switch rq.Method {
@@ -757,7 +768,7 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
-		if endpt, ok := m.endpoints.GetByUUID(euuid); ok {
+		if endpt, ok := m.MutEndpoint(euuid); ok {
 			search := m.db.Search(&ArchivedReport{}, "Identifier", "=", endpt.Uuid).
 				And("ArchivedTimestamp", ">=", since).
 				And("ArchivedTimestamp", "<=", until)
@@ -777,10 +788,14 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 
 func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Request) {
 	out := make(map[string]*reducer.ReducedStats)
-	for _, e := range m.endpoints.MutEndpoints() {
-		out[e.Uuid] = m.gene.reducer.ReduceCopy(e.Uuid)
+	if endpoints, err := m.MutEndpoints(); err != nil {
+		wt.Write(admErr(err))
+	} else {
+		for _, e := range endpoints {
+			out[e.Uuid] = m.gene.reducer.ReduceCopy(e.Uuid)
+		}
+		wt.Write(NewAdminAPIResponse(out).ToJSON())
 	}
-	wt.Write(NewAdminAPIResponse(out).ToJSON())
 }
 
 type DumpFile struct {
@@ -914,7 +929,7 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(NewAdminAPIRespError(err).ToJSON())
 	} else {
-		if m.endpoints.HasByUUID(euuid) {
+		if _, ok := m.MutEndpoint(euuid); ok {
 			if dumps, err = listEndpointDumps(m.Config.DumpDir, euuid, since); err != nil {
 				wt.Write(admErr(format("Failed to list dumps, %s", err)))
 				return
@@ -999,11 +1014,15 @@ type stats struct {
 }
 
 func (m *Manager) admAPIStats(wt http.ResponseWriter, rq *http.Request) {
-	s := stats{
-		EndpointCount: m.endpoints.Len(),
-		RuleCount:     m.gene.engine.Count(),
+	if count, err := m.db.Count(&Endpoint{}); err != nil {
+		wt.Write(admErr(err))
+	} else {
+		s := stats{
+			EndpointCount: count,
+			RuleCount:     m.gene.engine.Count(),
+		}
+		wt.Write(admJSONResp(s))
 	}
-	wt.Write(NewAdminAPIResponse(s).ToJSON())
 }
 
 func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {

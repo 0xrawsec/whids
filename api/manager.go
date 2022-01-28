@@ -239,10 +239,10 @@ type Manager struct {
 	detectionLogger   *logger.EventLogger
 	detectionSearcher *logger.EventSearcher
 	endpointAPI       *http.Server
-	endpoints         Endpoints
-	adminAPI          *http.Server
-	stop              chan bool
-	done              bool
+	//endpoints         Endpoints
+	adminAPI *http.Server
+	stop     chan bool
+	done     bool
 
 	// Gene related members
 	gene struct {
@@ -261,7 +261,6 @@ type Manager struct {
 // NewManager creates a new WHIDS manager with a logfile as parameter
 func NewManager(c *ManagerConfig) (*Manager, error) {
 	var err error
-	var objects []sod.Object
 
 	m := Manager{Config: c, iocs: ioc.NewIocs()}
 	//logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
@@ -295,16 +294,6 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	}
 	// initialize IoCs from db
 	m.iocs.FromDB(m.db)
-
-	// Endpoints initialization
-	m.endpoints = NewEndpoints()
-	if objects, err = m.db.All(&Endpoint{}); err != nil {
-		return nil, err
-	}
-	for _, o := range objects {
-		ept := o.(*Endpoint)
-		m.endpoints.Add(ept)
-	}
 
 	m.stop = make(chan bool)
 	if err = c.TLS.Verify(); err != nil && !c.TLS.Empty() {
@@ -405,6 +394,38 @@ func (m *Manager) updateRulesCache() {
 	m.gene.sha256 = hex.EncodeToString(sha256.Sum(nil))
 }
 
+// MutEndpoint returns an Endpoint pointer from database
+// Result must be handled with care as any change to the Endpoint
+// might be commited to the database. If an Endpoint needs to be
+// modified but changes don't need to be commited, use Endpoint.Copy()
+// to work on a copy
+func (m *Manager) MutEndpoint(uuid string) (*Endpoint, bool) {
+	if o, err := m.db.GetByUUID(&Endpoint{}, uuid); err == nil {
+		// we return copy to endpoints not to modify cached structures
+		return o.(*Endpoint), true
+	}
+	return nil, false
+}
+
+// MutEndpoints returns a slice of Endpoint pointers from database
+// Result must be handled with care as any change to the Endpoint
+// might be commited to the database. If an Endpoint needs to be
+// modified but changes don't need to be commited, use Endpoint.Copy()
+// to work on a copy
+func (m *Manager) MutEndpoints() (endpoints []*Endpoint, err error) {
+	var all []sod.Object
+
+	if all, err = m.db.All(&Endpoint{}); err != nil {
+		return
+	}
+	endpoints = make([]*Endpoint, 0, len(all))
+	for _, o := range all {
+		// we return copy to endpoints not to modify cached structures
+		endpoints = append(endpoints, o.(*Endpoint))
+	}
+	return
+}
+
 func (m *Manager) ImportRules(directory string) (err error) {
 	engine := engine.NewEngine()
 	engine.SetDumpRaw(true)
@@ -444,7 +465,7 @@ func (m *Manager) CreateNewAdminAPIUser(user *AdminAPIUser) (err error) {
 
 // AddEndpoint adds new endpoint to the manager
 func (m *Manager) AddEndpoint(uuid, key string) {
-	m.endpoints.Add(NewEndpoint(uuid, key))
+	m.db.InsertOrUpdate(NewEndpoint(uuid, key))
 }
 
 // UpdateReducer updates the reducer member of the Manager
@@ -494,6 +515,11 @@ func (m *Manager) Shutdown() (lastErr error) {
 	if err := m.eventLogger.Close(); err != nil {
 		lastErr = err
 	}
+
+	if err := m.db.Close(); err != nil {
+		lastErr = err
+	}
+
 	return
 }
 
