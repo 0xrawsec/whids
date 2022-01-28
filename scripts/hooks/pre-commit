@@ -2,7 +2,7 @@
 set -e
 
 echo "Running coverage"
-./coverage.sh
+./scripts/coverage.sh
 
 echo "Generating OpenAPI documentation"
 GOOS=linux go run tools/manager/*.go -openapi > ./doc/admin.openapi.json
