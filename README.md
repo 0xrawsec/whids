@@ -1,4 +1,4 @@
-**IMPORTANT:** this README and other documentation is not updated to reflect the changes made to latest beta releases (as a lot of changes happened). All this will be updated in time when a stable version will be released. Feel free to run beta releases on your own and ask questions if you need help.
+**IMPORTANT:** this README and other documentation is not updated to reflect the changes made to latest beta releases (as a lot of changes happened). All this will be updated in time when a stable version will be released (see [Roadmap until next release](#roadmap-until-next-release)). Feel free to run beta releases on your own and ask questions if you need help.
 
 <p align="center">
   <img src="./doc/img/logo.png" alt="logo" width="40%">
