@@ -144,6 +144,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
   - [X] overall manager API improvement
   - [X] provide event streams so that a client can receive events in realtime
   - [X] standardize HTTP headers
+  - [X] provide a python library interact with manager (https://github.com/0xrawsec/pywhids)
 
 
 # Changelog
