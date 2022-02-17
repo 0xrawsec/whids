@@ -124,6 +124,27 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 * Does not work properly when ran from a network share **mapped as a network drive** (this case prevent whids to identify itself and thus generate some noise). Example: if `\\vbox\test` is mounted as `Z:` drive, running `Z:\whids.exe` **won't work** while running `\\vbox\test\whids.exe` actually would.
 
+# Roadmap until next release
+
+  - [ ] better sysmon integration (config, deployment, update)
+  - [ ] endpoint configuration from manager
+  - [ ] tooling management (update, install), like OSQuery
+  - [ ] code refactoring and optimization
+  - [X] implement a performance monitor
+  - [X] get rid of any on-disk configuration
+  - [X] manage IOC from manager
+  - [X] ETW support
+  - [X] automatic documentation of manager's API
+  - [X] provide endpoint system information in manager
+  - [X] implement actionable rules
+  - [X] provide canary file management
+  - [X] builtin commands executed by the agent
+  - [X] provide Incident Response reports
+  - [X] overall manager API improvement
+  - [X] provide event streams so that a client can receive events in realtime
+  - [X] standardize HTTP headers
+
+
 # Changelog
 
 ## v1.7
