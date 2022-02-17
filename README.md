@@ -133,14 +133,14 @@ Please visit [doc/configuration.md](doc/configuration.md)
   - [X] implement a performance monitor
   - [X] get rid of any on-disk configuration
   - [X] manage IOC from manager
-  - [X] ETW support
+  - [X] ETW support
   - [X] automatic documentation of manager's API
   - [X] provide endpoint system information in manager
   - [X] implement actionable rules
   - [X] provide canary file management
   - [X] builtin commands executed by the agent
   - [X] provide Incident Response reports
-  - [X] overall manager API improvement
+  - [X] overall manager API improvement
   - [X] provide event streams so that a client can receive events in realtime
   - [X] standardize HTTP headers
 
