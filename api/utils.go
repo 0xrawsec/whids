@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -38,4 +39,13 @@ func readPostAsJSON(rq *http.Request, i interface{}) error {
 		return fmt.Errorf("failed to read POST body: %w", err)
 	}
 	return json.Unmarshal(b, i)
+}
+
+func readPostAsXML(rq *http.Request, i interface{}) error {
+	defer rq.Body.Close()
+	b, err := ioutil.ReadAll(rq.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read POST body: %w", err)
+	}
+	return xml.Unmarshal(b, i)
 }

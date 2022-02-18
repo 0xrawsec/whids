@@ -72,9 +72,9 @@
                       "group": "",
                       "hostname": "OpenHappy",
                       "ip": "127.0.0.1",
-                      "key": "Rw8FElmRch4K7PmpLBIR1gRlDJys74KSyBtnHlJaDGOfMMyDXd4H2G7Y0WerVFCj",
-                      "last-connection": "2022-01-28T10:58:38.403781409Z",
-                      "last-detection": "2022-01-28T11:58:37.309299837+01:00",
+                      "key": "cpcaI3apfPcaCfuS4eL4e7ruNXkVNWmBkjmteKF0nrDjW5xDdeJJgEB2XMVSSgMp",
+                      "last-connection": "2022-02-18T12:31:30.053301775Z",
+                      "last-detection": "2022-02-18T13:31:28.890186858+01:00",
                       "score": 0,
                       "status": "",
                       "system-info": {
@@ -146,12 +146,12 @@
                     "group": "",
                     "hostname": "",
                     "ip": "",
-                    "key": "wS4IhUxEQumnviTeBpPVj0w9Phhz7PncrPYvfx4IYutaDrh7HKaErGadoa29no7s",
+                    "key": "fOB7eMhsihedzYcnxFQ8vmntulrUkuaEnLyfPKBpWeD9GLaB4QQn959a9g2QkgUX",
                     "last-connection": "0001-01-01T00:00:00Z",
                     "last-detection": "0001-01-01T00:00:00Z",
                     "score": 0,
                     "status": "",
-                    "uuid": "e0ac3b8e-5f18-e2fa-13ad-2277d5287816"
+                    "uuid": "8eded9dd-de8e-bcf0-ad5f-4fe94732776b"
                   },
                   "error": "",
                   "message": "OK"
@@ -191,21 +191,21 @@
                     "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d": [
                       {
                         "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                        "creation": "2022-01-28T10:58:43.001721634Z",
+                        "creation": "2022-02-18T12:31:35.151269463Z",
                         "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                         "files": [
                           {
                             "name": "bar.txt",
                             "size": 4,
-                            "timestamp": "2022-01-28T10:58:43.011721641Z"
+                            "timestamp": "2022-02-18T12:31:35.161269501Z"
                           },
                           {
                             "name": "foo.txt",
                             "size": 4,
-                            "timestamp": "2022-01-28T10:58:43.001721634Z"
+                            "timestamp": "2022-02-18T12:31:35.151269463Z"
                           }
                         ],
-                        "modification": "2022-01-28T10:58:43.011721641Z",
+                        "modification": "2022-02-18T12:31:35.161269501Z",
                         "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                       }
                     ]
@@ -239,35 +239,876 @@
                       "avg-signature-criticality": 0,
                       "bounded-score": 0,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 4,
-                        "NewAutorun": 16,
-                        "SuspiciousService": 8,
-                        "UnknownServices": 5,
-                        "UntrustedDriverLoaded": 17
+                        "DefenderConfigChanged": 1,
+                        "NewAutorun": 23,
+                        "SuspiciousService": 5,
+                        "UnknownServices": 8,
+                        "UntrustedDriverLoaded": 13
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2022-01-28T11:58:39.634708357+01:00",
+                      "median-time": "2022-02-18T13:31:31.512025697+01:00",
                       "score": 0,
                       "signature-count": 50,
                       "signature-criticality-metric": 0,
                       "signature-diversity": 100,
                       "signatures": [
+                        "UnknownServices",
                         "NewAutorun",
                         "UntrustedDriverLoaded",
-                        "DefenderConfigChanged",
                         "SuspiciousService",
-                        "UnknownServices"
+                        "DefenderConfigChanged"
                       ],
-                      "start-time": "2022-01-28T11:58:39.632420476+01:00",
+                      "start-time": "2022-02-18T13:31:31.507915208+01:00",
                       "std-dev-alert-criticality": 0,
                       "std-dev-signature-criticality": -92233720368547760,
-                      "stop-time": "2022-01-28T11:58:39.636996239+01:00",
+                      "stop-time": "2022-02-18T13:31:31.516136186+01:00",
                       "sum-alert-criticality": 0,
                       "sum-rule-criticality": 0,
                       "tactics": null,
                       "techniques": null
                     }
+                  },
+                  "error": "",
+                  "message": "OK"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/{os}/sysmon/config": {
+      "get": {
+        "tags": [
+          "Manage sysmon configuration"
+        ],
+        "summary": "Get a sysmon configuration",
+        "parameters": [
+          {
+            "name": "os",
+            "in": "path",
+            "description": "os path parameter",
+            "required": true,
+            "allowEmptyValue": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "version query parameter",
+            "required": true,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "format query parameter",
+            "required": false,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "raw",
+            "in": "query",
+            "description": "raw query parameter",
+            "required": false,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTTP 200 response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "CheckRevocation": false,
+                    "CopyOnDeletePE": false,
+                    "DnsLookup": false,
+                    "EventFiltering": {
+                      "ClipboardChange": {
+                        "onmatch": "exclude"
+                      },
+                      "CreateRemoteThread": {
+                        "onmatch": "exclude"
+                      },
+                      "DriverLoad": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateStreamHash": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateTime": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDelete": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDeleteDetected": {
+                        "onmatch": "exclude"
+                      },
+                      "NetworkConnect": {
+                        "onmatch": "exclude"
+                      },
+                      "PipeEvent": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTampering": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTerminate": {
+                        "onmatch": "exclude"
+                      },
+                      "RawAccessRead": {
+                        "onmatch": "exclude"
+                      },
+                      "RuleGroup": [
+                        {
+                          "ImageLoad": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "Signature": [
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows Publisher"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Corporation"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "ProcessAccess": {
+                            "GrantedAccess": [
+                              {
+                                "condition": "is",
+                                "value": "0x1000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x2000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x3000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x100000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x101000"
+                              }
+                            ],
+                            "SourceImage": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\wbem\\wmiprvse.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\System32\\VBoxService.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\taskmgr.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "RegistryEvent": {
+                            "EventType": [
+                              {
+                                "condition": "is not",
+                                "value": "SetValue"
+                              }
+                            ],
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "DnsQuery": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        }
+                      ],
+                      "WmiEvent": {
+                        "onmatch": "exclude"
+                      }
+                    },
+                    "HashAlgorithms": [
+                      "*"
+                    ],
+                    "OS": "windows",
+                    "XmlSha256": "9a7261a6bb857d35dbc1d9cb810692304a528316d0b82bcced3aa17955e71b1b",
+                    "schemaversion": "4.70"
+                  },
+                  "error": "",
+                  "message": "OK"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Manage sysmon configuration"
+        ],
+        "summary": "Add or update a sysmon configuration",
+        "parameters": [
+          {
+            "name": "os",
+            "in": "path",
+            "description": "os path parameter",
+            "required": true,
+            "allowEmptyValue": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "format query parameter",
+            "required": false,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Sysmon configuration file. Raw XML file that you would use to configure Sysmon can be posted here.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Item": {
+                    "type": "object"
+                  }
+                }
+              },
+              "example": {
+                "schemaversion": "4.70",
+                "CheckRevocation": false,
+                "CopyOnDeletePE": false,
+                "DnsLookup": false,
+                "HashAlgorithms": [
+                  "*"
+                ],
+                "EventFiltering": {
+                  "ProcessCreate": {
+                    "onmatch": "exclude"
+                  },
+                  "FileCreateTime": {
+                    "onmatch": "exclude"
+                  },
+                  "NetworkConnect": {
+                    "onmatch": "exclude"
+                  },
+                  "ProcessTerminate": {
+                    "onmatch": "exclude"
+                  },
+                  "DriverLoad": {
+                    "onmatch": "exclude"
+                  },
+                  "CreateRemoteThread": {
+                    "onmatch": "exclude"
+                  },
+                  "RawAccessRead": {
+                    "onmatch": "exclude"
+                  },
+                  "FileCreate": {
+                    "onmatch": "exclude"
+                  },
+                  "FileCreateStreamHash": {
+                    "onmatch": "exclude"
+                  },
+                  "PipeEvent": {
+                    "onmatch": "exclude"
+                  },
+                  "WmiEvent": {
+                    "onmatch": "exclude"
+                  },
+                  "FileDelete": {
+                    "onmatch": "exclude"
+                  },
+                  "ClipboardChange": {
+                    "onmatch": "exclude"
+                  },
+                  "ProcessTampering": {
+                    "onmatch": "exclude"
+                  },
+                  "FileDeleteDetected": {
+                    "onmatch": "exclude"
+                  },
+                  "RuleGroup": [
+                    {
+                      "ImageLoad": {
+                        "onmatch": "exclude",
+                        "Image": [
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon.exe"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon64.exe"
+                          }
+                        ],
+                        "Signature": [
+                          {
+                            "condition": "is",
+                            "value": "Microsoft Windows Publisher"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "Microsoft Corporation"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "Microsoft Windows"
+                          }
+                        ]
+                      },
+                      "groupRelation": "or"
+                    },
+                    {
+                      "ProcessAccess": {
+                        "onmatch": "exclude",
+                        "SourceImage": [
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\system32\\wbem\\wmiprvse.exe"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\System32\\VBoxService.exe"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\system32\\taskmgr.exe"
+                          }
+                        ],
+                        "GrantedAccess": [
+                          {
+                            "condition": "is",
+                            "value": "0x1000"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "0x2000"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "0x3000"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "0x100000"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "0x101000"
+                          }
+                        ]
+                      },
+                      "groupRelation": "or"
+                    },
+                    {
+                      "RegistryEvent": {
+                        "onmatch": "exclude",
+                        "EventType": [
+                          {
+                            "condition": "is not",
+                            "value": "SetValue"
+                          }
+                        ],
+                        "Image": [
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon.exe"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon64.exe"
+                          }
+                        ]
+                      },
+                      "groupRelation": "or"
+                    },
+                    {
+                      "DnsQuery": {
+                        "onmatch": "exclude",
+                        "Image": [
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon.exe"
+                          },
+                          {
+                            "condition": "is",
+                            "value": "C:\\Windows\\Sysmon64.exe"
+                          }
+                        ]
+                      },
+                      "groupRelation": "or"
+                    }
+                  ]
+                },
+                "XmlSha256": "9a7261a6bb857d35dbc1d9cb810692304a528316d0b82bcced3aa17955e71b1b",
+                "OS": "windows"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "HTTP 200 response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "CheckRevocation": false,
+                    "CopyOnDeletePE": false,
+                    "DnsLookup": false,
+                    "EventFiltering": {
+                      "ClipboardChange": {
+                        "onmatch": "exclude"
+                      },
+                      "CreateRemoteThread": {
+                        "onmatch": "exclude"
+                      },
+                      "DriverLoad": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateStreamHash": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateTime": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDelete": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDeleteDetected": {
+                        "onmatch": "exclude"
+                      },
+                      "NetworkConnect": {
+                        "onmatch": "exclude"
+                      },
+                      "PipeEvent": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTampering": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTerminate": {
+                        "onmatch": "exclude"
+                      },
+                      "RawAccessRead": {
+                        "onmatch": "exclude"
+                      },
+                      "RuleGroup": [
+                        {
+                          "ImageLoad": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "Signature": [
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows Publisher"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Corporation"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "ProcessAccess": {
+                            "GrantedAccess": [
+                              {
+                                "condition": "is",
+                                "value": "0x1000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x2000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x3000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x100000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x101000"
+                              }
+                            ],
+                            "SourceImage": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\wbem\\wmiprvse.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\System32\\VBoxService.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\taskmgr.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "RegistryEvent": {
+                            "EventType": [
+                              {
+                                "condition": "is not",
+                                "value": "SetValue"
+                              }
+                            ],
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "DnsQuery": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        }
+                      ],
+                      "WmiEvent": {
+                        "onmatch": "exclude"
+                      }
+                    },
+                    "HashAlgorithms": [
+                      "*"
+                    ],
+                    "OS": "windows",
+                    "XmlSha256": "9a7261a6bb857d35dbc1d9cb810692304a528316d0b82bcced3aa17955e71b1b",
+                    "schemaversion": "4.70"
+                  },
+                  "error": "",
+                  "message": "OK"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Manage sysmon configuration"
+        ],
+        "summary": "Delete a sysmon configuration",
+        "parameters": [
+          {
+            "name": "os",
+            "in": "path",
+            "description": "os path parameter",
+            "required": true,
+            "allowEmptyValue": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "version query parameter",
+            "required": true,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTTP 200 response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "CheckRevocation": false,
+                    "CopyOnDeletePE": false,
+                    "DnsLookup": false,
+                    "EventFiltering": {
+                      "ClipboardChange": {
+                        "onmatch": "exclude"
+                      },
+                      "CreateRemoteThread": {
+                        "onmatch": "exclude"
+                      },
+                      "DriverLoad": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateStreamHash": {
+                        "onmatch": "exclude"
+                      },
+                      "FileCreateTime": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDelete": {
+                        "onmatch": "exclude"
+                      },
+                      "FileDeleteDetected": {
+                        "onmatch": "exclude"
+                      },
+                      "NetworkConnect": {
+                        "onmatch": "exclude"
+                      },
+                      "PipeEvent": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessCreate": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTampering": {
+                        "onmatch": "exclude"
+                      },
+                      "ProcessTerminate": {
+                        "onmatch": "exclude"
+                      },
+                      "RawAccessRead": {
+                        "onmatch": "exclude"
+                      },
+                      "RuleGroup": [
+                        {
+                          "ImageLoad": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "Signature": [
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows Publisher"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Corporation"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "Microsoft Windows"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "ProcessAccess": {
+                            "GrantedAccess": [
+                              {
+                                "condition": "is",
+                                "value": "0x1000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x2000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x3000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x100000"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "0x101000"
+                              }
+                            ],
+                            "SourceImage": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\wbem\\wmiprvse.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\System32\\VBoxService.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\system32\\taskmgr.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "RegistryEvent": {
+                            "EventType": [
+                              {
+                                "condition": "is not",
+                                "value": "SetValue"
+                              }
+                            ],
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        },
+                        {
+                          "DnsQuery": {
+                            "Image": [
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon.exe"
+                              },
+                              {
+                                "condition": "is",
+                                "value": "C:\\Windows\\Sysmon64.exe"
+                              }
+                            ],
+                            "onmatch": "exclude"
+                          },
+                          "groupRelation": "or"
+                        }
+                      ],
+                      "WmiEvent": {
+                        "onmatch": "exclude"
+                      }
+                    },
+                    "HashAlgorithms": [
+                      "*"
+                    ],
+                    "OS": "windows",
+                    "XmlSha256": "9a7261a6bb857d35dbc1d9cb810692304a528316d0b82bcced3aa17955e71b1b",
+                    "schemaversion": "4.70"
                   },
                   "error": "",
                   "message": "OK"
@@ -307,8 +1148,8 @@
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-01-28T10:58:38.403781409Z",
-                    "last-detection": "2022-01-28T11:58:37.309299837+01:00",
+                    "last-connection": "2022-02-18T12:31:30.053301775Z",
+                    "last-detection": "2022-02-18T13:31:28.890186858+01:00",
                     "score": 0,
                     "status": "",
                     "system-info": {
@@ -687,8 +1528,8 @@
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-01-28T10:58:38.403781409Z",
-                    "last-detection": "2022-01-28T11:58:37.309299837+01:00",
+                    "last-connection": "2022-02-18T12:31:30.053301775Z",
+                    "last-detection": "2022-02-18T13:31:28.890186858+01:00",
                     "score": 0,
                     "status": "New Status",
                     "system-info": {
@@ -771,8 +1612,8 @@
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-01-28T10:58:38.403781409Z",
-                    "last-detection": "2022-01-28T11:58:37.309299837+01:00",
+                    "last-connection": "2022-02-18T12:31:30.053301775Z",
+                    "last-detection": "2022-02-18T13:31:28.890186858+01:00",
                     "score": 0,
                     "status": "New Status",
                     "system-info": {
@@ -866,21 +1707,21 @@
                   "data": [
                     {
                       "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                      "creation": "2022-01-28T10:58:43.001721634Z",
+                      "creation": "2022-02-18T12:31:35.151269463Z",
                       "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                       "files": [
                         {
                           "name": "bar.txt",
                           "size": 4,
-                          "timestamp": "2022-01-28T10:58:43.011721641Z"
+                          "timestamp": "2022-02-18T12:31:35.161269501Z"
                         },
                         {
                           "name": "foo.txt",
                           "size": 4,
-                          "timestamp": "2022-01-28T10:58:43.001721634Z"
+                          "timestamp": "2022-02-18T12:31:35.151269463Z"
                         }
                       ],
-                      "modification": "2022-01-28T10:58:43.011721641Z",
+                      "modification": "2022-02-18T12:31:35.161269501Z",
                       "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                     }
                   ],
@@ -1025,11 +1866,11 @@
                     "json": null,
                     "name": "/usr/bin/printf",
                     "sent": true,
-                    "sent-time": "2022-01-28T11:58:39.546313284+01:00",
+                    "sent-time": "2022-02-18T13:31:31.391387264+01:00",
                     "stderr": null,
                     "stdout": "SGVsbG8gV29ybGQ=",
                     "timeout": 0,
-                    "uuid": "a4231065-f12b-cbf1-2fb5-6456f8665e6c"
+                    "uuid": "1f4fef2b-d60a-5123-08bc-70bb13390e5d"
                   },
                   "error": "",
                   "message": "OK"
@@ -1117,15 +1958,15 @@
                       "stderr": null,
                       "stdout": null,
                       "timeout": 0,
-                      "uuid": "a4231065-f12b-cbf1-2fb5-6456f8665e6c"
+                      "uuid": "1f4fef2b-d60a-5123-08bc-70bb13390e5d"
                     },
                     "criticality": 0,
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "key": "B9sah5THLSdSoiRLz9Ri3TIkhUoWuLUQJTJYaBfaCjJR1fR99T2s1YynwXQXyReN",
-                    "last-connection": "2022-01-28T10:58:39.522675194Z",
-                    "last-detection": "2022-01-28T11:58:38.432535508+01:00",
+                    "key": "FwL3mhI7GNjsX8FgItaopmrhqxYNWoRdvR4vKKw8j76yBa9SnhbXTIFETXja4mTx",
+                    "last-connection": "2022-02-18T12:31:31.322551437Z",
+                    "last-detection": "2022-02-18T13:31:30.089205878+01:00",
                     "score": 0,
                     "status": "",
                     "system-info": {
@@ -1339,92 +2180,6 @@
                       "Event": {
                         "Detection": {
                           "Actions": [],
-                          "Criticality": 10,
-                          "Signature": [
-                            "UnknownServices"
-                          ]
-                        },
-                        "EdrData": {
-                          "Endpoint": {
-                            "Group": "",
-                            "Hostname": "OpenHappy",
-                            "IP": "127.0.0.1",
-                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
-                          },
-                          "Event": {
-                            "Detection": true,
-                            "Hash": "85c1893511233162eb4d28719de480400b475521",
-                            "ReceiptTime": "2022-01-28T10:58:37.208588752Z"
-                          }
-                        },
-                        "EventData": {
-                          "Ancestors": "System|C:\\Windows\\System32\\smss.exe|C:\\Windows\\System32\\smss.exe|C:\\Windows\\System32\\wininit.exe|C:\\Windows\\System32\\services.exe",
-                          "CommandLine": "\"C:\\Program Files\\osquery\\osqueryd\\osqueryd.exe\" --flagfile=\"C:\\Program Files\\osquery\\osquery.flags\"",
-                          "Company": "Facebook",
-                          "CurrentDirectory": "C:\\Windows\\system32\\",
-                          "Description": "osquery daemon and shell",
-                          "FileVersion": "4.8.0.0",
-                          "Hashes": "SHA1=ED57ADE89F017B9020D727749EC32EA6646DE163,MD5=50D99BE393641C95354D00DD9DB11F72,SHA256=4FE020D36C4031FC7E4D0AED28A1C1AABD157CAF49B2C9D16DBDDD4AAB19FA86,IMPHASH=27E96EFBAE3B96032D450234A10EDE3B",
-                          "Image": "C:\\Program Files\\osquery\\osqueryd\\osqueryd.exe",
-                          "ImageSize": "21713568",
-                          "IntegrityLevel": "System",
-                          "LogonGuid": "{515cd0d1-7667-6123-e703-000000000000}",
-                          "LogonId": "0x3E7",
-                          "OriginalFileName": "osqueryd.exe",
-                          "ParentCommandLine": "C:\\Windows\\system32\\services.exe",
-                          "ParentImage": "C:\\Windows\\System32\\services.exe",
-                          "ParentIntegrityLevel": "System",
-                          "ParentProcessGuid": "{515cd0d1-7666-6123-0b00-000000007300}",
-                          "ParentProcessId": "692",
-                          "ParentServices": "N/A",
-                          "ParentUser": "NT AUTHORITY\\SYSTEM",
-                          "ProcessGuid": "{515cd0d1-7669-6123-4800-000000007300}",
-                          "ProcessId": "3184",
-                          "Product": "osquery",
-                          "RuleName": "-",
-                          "Services": "osqueryd",
-                          "TerminalSessionId": "0",
-                          "User": "NT AUTHORITY\\SYSTEM",
-                          "UtcTime": "2021-08-23 10:20:25.415"
-                        },
-                        "System": {
-                          "Channel": "Microsoft-Windows-Sysmon/Operational",
-                          "Computer": "DESKTOP-LJRVE06",
-                          "EventID": 1,
-                          "Execution": {
-                            "ProcessID": 3220,
-                            "ThreadID": 3848
-                          },
-                          "Keywords": {
-                            "Name": "",
-                            "Value": 9223372036854776000
-                          },
-                          "Level": {
-                            "Name": "Information",
-                            "Value": 4
-                          },
-                          "Opcode": {
-                            "Name": "Info",
-                            "Value": 0
-                          },
-                          "Provider": {
-                            "Guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
-                            "Name": "Microsoft-Windows-Sysmon"
-                          },
-                          "Task": {
-                            "Name": "",
-                            "Value": 0
-                          },
-                          "TimeCreated": {
-                            "SystemTime": "2022-01-28T11:58:36.168606639+01:00"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "Event": {
-                        "Detection": {
-                          "Actions": [],
                           "Criticality": 8,
                           "Signature": [
                             "NewAutorun"
@@ -1439,8 +2194,8 @@
                           },
                           "Event": {
                             "Detection": true,
-                            "Hash": "f4e660c5c21dec2e28a2a32a9274f180618a5d2d",
-                            "ReceiptTime": "2022-01-28T10:58:37.2089718Z"
+                            "Hash": "ba35477019eda111bd5e9556b88b573535f46194",
+                            "ReceiptTime": "2022-02-18T12:31:28.654987083Z"
                           }
                         },
                         "EventData": {
@@ -1456,10 +2211,10 @@
                           "IntegrityLevel": "System",
                           "ProcessGuid": "{515cd0d1-7669-6123-4e00-000000007300}",
                           "ProcessId": "3276",
-                          "ProcessThreatScore": "32",
+                          "ProcessThreatScore": "8",
                           "RuleName": "-",
                           "Services": "WinDefend",
-                          "TargetObject": "HKCR\\CLSID\\{4DB116D1-9B24-4DFC-946B-BFE03E852002}\\InProcServer32\\(Default)",
+                          "TargetObject": "HKCR\\CLSID\\{2DCD7FDB-8809-48E4-8E4F-3157C57CF987}\\InprocServer32\\(Default)",
                           "User": "NT AUTHORITY\\SYSTEM",
                           "UtcTime": "2021-08-23 10:20:25.878"
                         },
@@ -1492,7 +2247,83 @@
                             "Value": 0
                           },
                           "TimeCreated": {
-                            "SystemTime": "2022-01-28T11:58:36.168649437+01:00"
+                            "SystemTime": "2022-02-18T13:31:27.595348416+01:00"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "Event": {
+                        "Detection": {
+                          "Actions": [],
+                          "Criticality": 8,
+                          "Signature": [
+                            "NewAutorun"
+                          ]
+                        },
+                        "EdrData": {
+                          "Endpoint": {
+                            "Group": "",
+                            "Hostname": "OpenHappy",
+                            "IP": "127.0.0.1",
+                            "UUID": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
+                          },
+                          "Event": {
+                            "Detection": true,
+                            "Hash": "f3ff9a031ffb9bda83ead6e2b41518e001db116d",
+                            "ReceiptTime": "2022-02-18T12:31:28.655926037Z"
+                          }
+                        },
+                        "EventData": {
+                          "CommandLine": "\"C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe\"",
+                          "CurrentDirectory": "C:\\Windows\\system32\\",
+                          "Details": "\"%%ProgramFiles%%\\Windows Defender\\MSASCuiL.exe\"",
+                          "EventType": "SetValue",
+                          "Image": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.2106.6-0\\MsMpEng.exe",
+                          "ImageHashes": "SHA1=FBF03B5D6DC1A7EDAB0BA8D4DD27291C739E5813,MD5=B1C15F9DB942B373B2FC468B7048E63F,SHA256=1DC05B6DD6281840CEB822604B0E403E499180D636D02EC08AD77B4EB56F1B9C,IMPHASH=8AA2B8727E6858A3557A4C09970B9A5D",
+                          "ImageSignature": "?",
+                          "ImageSignatureStatus": "?",
+                          "ImageSigned": "false",
+                          "IntegrityLevel": "System",
+                          "ProcessGuid": "{515cd0d1-7669-6123-4e00-000000007300}",
+                          "ProcessId": "3276",
+                          "ProcessThreatScore": "56",
+                          "RuleName": "-",
+                          "Services": "WinDefend",
+                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\WindowsDefender",
+                          "User": "NT AUTHORITY\\SYSTEM",
+                          "UtcTime": "2021-08-23 10:20:26.175"
+                        },
+                        "System": {
+                          "Channel": "Microsoft-Windows-Sysmon/Operational",
+                          "Computer": "DESKTOP-LJRVE06",
+                          "EventID": 13,
+                          "Execution": {
+                            "ProcessID": 3220,
+                            "ThreadID": 3848
+                          },
+                          "Keywords": {
+                            "Name": "",
+                            "Value": 9223372036854776000
+                          },
+                          "Level": {
+                            "Name": "Information",
+                            "Value": 4
+                          },
+                          "Opcode": {
+                            "Name": "Info",
+                            "Value": 0
+                          },
+                          "Provider": {
+                            "Guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
+                            "Name": "Microsoft-Windows-Sysmon"
+                          },
+                          "Task": {
+                            "Name": "",
+                            "Value": 0
+                          },
+                          "TimeCreated": {
+                            "SystemTime": "2022-02-18T13:31:27.595485869+01:00"
                           }
                         }
                       }
@@ -1618,14 +2449,14 @@
                           },
                           "Event": {
                             "Detection": false,
-                            "Hash": "82b96ac17d1f3d992752db30192334cf6aebb983",
-                            "ReceiptTime": "2022-01-28T10:58:37.203669307Z"
+                            "Hash": "13e9e84c6d5243d38d71a2206ac884986e02f89c",
+                            "ReceiptTime": "2022-02-18T12:31:28.643780793Z"
                           }
                         },
                         "EventData": {
                           "CommandLine": "C:\\Windows\\system32\\svchost.exe -k appmodel -p -s StateRepository",
                           "CurrentDirectory": "C:\\Windows\\system32\\",
-                          "Details": "DWORD (0x00000003)",
+                          "Details": "Binary Data",
                           "EventType": "SetValue",
                           "Image": "C:\\Windows\\system32\\svchost.exe",
                           "ImageHashes": "SHA1=75C5A97F521F760E32A4A9639A653EED862E9C61,MD5=9520A99E77D6196D0D09833146424113,SHA256=DD191A5B23DF92E12A8852291F9FB5ED594B76A28A5A464418442584AFD1E048,IMPHASH=247B9220E5D9B720A82B2C8B5069AD69",
@@ -1638,9 +2469,9 @@
                           "ProcessThreatScore": "0",
                           "RuleName": "-",
                           "Services": "StateRepository",
-                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\PackageUser\\Data\\531\\User",
+                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\ApplicationExtension\\Data\\2b\\_IndexKeys",
                           "User": "NT AUTHORITY\\SYSTEM",
-                          "UtcTime": "2021-08-23 10:20:30.490"
+                          "UtcTime": "2021-08-23 10:20:30.581"
                         },
                         "System": {
                           "Channel": "Microsoft-Windows-Sysmon/Operational",
@@ -1671,7 +2502,7 @@
                             "Value": 0
                           },
                           "TimeCreated": {
-                            "SystemTime": "2022-01-28T11:58:36.167812151+01:00"
+                            "SystemTime": "2022-02-18T13:31:27.594419558+01:00"
                           }
                         }
                       }
@@ -1687,14 +2518,14 @@
                           },
                           "Event": {
                             "Detection": false,
-                            "Hash": "c9d53e1e361434e93296ffbf74fe7d4b11945f79",
-                            "ReceiptTime": "2022-01-28T10:58:37.204205048Z"
+                            "Hash": "4f14b9bd5b500cfd84b2badeacd1c07b3b455c2c",
+                            "ReceiptTime": "2022-02-18T12:31:28.644737448Z"
                           }
                         },
                         "EventData": {
                           "CommandLine": "C:\\Windows\\system32\\svchost.exe -k appmodel -p -s StateRepository",
                           "CurrentDirectory": "C:\\Windows\\system32\\",
-                          "Details": "DWORD (0x00000014)",
+                          "Details": "DWORD (0x00000008)",
                           "EventType": "SetValue",
                           "Image": "C:\\Windows\\system32\\svchost.exe",
                           "ImageHashes": "SHA1=75C5A97F521F760E32A4A9639A653EED862E9C61,MD5=9520A99E77D6196D0D09833146424113,SHA256=DD191A5B23DF92E12A8852291F9FB5ED594B76A28A5A464418442584AFD1E048,IMPHASH=247B9220E5D9B720A82B2C8B5069AD69",
@@ -1707,9 +2538,9 @@
                           "ProcessThreatScore": "0",
                           "RuleName": "-",
                           "Services": "StateRepository",
-                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\Application\\Data\\17\\Package",
+                          "TargetObject": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel\\StateRepository\\Cache\\Package\\Data\\2c\\Flags",
                           "User": "NT AUTHORITY\\SYSTEM",
-                          "UtcTime": "2021-08-23 10:20:30.146"
+                          "UtcTime": "2021-08-23 10:20:29.754"
                         },
                         "System": {
                           "Channel": "Microsoft-Windows-Sysmon/Operational",
@@ -1740,7 +2571,7 @@
                             "Value": 0
                           },
                           "TimeCreated": {
-                            "SystemTime": "2022-01-28T11:58:36.167812525+01:00"
+                            "SystemTime": "2022-02-18T13:31:27.594420188+01:00"
                           }
                         }
                       }
@@ -1786,30 +2617,30 @@
                     "avg-signature-criticality": 0,
                     "bounded-score": 0,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 4,
-                      "NewAutorun": 16,
-                      "SuspiciousService": 8,
-                      "UnknownServices": 5,
-                      "UntrustedDriverLoaded": 17
+                      "DefenderConfigChanged": 1,
+                      "NewAutorun": 23,
+                      "SuspiciousService": 5,
+                      "UnknownServices": 8,
+                      "UntrustedDriverLoaded": 13
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2022-01-28T11:58:39.634708357+01:00",
+                    "median-time": "2022-02-18T13:31:31.512025697+01:00",
                     "score": 0,
                     "signature-count": 50,
                     "signature-criticality-metric": 0,
                     "signature-diversity": 100,
                     "signatures": [
+                      "SuspiciousService",
+                      "DefenderConfigChanged",
                       "UnknownServices",
                       "NewAutorun",
-                      "UntrustedDriverLoaded",
-                      "DefenderConfigChanged",
-                      "SuspiciousService"
+                      "UntrustedDriverLoaded"
                     ],
-                    "start-time": "2022-01-28T11:58:39.632420476+01:00",
+                    "start-time": "2022-02-18T13:31:31.507915208+01:00",
                     "std-dev-alert-criticality": 0,
                     "std-dev-signature-criticality": -92233720368547760,
-                    "stop-time": "2022-01-28T11:58:39.636996239+01:00",
+                    "stop-time": "2022-02-18T13:31:31.516136186+01:00",
                     "sum-alert-criticality": 0,
                     "sum-rule-criticality": 0,
                     "tactics": null,
@@ -1853,15 +2684,15 @@
                     "avg-signature-criticality": 0,
                     "bounded-score": 0,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 4,
-                      "NewAutorun": 16,
-                      "SuspiciousService": 8,
-                      "UnknownServices": 5,
-                      "UntrustedDriverLoaded": 17
+                      "DefenderConfigChanged": 1,
+                      "NewAutorun": 23,
+                      "SuspiciousService": 5,
+                      "UnknownServices": 8,
+                      "UntrustedDriverLoaded": 13
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2022-01-28T11:58:39.634708357+01:00",
+                    "median-time": "2022-02-18T13:31:31.512025697+01:00",
                     "score": 0,
                     "signature-count": 50,
                     "signature-criticality-metric": 0,
@@ -1870,13 +2701,13 @@
                       "UnknownServices",
                       "NewAutorun",
                       "UntrustedDriverLoaded",
-                      "DefenderConfigChanged",
-                      "SuspiciousService"
+                      "SuspiciousService",
+                      "DefenderConfigChanged"
                     ],
-                    "start-time": "2022-01-28T11:58:39.632420476+01:00",
+                    "start-time": "2022-02-18T13:31:31.507915208+01:00",
                     "std-dev-alert-criticality": 0,
                     "std-dev-signature-criticality": -92233720368547760,
-                    "stop-time": "2022-01-28T11:58:39.636996239+01:00",
+                    "stop-time": "2022-02-18T13:31:31.516136186+01:00",
                     "sum-alert-criticality": 0,
                     "sum-rule-criticality": 0,
                     "tactics": null,
@@ -1962,20 +2793,20 @@
                     {
                       "alert-count": 50,
                       "alert-criticality-metric": 0,
-                      "archived-time": "2022-01-28T11:58:40.725833736+01:00",
+                      "archived-time": "2022-02-18T13:31:32.759630107+01:00",
                       "avg-alert-criticality": 0,
                       "avg-signature-criticality": 0,
                       "bounded-score": 0,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 4,
-                        "NewAutorun": 16,
-                        "SuspiciousService": 8,
-                        "UnknownServices": 5,
-                        "UntrustedDriverLoaded": 17
+                        "DefenderConfigChanged": 1,
+                        "NewAutorun": 23,
+                        "SuspiciousService": 5,
+                        "UnknownServices": 8,
+                        "UntrustedDriverLoaded": 13
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2022-01-28T11:58:39.634708357+01:00",
+                      "median-time": "2022-02-18T13:31:31.512025697+01:00",
                       "score": 0,
                       "signature-count": 50,
                       "signature-criticality-metric": 0,
@@ -1984,13 +2815,13 @@
                         "UnknownServices",
                         "NewAutorun",
                         "UntrustedDriverLoaded",
-                        "DefenderConfigChanged",
-                        "SuspiciousService"
+                        "SuspiciousService",
+                        "DefenderConfigChanged"
                       ],
-                      "start-time": "2022-01-28T11:58:39.632420476+01:00",
+                      "start-time": "2022-02-18T13:31:31.507915208+01:00",
                       "std-dev-alert-criticality": 0,
                       "std-dev-signature-criticality": -92233720368547760,
-                      "stop-time": "2022-01-28T11:58:39.636996239+01:00",
+                      "stop-time": "2022-02-18T13:31:31.516136186+01:00",
                       "sum-alert-criticality": 0,
                       "sum-rule-criticality": 0,
                       "tactics": null,
@@ -2072,10 +2903,10 @@
                 "example": {
                   "data": [
                     {
-                      "guuid": "234351cd-4fea-417e-eb0e-6c6fd1206dcf",
+                      "guuid": "3ddbc607-5a53-71f2-063b-c065054891e8",
                       "source": "XyzTIProvider",
                       "type": "domain",
-                      "uuid": "0a9b375c-5ad9-13f7-cba9-b43f695bb52d",
+                      "uuid": "77f6665a-6a18-4e5c-00d6-fb8570c1ced7",
                       "value": "some.random.domain"
                     }
                   ],
@@ -2123,8 +2954,8 @@
               },
               "example": [
                 {
-                  "uuid": "0a9b375c-5ad9-13f7-cba9-b43f695bb52d",
-                  "guuid": "234351cd-4fea-417e-eb0e-6c6fd1206dcf",
+                  "uuid": "77f6665a-6a18-4e5c-00d6-fb8570c1ced7",
+                  "guuid": "3ddbc607-5a53-71f2-063b-c065054891e8",
                   "source": "XyzTIProvider",
                   "value": "some.random.domain",
                   "type": "domain"
@@ -2142,10 +2973,10 @@
                 "example": {
                   "data": [
                     {
-                      "guuid": "234351cd-4fea-417e-eb0e-6c6fd1206dcf",
+                      "guuid": "3ddbc607-5a53-71f2-063b-c065054891e8",
                       "source": "XyzTIProvider",
                       "type": "domain",
-                      "uuid": "0a9b375c-5ad9-13f7-cba9-b43f695bb52d",
+                      "uuid": "77f6665a-6a18-4e5c-00d6-fb8570c1ced7",
                       "value": "some.random.domain"
                     }
                   ],
@@ -2642,8 +3473,8 @@
                     "description": "",
                     "group": "",
                     "identifier": "TestAdminUser",
-                    "key": "WGtD4Q4RKSMVQwch3Grbt5MqhuT0zp1whOIvxqwLzmVN5vgIevUyfCKemMmDS7FW",
-                    "uuid": "4257662a-a230-6f26-b24b-b98bb917b80a"
+                    "key": "G9b01iVJdEPeLKv5aNufPFHIuhMoyWJ5VelRyy8nfVBaXcHvPdP6Xqgt6s0dFK81",
+                    "uuid": "1302ea4f-4220-fc3a-6fc9-f4e897abc483"
                   },
                   "error": "",
                   "message": "OK"
@@ -2686,7 +3517,7 @@
                 }
               },
               "example": {
-                "uuid": "9acbe672-c255-da79-7c11-55ea9cb8b25e",
+                "uuid": "84de075d-d1a4-6330-ed79-caf3bd15c2c2",
                 "identifier": "SecondTestAdmin",
                 "key": "ChangeMe",
                 "group": "CSIRT",
@@ -2707,7 +3538,7 @@
                     "group": "CSIRT",
                     "identifier": "SecondTestAdmin",
                     "key": "ChangeMe",
-                    "uuid": "9acbe672-c255-da79-7c11-55ea9cb8b25e"
+                    "uuid": "84de075d-d1a4-6330-ed79-caf3bd15c2c2"
                   },
                   "error": "",
                   "message": "OK"
@@ -2795,7 +3626,7 @@
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "9acbe672-c255-da79-7c11-55ea9cb8b25e"
+                    "uuid": "84de075d-d1a4-6330-ed79-caf3bd15c2c2"
                   },
                   "error": "",
                   "message": "OK"
@@ -2833,7 +3664,7 @@
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "9acbe672-c255-da79-7c11-55ea9cb8b25e"
+                    "uuid": "84de075d-d1a4-6330-ed79-caf3bd15c2c2"
                   },
                   "error": "",
                   "message": "OK"

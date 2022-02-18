@@ -1,6 +1,12 @@
 package sysmon
 
-type Sysmon struct {
+import "fmt"
+
+var (
+	ErrSysmonNotInstalled = fmt.Errorf("sysmon is not installed")
+)
+
+type Info struct {
 	Err     error  `json:"error,omitempty"`
 	Version string `json:"version"`
 

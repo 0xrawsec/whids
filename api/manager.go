@@ -27,6 +27,7 @@ import (
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/ioc"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 
@@ -331,6 +332,11 @@ func (m *Manager) initializeDB() (err error) {
 
 	// Creating IOC table
 	if err = m.db.Create(&ioc.IOC{}, sod.DefaultSchema); err != nil {
+		return
+	}
+
+	// Creating Sysmon config table
+	if err = m.db.Create(&sysmon.Config{}, sod.DefaultSchema); err != nil {
 		return
 	}
 

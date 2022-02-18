@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/0xrawsec/whids/utils/command"
 	"github.com/google/shlex"
 	"github.com/google/uuid"
 )
@@ -134,7 +135,7 @@ func (c *Command) Unrunnable() {
 func (c *Command) Run() (err error) {
 	// current working directory for command
 	var cwd string
-	var cmd *exec.Cmd
+	var cmd *command.Cmd
 
 	// if we want to execute a binary
 	if len(c.Drop) > 0 {
@@ -169,36 +170,39 @@ func (c *Command) Run() (err error) {
 
 	// we have something to run
 	if c.Name != "" && c.runnable {
-		cmd, err = c.BuildCmd()
-		if err == nil {
-			c.Name = cmd.Path
-			c.Args = cmd.Args
-			// if we dropped a binary we use the relative directory as working directory
-			if cwd != "" {
-				cmd.Dir = cwd
-			}
 
-			// we run the command and wait for its output
-			stdout, err := cmd.Output()
-			if err != nil {
-				if ee, ok := err.(*exec.ExitError); ok {
-					c.Stderr = ee.Stderr
-				}
-				c.Error = fmt.Sprintf("%s", err)
-			}
+		if c.Timeout > 0 {
+			cmd = command.CommandTimeout(c.Timeout, c.Name, c.Args...)
+		} else {
+			cmd = command.Command(c.Name, c.Args...)
+		}
+		defer cmd.Terminate()
 
-			// if we expect JSON output
-			if c.ExpectJSON {
-				if err := json.Unmarshal(stdout, &c.Json); err != nil {
-					c.Stdout = stdout
-				}
-			} else {
+		// ToDo consider removing that !
+		c.Name = cmd.Path
+		c.Args = cmd.Args
+
+		// if we dropped a binary we use the relative directory as working directory
+		if cwd != "" {
+			cmd.Dir = cwd
+		}
+
+		// we run the command and wait for its output
+		stdout, err := cmd.Output()
+		if err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				c.Stderr = ee.Stderr
+			}
+			c.Error = fmt.Sprintf("%s", err)
+		}
+
+		// if we expect JSON output
+		if c.ExpectJSON {
+			if err := json.Unmarshal(stdout, &c.Json); err != nil {
 				c.Stdout = stdout
 			}
-
 		} else {
-			// if we failed to build the command we set error field
-			c.Error = fmt.Sprintf("Failed to build command: %s", err)
+			c.Stdout = stdout
 		}
 	}
 

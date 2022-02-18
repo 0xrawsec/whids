@@ -20,6 +20,7 @@ import (
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/ioc"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
@@ -1008,6 +1009,80 @@ func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Reques
 	}
 }
 
+func (m *Manager) admAPIEndpointSysmonConfig(wt http.ResponseWriter, rq *http.Request) {
+	var config = &sysmon.Config{}
+
+	format := rq.URL.Query().Get(qpFormat)
+	raw, _ := strconv.ParseBool(rq.URL.Query().Get(qpRaw))
+	sversion := rq.URL.Query().Get(qpVersion)
+
+	if os, err := muxGetVar(rq, "os"); err == nil {
+
+		switch rq.Method {
+		case "GET":
+			err = m.db.Search(&sysmon.Config{}, "OS", "=", os).
+				And("SchemaVersion", "=", sversion).AssignOne(&config)
+			if err == nil {
+				if format == "xml" {
+					if xml, err := config.XML(); err == nil {
+						if raw {
+							wt.Header().Set("Content-Type", "application/xml")
+							wt.Write(xml)
+						} else {
+							wt.Write(admJSONResp(string(xml)))
+						}
+					} else {
+						wt.Write(admErr(err))
+					}
+				} else {
+					wt.Write(admJSONResp(config))
+				}
+			} else {
+				wt.Write(admErr(err))
+			}
+
+		case "POST":
+			var new = &sysmon.Config{}
+
+			readPost := readPostAsJSON
+			if format == "xml" {
+				readPost = readPostAsXML
+			}
+
+			if err := readPost(rq, new); err == nil {
+				m.db.Search(&sysmon.Config{}, "OS", "=", os).
+					And("SchemaVersion", "=", new.SchemaVersion).AssignOne(&config)
+
+				new.Initialize(config.UUID())
+				// setting up configuration OS
+				new.OS = os
+				if err := m.db.InsertOrUpdate(new); err == nil {
+					// we return configuration
+					wt.Write(admJSONResp(new))
+				} else {
+					wt.Write(admErr(err))
+				}
+			} else {
+				wt.Write(admErr(err))
+			}
+
+		case "DELETE":
+			if o, err := m.db.Search(&sysmon.Config{}, "OS", "=", os).
+				And("SchemaVersion", "=", sversion).One(); err == nil {
+				if err = m.db.Delete(o); err == nil {
+					wt.Write(admJSONResp(o))
+				} else {
+					wt.Write(admErr(err))
+				}
+			} else {
+				wt.Write(admErr(err))
+			}
+		}
+	} else {
+		wt.Write(admErr(err))
+	}
+}
+
 type stats struct {
 	EndpointCount int `json:"endpoint-count"`
 	RuleCount     int `json:"rule-count"`
@@ -1341,6 +1416,7 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointsArtifactsPath, m.admAPIArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
+		rt.HandleFunc(AdmAPIEndpointsSysmonConfig, m.admAPIEndpointSysmonConfig).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIIocsPath, m.admAPIIocs).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")

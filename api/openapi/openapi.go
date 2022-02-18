@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 const (
 	ContentTypeJson = "application/json"
+	ContentTypeXML  = "application/xml"
 )
 
 type OpenAPI struct {
@@ -523,6 +525,10 @@ func JsonRequestBody(desc string, data interface{}, required bool) *RequestBody 
 	return MakeRequestBody(desc, ContentTypeJson, data, required)
 }
 
+func XMLRequestBody(desc string, data interface{}, required bool) *RequestBody {
+	return MakeRequestBody(desc, ContentTypeXML, data, required)
+}
+
 func MakeRequestBody(desc, contentType string, data interface{}, required bool) *RequestBody {
 	content := make(map[string]MediaType)
 	content[contentType] = MediaType{
@@ -541,6 +547,8 @@ func (r *RequestBody) ContentBytes() (b []byte, err error) {
 		switch ct {
 		case ContentTypeJson:
 			return json.Marshal(mt.Example)
+		case ContentTypeXML:
+			return xml.Marshal(mt.Example)
 		default:
 			return nil, fmt.Errorf("unknown Content-Type: %s", ct)
 		}
@@ -633,10 +641,20 @@ func SchemaFrom(i interface{}, contentType string) (s *Schema) {
 			fieldName := t.Field(i).Name
 			if string(fieldName[0]) == strings.ToUpper(string(fieldName[0])) {
 				switch contentType {
-				case ContentTypeJson:
-					jsonTag := t.Field(i).Tag.Get("json")
-					if jsonTag != "" {
-						name := strings.SplitN(jsonTag, ",", 2)[0]
+				case ContentTypeJson, ContentTypeXML:
+					tag := "json"
+					if contentType == ContentTypeXML {
+						tag = "xml"
+					}
+					tagVal := t.Field(i).Tag.Get(tag)
+
+					// this field should be ignored
+					if tagVal == "-" {
+						continue
+					}
+
+					if tagVal != "" {
+						name := strings.SplitN(tagVal, ",", 2)[0]
 						fields[name] = SchemaFrom(v.Field(i).Interface(), contentType)
 					} else {
 						// if there is no json tag we take field name

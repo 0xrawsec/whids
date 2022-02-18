@@ -47,11 +47,12 @@ const (
 	AdmAPIUsers    = "/users"
 	AdmAPIUserByID = AdmAPIUsers + "/{uuuid:" + uuidRe + "}"
 
-	AdmAPIStatsPath         = "/stats"
-	AdmAPIIocsPath          = "/iocs"
-	AdmAPIRulesPath         = "/rules"
-	AdmAPIEndpointsPath     = "/endpoints"
-	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
+	AdmAPIStatsPath             = "/stats"
+	AdmAPIIocsPath              = "/iocs"
+	AdmAPIRulesPath             = "/rules"
+	AdmAPIEndpointsPath         = "/endpoints"
+	AdmAPIEndpointsSysmonConfig = AdmAPIEndpointsPath + `/{os:\w+}/sysmon/config`
+	AdmAPIEndpointsByIDPath     = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related
 	AdmAPICommandSuffix            = "/command"
 	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + AdmAPICommandSuffix

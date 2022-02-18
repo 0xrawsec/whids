@@ -25,4 +25,6 @@ const (
 	qpGunzip      = "gunzip"
 	qpUuid        = "uuid"
 	qpGroupUuid   = "guuid"
+	qpFormat      = "format"
+	qpVersion     = "version"
 )

@@ -8,13 +8,12 @@ import (
 	"strings"
 
 	"github.com/0xrawsec/golang-win32/win32/advapi32"
-	"github.com/0xrawsec/whids/hids/sysmon"
+	"github.com/0xrawsec/whids/os"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
 
 const (
-	OS = "windows"
-
 	pathBuildInfo  = `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\`
 	pathSystemInfo = `HKLM\SYSTEM\CurrentControlSet\Control\SystemInformation\`
 	pathProcInfo   = `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\`
@@ -41,7 +40,7 @@ func NewSystemInfo() (info *SystemInfo) {
 	info.BIOS.Version = utils.RegValueToString(pathSystemInfo, "BIOSVersion")
 	info.BIOS.Date = utils.RegValueToString(pathSystemInfo, "BIOSReleaseDate")
 
-	info.OS.Name = OS
+	info.OS.Name = os.OS
 	info.OS.Build = utils.RegValueToString(pathBuildInfo, "CurrentBuild")
 	info.OS.Version = version
 	info.OS.Product = utils.RegValueToString(pathBuildInfo, "ProductName")
@@ -52,6 +51,6 @@ func NewSystemInfo() (info *SystemInfo) {
 	procs, _ := advapi32.RegEnumKeys(pathProcInfo)
 	info.CPU.Count = len(procs)
 
-	info.Sysmon = sysmon.NewSysmonConfig()
+	info.Sysmon = sysmon.NewSysmonInfo()
 	return
 }

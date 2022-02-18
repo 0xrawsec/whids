@@ -1,6 +1,6 @@
 package sysinfo
 
-import "github.com/0xrawsec/whids/hids/sysmon"
+import "github.com/0xrawsec/whids/sysmon"
 
 type SystemInfo struct {
 	System struct {
@@ -40,5 +40,5 @@ type SystemInfo struct {
 		Count int    `json:"count"`
 	} `json:"cpu"`
 
-	Sysmon *sysmon.Sysmon `json:"sysmon"`
+	Sysmon *sysmon.Info `json:"sysmon"`
 }
