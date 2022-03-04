@@ -11,6 +11,9 @@ const (
 	// EptAPIRulesSha256Path API route used to retrieve sha256 of latest batch of Gene rules
 	EptAPIRulesSha256Path = "/rules/sha256"
 
+	EptAPISysmonConfigPath       = "/sysmon/config"
+	EptAPISysmonConfigSha256Path = "/sysmon/config/sha256"
+
 	// EptAPIIoCsPath API route used to serve IOC container
 	EptAPIIoCsPath = "/iocs"
 	// EptAPIIoCsSha256Path API route used to serve sha256 of IOC container

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"math/rand"
 	"path/filepath"
@@ -12,6 +14,8 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/ioc"
+	"github.com/0xrawsec/whids/os"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -31,7 +35,7 @@ func TestClientGetRules(t *testing.T) {
 
 	tt := toast.FromT(t)
 	m, c := prep()
-	defer m.Shutdown()
+	defer cleanup(m)
 
 	rules, err := c.GetRules()
 	tt.CheckErr(err)
@@ -46,7 +50,7 @@ func TestClientPostDump(t *testing.T) {
 
 	tt := toast.FromT(t)
 	m, c := prep()
-	defer m.Shutdown()
+	defer cleanup(m)
 
 	for wi := range fswalker.Walk("./dumps") {
 		for _, fi := range wi.Files {
@@ -71,7 +75,7 @@ func TestClientContainer(t *testing.T) {
 
 	tt := toast.FromT(t)
 	m, c := prep()
-	defer m.Shutdown()
+	defer cleanup(m)
 
 	niocs := 1000
 	iocs := make([]ioc.IOC, 0, niocs)
@@ -129,7 +133,7 @@ func TestClientExecuteCommand(t *testing.T) {
 
 	tt := toast.FromT(t)
 	m, c := prep()
-	defer m.Shutdown()
+	defer cleanup(m)
 
 	cmd = NewCommand()
 
@@ -159,7 +163,7 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 
 	tt := toast.FromT(t)
 	m, c := prep()
-	defer m.Shutdown()
+	defer cleanup(m)
 
 	cmd = NewCommand()
 	// adding files to drop
@@ -198,4 +202,39 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 	tt.Assert(cmd.Fetch["/nonexistingfile"].Error != "")
 
 	t.Logf(cmd.Fetch["/nonexistingfile"].Error)
+}
+
+func TestClientSysmonConfig(t *testing.T) {
+	var err error
+
+	sversion := "4.70"
+	tt := toast.FromT(t)
+	m, c := prep()
+	defer cleanup(m)
+
+	// test emptyness
+	sha256, err := c.GetSysmonConfigSha256(sversion)
+	tt.ExpectErr(err, ErrNoSysmonConfig)
+	tt.Assert(sha256 == "")
+
+	// preparing sysmon config structure
+	cfg := &sysmon.Config{}
+	tt.CheckErr(xml.Unmarshal([]byte(sysmonXMLConfig), &cfg))
+	cfg.OS = os.OS
+	cfgSha256, err := cfg.Sha256()
+	tt.CheckErr(err)
+
+	// adding sysmon config and testing sha256
+	tt.CheckErr(m.db.InsertOrUpdate(cfg))
+	sha256, err = c.GetSysmonConfigSha256(sversion)
+	tt.CheckErr(err)
+	tt.Assert(sha256 == cfgSha256)
+
+	remoteCfg, err := c.GetSysmonConfig(sversion)
+	tt.CheckErr(err)
+	tt.Assert(remoteCfg.XmlSha256 == sha256)
+
+	b, err := json.MarshalIndent(remoteCfg, "", "  ")
+	tt.CheckErr(err)
+	t.Log(string(b))
 }

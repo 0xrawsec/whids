@@ -49,3 +49,9 @@ func readPostAsXML(rq *http.Request, i interface{}) error {
 	}
 	return xml.Unmarshal(b, i)
 }
+
+func requestAddURLParam(r *http.Request, key, value string) {
+	q := r.URL.Query()
+	q.Add(key, value)
+	r.URL.RawQuery = q.Encode()
+}

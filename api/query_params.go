@@ -27,4 +27,5 @@ const (
 	qpGroupUuid   = "guuid"
 	qpFormat      = "format"
 	qpVersion     = "version"
+	qpOS          = "os"
 )

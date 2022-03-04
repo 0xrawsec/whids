@@ -1,3 +1,5 @@
+github.com/0xrawsec/crony v0.0.0 h1:0tiAWTPwAqnZKul5TmlzHDLLDXPUSNKK0g5NfZs4O4k=
+github.com/0xrawsec/crony v0.0.0/go.mod h1:4MUBMHBeM5HKSUIDXYU7nkmny/pUBHXqg5ZXXC9coe0=
 github.com/0xrawsec/gene/v2 v2.2.0 h1:0BcsNszFZr6moySryuB8BpAyuiMRvV+sENYH5hLMd4w=
 github.com/0xrawsec/gene/v2 v2.2.0/go.mod h1:gpXuOpA823ZWvDU7Rn3lt3VWYibJedKXPzsm7kw0XtM=
 github.com/0xrawsec/golang-etw v1.4.4 h1:f9Cz6jq6s2ZNPzTtkHFSPKVeTivtK4xfQBuBWOxNYEM=
@@ -38,6 +40,8 @@ github.com/0xrawsec/sod v1.6.7 h1:AyCQsvw37w0rVJWenr574wvQo009LwbgfDMyJJHcHW8=
 github.com/0xrawsec/sod v1.6.7/go.mod h1:AWB2VrKUriy5RZff2qmYkEtjcCS8NBYp0E/TUdoo+fE=
 github.com/0xrawsec/sod v1.6.8 h1:v/xJwQBJlTR1Lgy7qWC7iRLM+lAoOJaauR72rm8RbyU=
 github.com/0xrawsec/sod v1.6.8/go.mod h1:AWB2VrKUriy5RZff2qmYkEtjcCS8NBYp0E/TUdoo+fE=
+github.com/0xrawsec/sod v1.6.9 h1:6fqhbXkL6X3S1fssBiaanxTiZxjKCWacNVP5awrQDNY=
+github.com/0xrawsec/sod v1.6.9/go.mod h1:AWB2VrKUriy5RZff2qmYkEtjcCS8NBYp0E/TUdoo+fE=
 github.com/0xrawsec/toast v0.0.0-20220211080932-a94241fb765c h1:/em94EHyMG3w2urfF6ngaqjlE3URJZ9s7vohrxfKANk=
 github.com/0xrawsec/toast v0.0.0-20220211080932-a94241fb765c/go.mod h1:sRvfNYxqVoH1sZnE18s9Knm/lkbarTGNvaNVBf2/h1k=
 github.com/0xrawsec/toast v0.0.0-20220211084149-1dc8dff5960a h1:+wxPa8TWkeY2nisOMUeWfHCIJGQ4T8e1j5RexRYwtxY=

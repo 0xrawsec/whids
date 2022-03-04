@@ -12,6 +12,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/code/builder"
+	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/api/openapi"
 	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/ioc"
@@ -66,6 +67,64 @@ const (
 		}
 	}
 	`
+
+	sysmonXMLConfig = `<Sysmon schemaversion="4.70">
+  <CheckRevocation>false</CheckRevocation>
+  <CopyOnDeletePE>false</CopyOnDeletePE>
+  <DnsLookup>false</DnsLookup>
+  <HashAlgorithms>*</HashAlgorithms>
+  <EventFiltering>
+    <ProcessCreate onmatch="exclude"></ProcessCreate>
+    <FileCreateTime onmatch="exclude"></FileCreateTime>
+    <NetworkConnect onmatch="exclude"></NetworkConnect>
+    <ProcessTerminate onmatch="exclude"></ProcessTerminate>
+    <DriverLoad onmatch="exclude"></DriverLoad>
+    <CreateRemoteThread onmatch="exclude"></CreateRemoteThread>
+    <RawAccessRead onmatch="exclude"></RawAccessRead>
+    <FileCreate onmatch="exclude"></FileCreate>
+    <FileCreateStreamHash onmatch="exclude"></FileCreateStreamHash>
+    <PipeEvent onmatch="exclude"></PipeEvent>
+    <WmiEvent onmatch="exclude"></WmiEvent>
+    <FileDelete onmatch="exclude"></FileDelete>
+    <ClipboardChange onmatch="exclude"></ClipboardChange>
+    <ProcessTampering onmatch="exclude"></ProcessTampering>
+    <FileDeleteDetected onmatch="exclude"></FileDeleteDetected>
+    <RuleGroup groupRelation="or">
+      <ImageLoad onmatch="exclude">
+        <Image condition="is">C:\Windows\Sysmon.exe</Image>
+        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+        <Signature condition="is">Microsoft Windows Publisher</Signature>
+        <Signature condition="is">Microsoft Corporation</Signature>
+        <Signature condition="is">Microsoft Windows</Signature>
+      </ImageLoad>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <ProcessAccess onmatch="exclude">
+        <SourceImage condition="is">C:\Windows\system32\wbem\wmiprvse.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\System32\VBoxService.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\taskmgr.exe</SourceImage>
+        <GrantedAccess condition="is">0x1000</GrantedAccess>
+        <GrantedAccess condition="is">0x2000</GrantedAccess>
+        <GrantedAccess condition="is">0x3000</GrantedAccess>
+        <GrantedAccess condition="is">0x100000</GrantedAccess>
+        <GrantedAccess condition="is">0x101000</GrantedAccess>
+      </ProcessAccess>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <RegistryEvent onmatch="exclude">
+        <EventType condition="is not">SetValue</EventType>
+        <Image condition="is">C:\Windows\Sysmon.exe</Image>
+        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+      </RegistryEvent>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <DnsQuery onmatch="exclude">
+        <Image condition="is">C:\Windows\Sysmon.exe</Image>
+        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+      </DnsQuery>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>`
 )
 
 var (
@@ -146,15 +205,10 @@ func prep() (m *Manager, c *ManagerClient) {
 	f.Run()
 	defer f.Close()
 
+	// Create fake events on client
 	for e := range emitMixedEvents(50, 50) {
 		f.PipeEvent(e)
 	}
-
-	return
-}
-
-func runAdminApiTest(t *testing.T, f func(*testing.T)) {
-	m, c := prep()
 
 	// Create fake dumps
 	for _, name := range []string{"foo.txt", "bar.txt"} {
@@ -170,8 +224,21 @@ func runAdminApiTest(t *testing.T, f func(*testing.T)) {
 
 	// post fake system information
 	if err := c.PostSystemInfo(systemInfo); err != nil {
-		t.Error(err)
+		panic(err)
 	}
+
+	return
+}
+
+func cleanup(m *Manager) {
+	m.Shutdown()
+	m.Wait()
+	os.RemoveAll(m.Config.Database)
+	os.RemoveAll(m.Config.DumpDir)
+}
+
+func runAdminApiTest(t *testing.T, f func(*testing.T)) {
+	m, c := prep()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -197,10 +264,7 @@ func runAdminApiTest(t *testing.T, f func(*testing.T)) {
 
 	defer func() {
 		cancel()
-		m.Shutdown()
-		m.Wait()
-		os.RemoveAll(m.Config.Database)
-		os.RemoveAll(m.Config.DumpDir)
+		cleanup(m)
 	}()
 	f(t)
 }
@@ -702,65 +766,9 @@ func TestOpenApiRules(t *testing.T) {
 
 func TestOpenApiSysmonConfig(t *testing.T) {
 
-	xmlconfig := `<Sysmon schemaversion="4.70">
-  <CheckRevocation>false</CheckRevocation>
-  <CopyOnDeletePE>false</CopyOnDeletePE>
-  <DnsLookup>false</DnsLookup>
-  <HashAlgorithms>*</HashAlgorithms>
-  <EventFiltering>
-    <ProcessCreate onmatch="exclude"></ProcessCreate>
-    <FileCreateTime onmatch="exclude"></FileCreateTime>
-    <NetworkConnect onmatch="exclude"></NetworkConnect>
-    <ProcessTerminate onmatch="exclude"></ProcessTerminate>
-    <DriverLoad onmatch="exclude"></DriverLoad>
-    <CreateRemoteThread onmatch="exclude"></CreateRemoteThread>
-    <RawAccessRead onmatch="exclude"></RawAccessRead>
-    <FileCreate onmatch="exclude"></FileCreate>
-    <FileCreateStreamHash onmatch="exclude"></FileCreateStreamHash>
-    <PipeEvent onmatch="exclude"></PipeEvent>
-    <WmiEvent onmatch="exclude"></WmiEvent>
-    <FileDelete onmatch="exclude"></FileDelete>
-    <ClipboardChange onmatch="exclude"></ClipboardChange>
-    <ProcessTampering onmatch="exclude"></ProcessTampering>
-    <FileDeleteDetected onmatch="exclude"></FileDeleteDetected>
-    <RuleGroup groupRelation="or">
-      <ImageLoad onmatch="exclude">
-        <Image condition="is">C:\Windows\Sysmon.exe</Image>
-        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
-        <Signature condition="is">Microsoft Windows Publisher</Signature>
-        <Signature condition="is">Microsoft Corporation</Signature>
-        <Signature condition="is">Microsoft Windows</Signature>
-      </ImageLoad>
-    </RuleGroup>
-    <RuleGroup groupRelation="or">
-      <ProcessAccess onmatch="exclude">
-        <SourceImage condition="is">C:\Windows\system32\wbem\wmiprvse.exe</SourceImage>
-        <SourceImage condition="is">C:\Windows\System32\VBoxService.exe</SourceImage>
-        <SourceImage condition="is">C:\Windows\system32\taskmgr.exe</SourceImage>
-        <GrantedAccess condition="is">0x1000</GrantedAccess>
-        <GrantedAccess condition="is">0x2000</GrantedAccess>
-        <GrantedAccess condition="is">0x3000</GrantedAccess>
-        <GrantedAccess condition="is">0x100000</GrantedAccess>
-        <GrantedAccess condition="is">0x101000</GrantedAccess>
-      </ProcessAccess>
-    </RuleGroup>
-    <RuleGroup groupRelation="or">
-      <RegistryEvent onmatch="exclude">
-        <EventType condition="is not">SetValue</EventType>
-        <Image condition="is">C:\Windows\Sysmon.exe</Image>
-        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
-      </RegistryEvent>
-    </RuleGroup>
-    <RuleGroup groupRelation="or">
-      <DnsQuery onmatch="exclude">
-        <Image condition="is">C:\Windows\Sysmon.exe</Image>
-        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
-      </DnsQuery>
-    </RuleGroup>
-  </EventFiltering>
-</Sysmon>`
-
 	f := func(t *testing.T) {
+
+		tt := toast.FromT(t)
 
 		path := openapi.PathItem{
 			Summary: "Manage sysmon configuration",
@@ -768,7 +776,7 @@ func TestOpenApiSysmonConfig(t *testing.T) {
 		}
 
 		config := &sysmon.Config{}
-		xml.Unmarshal([]byte(xmlconfig), &config)
+		tt.CheckErr(xml.Unmarshal([]byte(sysmonXMLConfig), &config))
 		config.OS = "windows"
 
 		openAPI.Do(path, openapi.Operation{

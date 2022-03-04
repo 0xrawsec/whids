@@ -12,6 +12,7 @@ import (
 
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/hids/sysinfo"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
@@ -142,6 +143,8 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(EptAPIRulesSha256Path, m.eptAPIRulesSha256).Methods("GET")
 		rt.HandleFunc(EptAPIIoCsPath, m.eptAPIIoCs).Methods("GET")
 		rt.HandleFunc(EptAPIIoCsSha256Path, m.eptAPIIoCsSha256).Methods("GET")
+		rt.HandleFunc(EptAPISysmonConfigPath, m.eptAPISysmonConfig).Methods("GET")
+		rt.HandleFunc(EptAPISysmonConfigSha256Path, m.eptAPISysmonConfigSha256).Methods("GET")
 
 		// GET and POST
 		rt.HandleFunc(EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
@@ -385,9 +388,39 @@ func (m *Manager) eptAPISystemInfo(wt http.ResponseWriter, rq *http.Request) {
 				endpt.SystemInfo = &info
 				m.db.InsertOrUpdate(endpt)
 				if err := m.db.InsertOrUpdate(endpt); err != nil {
-					m.logAPIErrorf("to update endpoint data: %s", err)
+					m.logAPIErrorf("failed to update endpoint data: %s", err)
 				}
 			}
 		}
+	}
+}
+
+func (m *Manager) eptAPISysmonConfig(wt http.ResponseWriter, rq *http.Request) {
+	var config *sysmon.Config
+
+	os := rq.URL.Query().Get(qpOS)
+	sversion := rq.URL.Query().Get(qpVersion)
+
+	if err := m.db.Search(&sysmon.Config{}, "OS", "=", os).And("SchemaVersion", "=", sversion).AssignOne(&config); err == nil {
+		if json, err := json.Marshal(config); err == nil {
+			wt.Write(json)
+		} else {
+			http.Error(wt, "failed to marshal data", http.StatusInternalServerError)
+		}
+	} else {
+		http.Error(wt, "no config available", http.StatusNoContent)
+	}
+}
+
+func (m *Manager) eptAPISysmonConfigSha256(wt http.ResponseWriter, rq *http.Request) {
+	var config *sysmon.Config
+
+	os := rq.URL.Query().Get(qpOS)
+	sversion := rq.URL.Query().Get(qpVersion)
+
+	if err := m.db.Search(&sysmon.Config{}, "OS", "=", os).And("SchemaVersion", "=", sversion).AssignOne(&config); err == nil {
+		wt.Write([]byte(config.XmlSha256))
+	} else {
+		http.Error(wt, "no config available", http.StatusNoContent)
 	}
 }

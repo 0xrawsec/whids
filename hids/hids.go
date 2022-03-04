@@ -663,7 +663,7 @@ func (h *HIDS) uploadRoutine() bool {
 								if shrink.Err() == nil {
 									log.Infof("Dump file successfully sent to manager, deleting: %s", fullpath)
 									if err := os.Remove(fullpath); err != nil {
-										log.Errorf("Failed to remove file %s: %s", fullpath, err)
+										log.Errorf("Failed to remove file %s: %s", fullpath, err)
 									}
 								} else {
 									log.Errorf("Failed to post dump file: %s", shrink.Err())

@@ -1017,7 +1017,6 @@ func (m *Manager) admAPIEndpointSysmonConfig(wt http.ResponseWriter, rq *http.Re
 	sversion := rq.URL.Query().Get(qpVersion)
 
 	if os, err := muxGetVar(rq, "os"); err == nil {
-
 		switch rq.Method {
 		case "GET":
 			err = m.db.Search(&sysmon.Config{}, "OS", "=", os).
