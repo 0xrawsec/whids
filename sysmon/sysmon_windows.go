@@ -5,6 +5,8 @@ package sysmon
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -38,8 +40,8 @@ func Install(image string) (err error) {
 		return
 	}
 
-	// we run install  
-	c := command.CommandTimeout(30, image, "-accepteula", "-i")
+	// we run install
+	c := command.CommandTimeout(30*time.Second, image, "-accepteula", "-i")
 	defer c.Terminate()
 	if err = c.Run(); err != nil {
 		return fmt.Errorf("failed to install sysmon: %w", err)
@@ -48,13 +50,26 @@ func Install(image string) (err error) {
 	return
 }
 
-func Configure(config string) (err error) {
+func Configure(r io.Reader) (err error) {
+	var tmp, config string
+
 	i := NewSysmonInfo()
 
 	image := i.Service.Image
 
+	if tmp, err = utils.HidsMkTmpDir(); err != nil {
+		return fmt.Errorf("failed to create tmp dir: %w", err)
+	}
+	// remove temporary file
+	defer os.RemoveAll(tmp)
+
+	config = filepath.Join(tmp, "sysmon.xml")
+	if err = utils.HidsWriteReader(config, r, false); err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+
 	if fsutil.IsFile(image) {
-		c := command.CommandTimeout(5, image, "-c", config)
+		c := command.CommandTimeout(5*time.Second, image, "-c", config)
 		defer c.Terminate()
 		return c.Run()
 	}
@@ -70,7 +85,7 @@ func Uninstall() (err error) {
 	//means sysmon is already installed
 	if fsutil.IsFile(image) {
 		// we uninstall it
-		c := command.CommandTimeout(60, image, "-u")
+		c := command.CommandTimeout(60*time.Second, image, "-u")
 		defer c.Terminate()
 		if err = c.Run(); err != nil {
 			return fmt.Errorf("failed to uninstall sysmon: %w", err)

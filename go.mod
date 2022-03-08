@@ -1,7 +1,7 @@
 module github.com/0xrawsec/whids
 
 require (
-	github.com/0xrawsec/crony v0.0.0 // indirect
+	github.com/0xrawsec/crony v1.0.1 // indirect
 	github.com/0xrawsec/gene/v2 v2.2.0
 	github.com/0xrawsec/golang-etw v1.4.5
 	github.com/0xrawsec/golang-evtx v1.2.9

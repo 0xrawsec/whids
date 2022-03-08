@@ -1,6 +1,7 @@
 package hids
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -9,11 +10,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/0xrawsec/crony"
 	"github.com/0xrawsec/golang-etw/etw"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
@@ -21,12 +22,12 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
-	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/hids/sysinfo"
+	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -60,6 +61,9 @@ type HIDS struct {
 	sync.RWMutex // Mutex to lock the IDS when updating rules
 	ctx          context.Context
 	cancel       context.CancelFunc
+
+	// task scheduler
+	scheduler *crony.Crony
 
 	eventProvider   *etw.Consumer
 	stats           *EventStats
@@ -114,6 +118,7 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h = &HIDS{
 		ctx:             ctx,
 		cancel:          cancel,
+		scheduler:       crony.NewWithContext(ctx),
 		eventProvider:   etw.NewRealTimeConsumer(ctx),
 		stats:           NewEventStats(MaxEPS, MaxEPSDuration),
 		preHooks:        NewHookMan(),
@@ -479,99 +484,6 @@ func (h *HIDS) loadContainers(engine *engine.Engine) (lastErr error) {
 	return
 }
 
-func (h *HIDS) cleanup() {
-	// Cleaning up empty dump directories if needed
-	fis, _ := ioutil.ReadDir(h.config.Dump.Dir)
-	for _, fi := range fis {
-		if fi.IsDir() {
-			fp := filepath.Join(h.config.Dump.Dir, fi.Name())
-			if utils.CountFiles(fp) == 0 {
-				os.RemoveAll(fp)
-			}
-		}
-	}
-}
-
-////////////////// Routines
-
-// schedules the different routines to be ran
-func (h *HIDS) cronRoutine() {
-	now := time.Now()
-	// timestamps
-	lastUpdateTs := now
-	lastUploadTs := now
-	lastArchDelTs := now
-	lastCmdRunTs := now
-
-	go func() {
-		for {
-			now = time.Now()
-			switch {
-			// handle updates
-			case now.Sub(lastUpdateTs) >= h.config.RulesConfig.UpdateInterval:
-				// put here function to update
-				lastUpdateTs = now
-			// handle uploads
-			case now.Sub(lastUploadTs) >= time.Minute:
-				lastUploadTs = now
-			// handle sysmon archive cleaning
-			case now.Sub(lastArchDelTs) >= time.Minute:
-				// put here code to delete archived files
-				lastArchDelTs = now
-			// handle command to run
-			case now.Sub(lastCmdRunTs) >= 5*time.Second:
-				// put here code to run commands
-				lastCmdRunTs = now
-			}
-
-			time.Sleep(1 * time.Second)
-		}
-	}()
-}
-
-func (h *HIDS) cleanArchivedRoutine() bool {
-	if h.config.Sysmon.CleanArchived {
-		go func() {
-			log.Info("Starting routine to cleanup Sysmon archived files")
-			archivePath := h.config.Sysmon.ArchiveDirectory
-
-			if archivePath == "" {
-				log.Error("Sysmon archive directory not found")
-				return
-			}
-
-			if fsutil.IsDir(archivePath) {
-				// used to mark files for which we already reported errors
-				reported := datastructs.NewSyncedSet()
-				log.Infof("Starting archive cleanup loop for directory: %s", archivePath)
-				for {
-					// expiration fixed to five minutes
-					expired := time.Now().Add(time.Minute * -5)
-					for wi := range fswalker.Walk(archivePath) {
-						for _, fi := range wi.Files {
-							if archivedRe.MatchString(fi.Name()) {
-								path := filepath.Join(wi.Dirpath, fi.Name())
-								if fi.ModTime().Before(expired) {
-									// we print out error only once
-									if err := os.Remove(path); err != nil && !reported.Contains(path) {
-										log.Errorf("Failed to remove archived file: %s", err)
-										reported.Add(path)
-									}
-								}
-							}
-						}
-					}
-					time.Sleep(time.Minute * 1)
-				}
-			} else {
-				log.Errorf(fmt.Sprintf("No such Sysmon archive directory: %s", archivePath))
-			}
-		}()
-		return true
-	}
-	return false
-}
-
 func (h *HIDS) updateSystemInfo() (err error) {
 	var hnew, hold string
 
@@ -594,271 +506,56 @@ func (h *HIDS) updateSystemInfo() (err error) {
 	return
 }
 
-// returns true if the update routine is started
-func (h *HIDS) updateRoutine() bool {
-	d := h.config.RulesConfig.UpdateInterval
-	if h.config.IsForwardingEnabled() {
-		if d > 0 {
-			go func() {
-				t := time.NewTimer(d)
-				for range t.C {
-					if err := h.update(false); err != nil {
-						log.Error(err)
-					}
-					if err := h.updateSystemInfo(); err != nil {
-						log.Error(err)
-					}
-					t.Reset(d)
-				}
-			}()
-			return true
-		}
-	}
-	return false
-}
+func (h *HIDS) updateSysmonConfig() (err error) {
+	var remoteSha256 string
+	var xml []byte
+	var cfg *sysmon.Config
 
-func (h *HIDS) uploadRoutine() bool {
-	if h.config.IsForwardingEnabled() {
-		// force compression in this case
-		h.config.Dump.Compression = true
-		go func() {
-			for {
-				// Sending dump files over to the manager
-				for wi := range fswalker.Walk(h.config.Dump.Dir) {
-					for _, fi := range wi.Files {
-						sp := strings.Split(wi.Dirpath, string(os.PathSeparator))
-						// upload only file with some extensions
-						if uploadExts.Contains(filepath.Ext(fi.Name())) {
-							if len(sp) >= 2 {
-								var shrink *api.UploadShrinker
-								var err error
+	c := h.forwarder.Client
+	systemInfo := sysinfo.NewSystemInfo()
+	schemaVersion := systemInfo.Sysmon.Config.Version.Schema
+	sha256 := systemInfo.Sysmon.Config.Hash
 
-								guid := sp[len(sp)-2]
-								ehash := sp[len(sp)-1]
-								fullpath := filepath.Join(wi.Dirpath, fi.Name())
-
-								// we create upload shrinker object
-								if shrink, err = api.NewUploadShrinker(fullpath, guid, ehash); err != nil {
-									log.Errorf("Failed to create upload iterator: %s", err)
-									continue
-								}
-
-								if shrink.Size() > h.config.FwdConfig.Client.MaxUploadSize {
-									log.Warnf("Dump file is above allowed upload limit, %s will be deleted without being sent", fullpath)
-									goto CleanShrinker
-								}
-
-								// we shrink a file into several chunks to reduce memory impact
-								for fu := shrink.Next(); fu != nil; fu = shrink.Next() {
-									if err = h.forwarder.Client.PostDump(fu); err != nil {
-										log.Error(err)
-										break
-									}
-								}
-
-							CleanShrinker:
-								// close shrinker otherwise we cannot remove files
-								shrink.Close()
-
-								if shrink.Err() == nil {
-									log.Infof("Dump file successfully sent to manager, deleting: %s", fullpath)
-									if err := os.Remove(fullpath); err != nil {
-										log.Errorf("Failed to remove file %s: %s", fullpath, err)
-									}
-								} else {
-									log.Errorf("Failed to post dump file: %s", shrink.Err())
-								}
-							} else {
-								log.Errorf("Unexpected directory layout, cannot send dump to manager")
-							}
-						}
-					}
-
-				}
-				time.Sleep(60 * time.Second)
-			}
-		}()
-		return true
-	}
-	return false
-}
-
-func (h *HIDS) containCmd() *exec.Cmd {
-	ip := h.forwarder.Client.ManagerIP
-	// only allow connection to the manager configured
-	return exec.Command("netsh.exe",
-		"advfirewall",
-		"firewall",
-		"add",
-		"rule",
-		fmt.Sprintf("name=%s", ContainRuleName),
-		"dir=out",
-		fmt.Sprintf("remoteip=0.0.0.0-%s,%s-255.255.255.255", utils.PrevIP(ip), utils.NextIP(ip)),
-		"action=block")
-}
-
-func (h *HIDS) uncontainCmd() *exec.Cmd {
-	return exec.Command("netsh.exe", "advfirewall",
-		"firewall",
-		"delete",
-		"rule",
-		fmt.Sprintf("name=%s", ContainRuleName),
-	)
-}
-
-func (h *HIDS) handleManagerCommand(cmd *api.Command) {
-
-	// Switch processing the commands
-	switch cmd.Name {
-	// Aliases
-	case "contain":
-		cmd.FromExecCmd(h.containCmd())
-	case "uncontain":
-		cmd.FromExecCmd(h.uncontainCmd())
-	case "osquery":
-		osquery := h.config.Report.OSQuery.Bin
-		switch {
-		case fsutil.IsFile(h.config.Report.OSQuery.Bin):
-			cmd.Name = h.config.Report.OSQuery.Bin
-			cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
-			cmd.ExpectJSON = true
-		case osquery == "":
-			cmd.Unrunnable()
-			cmd.Error = "OSQuery binary file configured does not exist"
-		default:
-			cmd.Unrunnable()
-			cmd.Error = fmt.Sprintf("OSQuery binary file configured does not exist: %s", osquery)
-		}
-
-	// internal commands
-	case "terminate":
-		cmd.Unrunnable()
-		if len(cmd.Args) > 0 {
-			spid := cmd.Args[0]
-			if pid, err := strconv.Atoi(spid); err != nil {
-				cmd.Error = fmt.Sprintf("failed to parse pid: %s", err)
-			} else if err := terminate(pid); err != nil {
-				cmd.Error = err.Error()
-			}
-		}
-	case "hash":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		if len(cmd.Args) > 0 {
-			if out, err := cmdHash(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
-			} else {
-				cmd.Json = out
-			}
-		}
-	case "stat":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		if len(cmd.Args) > 0 {
-			if out, err := cmdStat(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
-			} else {
-				cmd.Json = out
-			}
-		}
-	case "dir":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		if len(cmd.Args) > 0 {
-			if out, err := cmdDir(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
-			} else {
-				cmd.Json = out
-			}
-		}
-	case "walk":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		if len(cmd.Args) > 0 {
-			cmd.Json = cmdWalk(cmd.Args[0])
-		}
-	case "find":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		if len(cmd.Args) == 2 {
-			if out, err := cmdFind(cmd.Args[0], cmd.Args[1]); err != nil {
-				cmd.Error = err.Error()
-			} else {
-				cmd.Json = out
-			}
-		}
-	case "report":
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		cmd.Json = h.Report(false)
-	case "processes":
-		h.tracker.RLock()
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.PS()
-		h.tracker.RUnlock()
-	case "modules":
-		h.tracker.RLock()
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.Modules()
-		h.tracker.RUnlock()
-	case "drivers":
-		h.tracker.RLock()
-		cmd.Unrunnable()
-		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.Drivers
-		h.tracker.RUnlock()
+	if remoteSha256, err = c.GetSysmonConfigSha256(schemaVersion); err != nil {
+		return
 	}
 
-	// we finally run the command
-	if err := cmd.Run(); err != nil {
-		log.Errorf("failed to run command sent by manager \"%s\": %s", cmd.String(), err)
+	// Nothing to do
+	if remoteSha256 == sha256 {
+		return
 	}
+
+	if cfg, err = c.GetSysmonConfig(schemaVersion); err != nil {
+		return
+	}
+
+	log.Infof("Deploying new sysmon configuration old=%s new=%s", sha256, cfg.XmlSha256)
+	if xml, err = cfg.XML(); err != nil {
+		return
+	}
+
+	if err = sysmon.Configure(bytes.NewBuffer(xml)); err != nil {
+		return fmt.Errorf("failed to configure sysmon: %w", err)
+	}
+
+	if err = h.updateSystemInfo(); err != nil {
+		err = fmt.Errorf("failed to update system info: %w", err)
+	}
+
+	return
 }
 
-// routine which manages command to be executed on the endpoint
-// it is made in such a way that we can send burst of commands
-func (h *HIDS) commandRunnerRoutine() bool {
-	if h.config.IsForwardingEnabled() {
-		go func() {
-
-			defaultSleep := time.Second * 5
-			sleep := defaultSleep
-
-			burstDur := time.Duration(0)
-			tgtBurstDur := time.Second * 30
-			burstSleep := time.Millisecond * 500
-
-			for {
-				if cmd, err := h.forwarder.Client.FetchCommand(); err != nil && err != api.ErrNothingToDo {
-					log.Error(err)
-				} else if err == nil {
-					// reduce sleeping time if a command was received
-					sleep = burstSleep
-					burstDur = 0
-					log.Infof("Handling manager command: %s", cmd.String())
-					h.handleManagerCommand(cmd)
-					if err := h.forwarder.Client.PostCommand(cmd); err != nil {
-						log.Error(err)
-					}
-				}
-
-				// if we reached the targetted burst duration
-				if burstDur >= tgtBurstDur {
-					sleep = defaultSleep
-				}
-
-				if sleep == burstSleep {
-					burstDur += sleep
-				}
-
-				time.Sleep(sleep)
+func (h *HIDS) cleanup() {
+	// Cleaning up empty dump directories if needed
+	fis, _ := ioutil.ReadDir(h.config.Dump.Dir)
+	for _, fi := range fis {
+		if fi.IsDir() {
+			fp := filepath.Join(h.config.Dump.Dir, fi.Name())
+			if utils.CountFiles(fp) == 0 {
+				os.RemoveAll(fp)
 			}
-		}()
-		return true
+		}
 	}
-	return false
 }
 
 /** Public Methods **/
@@ -934,13 +631,17 @@ func (h *HIDS) Run() {
 	h.actionHandler.Run()
 
 	// Start the update routine
-	log.Infof("Update routine running: %t", h.updateRoutine())
+	//log.Infof("Update routine running: %t", h.updateRoutine())
 	// starting dump forwarding routine
-	log.Infof("Dump forwarding routine running: %t", h.uploadRoutine())
+	//log.Infof("Dump forwarding routine running: %t", h.uploadRoutine())
 	// running the command runner routine
-	log.Infof("Command runner routine running: %t", h.commandRunnerRoutine())
+	//log.Infof("Command runner routine running: %t", h.commandRunnerRoutine())
 	// start the archive cleanup routine (might create a new thread)
-	log.Infof("Sysmon archived files cleanup routine running: %t", h.cleanArchivedRoutine())
+	//log.Infof("Sysmon archived files cleanup routine running: %t", h.scheduleCleanArchivedTask())
+	h.scheduleTasks()
+	for _, t := range h.scheduler.Tasks() {
+		log.Infof("Scheduler running: %s", t.Name)
+	}
 
 	// Dry run don't do anything
 	if h.DryRun {

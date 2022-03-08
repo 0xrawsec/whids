@@ -131,16 +131,16 @@ type EventFiltering struct {
 }
 
 type innerConfig struct {
-	XMLName                xml.Name `xml:"Sysmon" json:"-"`
-	SchemaVersion          string   `xml:"schemaversion,attr" json:"schemaversion"`
-	ArchiveDirectory       string   `xml:",omitempty" json:",omitempty"`
-	CheckRevocation        bool
-	CopyOnDeletePE         bool
+	XMLName                xml.Name  `xml:"Sysmon" json:"-"`
+	SchemaVersion          string    `xml:"schemaversion,attr" json:"schemaversion"`
+	ArchiveDirectory       string    `xml:",omitempty" json:",omitempty"`
+	CheckRevocation        bool      `xml:",omitempty"`
+	CopyOnDeletePE         bool      `xml:",omitempty"`
 	CopyOnDeleteSIDs       csstrings `xml:",omitempty" json:",omitempty"`
 	CopyOnDeleteExtensions csstrings `xml:",omitempty" json:",omitempty"`
 	CopyOnDeleteProcesses  csstrings `xml:",omitempty" json:",omitempty"`
 	DriverName             string    `xml:",omitempty" json:",omitempty"`
-	DnsLookup              bool
+	DnsLookup              bool      `xml:",omitempty"`
 	HashAlgorithms         csstrings `xml:",omitempty" json:",omitempty"`
 	EventFiltering         EventFiltering
 	// Don't validate Sysmon XML DTD

@@ -452,7 +452,9 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 
 	switch rq.Method {
 	case "GET":
+		// query parameters
 		wait, _ := strconv.ParseBool(rq.URL.Query().Get(qpWait))
+
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(admErr(err))
 		} else {

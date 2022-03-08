@@ -217,6 +217,9 @@ func TestClientSysmonConfig(t *testing.T) {
 	tt.ExpectErr(err, ErrNoSysmonConfig)
 	tt.Assert(sha256 == "")
 
+	_, err = c.GetSysmonConfig(sversion)
+	tt.ExpectErr(err, ErrNoSysmonConfig)
+
 	// preparing sysmon config structure
 	cfg := &sysmon.Config{}
 	tt.CheckErr(xml.Unmarshal([]byte(sysmonXMLConfig), &cfg))

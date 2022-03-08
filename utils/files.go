@@ -12,6 +12,7 @@ import (
 
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/google/uuid"
 )
 
 const (
@@ -72,6 +73,21 @@ func HidsMkdirAll(dir string) error {
 	return os.MkdirAll(dir, DefaultPerms)
 }
 
+func HidsMkTmpDir() (dir string, err error) {
+	// genererating random uuid to drop binary in
+	randDir, err := uuid.NewRandom()
+	if err != nil {
+		err = fmt.Errorf("failed to create random directory: %w", err)
+		return
+	}
+
+	// creating temporary directory
+	dir = filepath.Join(os.TempDir(), randDir.String())
+	err = os.MkdirAll(dir, 0700)
+
+	return
+}
+
 // HidsCreateFile creates a file with the good permissions
 func HidsCreateFile(filename string) (*os.File, error) {
 	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultPerms)
@@ -98,6 +114,8 @@ func HidsWriteReader(dst string, content io.Reader, compress bool) (err error) {
 	}
 	defer out.Close()
 
+	// default value for writer
+	w = out
 	if compress {
 		if w, err = gzip.NewWriterLevel(out, gzip.BestSpeed); err != nil {
 			return

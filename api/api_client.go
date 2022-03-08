@@ -640,7 +640,11 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK); err == nil {
+	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+		if resp.StatusCode == http.StatusNoContent {
+			err = ErrNoSysmonConfig
+			return
+		}
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&c)
 	}

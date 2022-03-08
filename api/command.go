@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/0xrawsec/whids/utils"
 	"github.com/0xrawsec/whids/utils/command"
 	"github.com/google/shlex"
-	"github.com/google/uuid"
 )
 
 // EndpointFile describes a File to drop or fetch from the endpoint
@@ -139,15 +139,9 @@ func (c *Command) Run() (err error) {
 
 	// if we want to execute a binary
 	if len(c.Drop) > 0 {
-		// genererating random uuid to drop binary in
-		randDir, err := uuid.NewRandom()
-		if err != nil {
-			return fmt.Errorf("failed to create random directory: %w", err)
-		}
+		var tmpDir string
 
-		// creating temporary directory
-		tmpDir := filepath.Join(os.TempDir(), randDir.String())
-		if err := os.MkdirAll(tmpDir, 0700); err != nil {
+		if tmpDir, err = utils.HidsMkTmpDir(); err != nil {
 			return fmt.Errorf("failed to create temporary directory: %w", err)
 		}
 

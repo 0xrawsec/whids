@@ -11,9 +11,6 @@ import (
 
 var (
 	config = `<Sysmon schemaversion="4.70">
-  <CheckRevocation>false</CheckRevocation>
-  <CopyOnDeletePE>false</CopyOnDeletePE>
-  <DnsLookup>false</DnsLookup>
   <HashAlgorithms>*</HashAlgorithms>
   <EventFiltering>
     <ProcessCreate onmatch="exclude"></ProcessCreate>
