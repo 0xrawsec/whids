@@ -180,3 +180,9 @@ Please visit [doc/configuration.md](doc/configuration.md)
 - Sysmon Based EDR written in PowerShell: https://github.com/ion-storm/sysmon-edr
 - Comodo Open Source EDR with user and kernel components: https://github.com/ComodoSecurity/openedr
 - Sysmon X: https://github.com/marcosd4h/sysmonx
+
+# Sponsors
+
+[![Tines](https://avatars.githubusercontent.com/u/67642290?s=88&v=4)](https://www.tines.com/)
+
+Github:https://github.com/tines  Website:https://www.tines.com/ Twitter:[@tines_io](https://twitter.com/tines_io)
