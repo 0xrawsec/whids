@@ -183,6 +183,6 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 # Sponsors
 
-[![Tines](https://avatars.githubusercontent.com/u/67642290?s=88&v=4)](https://www.tines.com/)
+[![Tines](https://github.com/0xrawsec/sponsors/blob/master/logos/tines-sponsorship-badge-purple.png)](https://www.tines.com/?utm_source=oss&utm_medium=sponsorship&utm_campaign=whids)
 
 Github:https://github.com/tines  Website:https://www.tines.com/ Twitter:[@tines_io](https://twitter.com/tines_io)
