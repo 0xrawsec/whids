@@ -106,10 +106,12 @@ func TestValidation(t *testing.T) {
 
 	c := Config{}
 
+	tt.ExpectErr(c.Validate(), ErrInvalidSchemaVersion)
+	c.SchemaVersion = "4.70"
+
 	// should return non nil error as os is not correct
 	tt.ExpectErr(c.Validate(), ErrUnknownOS)
 	c.OS = los.OS
-	tt.ExpectErr(c.Validate(), ErrInvalidSchemaVersion)
 
 	// testing onmatch validity
 	tt.CheckErr(xml.Unmarshal([]byte(config), &c))

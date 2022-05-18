@@ -5,7 +5,7 @@ echo "Running coverage"
 ./scripts/coverage.sh
 
 echo "Generating OpenAPI documentation"
-GOOS=linux go run tools/manager/*.go -openapi > ./doc/admin.openapi.json
+GOOS=linux go run utilities/manager/*.go -openapi > ./doc/admin.openapi.json
 
 # adding openapi files to commit
 # those will not be seen in the commit message shown by git in

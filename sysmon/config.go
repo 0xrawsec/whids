@@ -92,7 +92,7 @@ func (f *Filters) Validate() error {
 		method := evtFilter.MethodByName("Validate")
 		res := method.Call([]reflect.Value{})
 		if !res[0].IsNil() {
-			return fmt.Errorf("%s %s", filterName, res[0].Interface().(error))
+			return fmt.Errorf("%s %w", filterName, res[0].Interface().(error))
 		}
 
 		evtFilter = evtFilter.Elem()
