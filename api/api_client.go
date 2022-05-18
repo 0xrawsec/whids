@@ -21,8 +21,9 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/hids/sysinfo"
-	edrOS "github.com/0xrawsec/whids/os"
+	edrOS "github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -647,6 +648,72 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 		}
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&c)
+	}
+
+	return
+}
+
+func (m *ManagerClient) ListTools() (t map[string]*tools.Tool, err error) {
+	var req *http.Request
+	var resp *http.Response
+
+	if auth, _ := m.IsServerAuthenticated(); !auth {
+		return nil, ErrServerUnauthenticated
+	}
+
+	if req, err = m.Prepare("GET", EptAPITools, nil); err != nil {
+		return
+	}
+
+	requestAddURLParam(req, qpOS, edrOS.OS)
+
+	if resp, err = m.HTTPClient.Do(req); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if err = ValidateRespStatus(resp, http.StatusOK); err == nil {
+		dec := json.NewDecoder(resp.Body)
+		err = dec.Decode(&t)
+	}
+
+	return
+}
+
+func (m *ManagerClient) GetTool(hash string) (t *tools.Tool, err error) {
+	var req *http.Request
+	var resp *http.Response
+	var tools map[string]*tools.Tool
+
+	if auth, _ := m.IsServerAuthenticated(); !auth {
+		return nil, ErrServerUnauthenticated
+	}
+
+	if req, err = m.Prepare("GET", EptAPITools, nil); err != nil {
+		return
+	}
+
+	requestAddURLParam(req, qpOS, edrOS.OS)
+	requestAddURLParam(req, qpHash, hash)
+	requestAddURLParam(req, qpBinary, "true")
+
+	if resp, err = m.HTTPClient.Do(req); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if err = ValidateRespStatus(resp, http.StatusOK); err == nil {
+		dec := json.NewDecoder(resp.Body)
+		err = dec.Decode(&tools)
+		if len(tools) > 0 {
+			for _, tool := range tools {
+				t = tool
+				break
+			}
+
+		}
 	}
 
 	return

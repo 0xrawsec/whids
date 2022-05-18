@@ -28,4 +28,6 @@ const (
 	qpFormat      = "format"
 	qpVersion     = "version"
 	qpOS          = "os"
+	qpBinary      = "binary"
+	qpHash        = "hash"
 )

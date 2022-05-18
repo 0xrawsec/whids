@@ -21,6 +21,7 @@ type Endpoint struct {
 	Score          float64             `json:"score"`
 	Status         string              `json:"status"`
 	SystemInfo     *sysinfo.SystemInfo `json:"system-info,omitempty"`
+	LastEvent      time.Time           `json:"last-event"`
 	LastDetection  time.Time           `json:"last-detection"`
 	LastConnection time.Time           `json:"last-connection"`
 }

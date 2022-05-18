@@ -17,6 +17,7 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/hids"
+	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 	"golang.org/x/sys/windows/svc"
@@ -98,7 +99,6 @@ var (
 		Report: &hids.ReportConfig{
 			EnableReporting: false,
 			OSQuery: hids.OSQueryConfig{
-				Bin:    "C:\\Program Files\\osquery\\osqueryi.exe",
 				Tables: []string{"processes", "services", "scheduled_tasks", "drivers", "startup_items", "process_open_sockets"}},
 			Commands: []hids.ReportCommand{{
 				Description: "Example command",
@@ -288,6 +288,13 @@ func main() {
 	}
 
 	flag.Parse()
+
+	// registering EdrInfo to make version info available from APIs
+	i := &sysinfo.EdrInfo{
+		Version: version,
+		Commit:  commitID,
+	}
+	sysinfo.RegisterEdrInfo(i)
 
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {

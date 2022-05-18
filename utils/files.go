@@ -194,3 +194,7 @@ func Unzip(zipfile, dest string) (err error) {
 	}
 	return nil
 }
+
+func RelativePath(path string) string {
+	return filepath.Join(filepath.Dir(os.Args[0]), path)
+}

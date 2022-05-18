@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	ContentTypeJson = "application/json"
-	ContentTypeXML  = "application/xml"
+	ContentTypeJson        = "application/json"
+	ContentTypeXML         = "application/xml"
+	ContentTypeOctetStream = "application/octet-stream"
 )
 
 type OpenAPI struct {
@@ -529,6 +530,10 @@ func XMLRequestBody(desc string, data interface{}, required bool) *RequestBody {
 	return MakeRequestBody(desc, ContentTypeXML, data, required)
 }
 
+func BinaryRequestBody(desc string, data interface{}, required bool) *RequestBody {
+	return MakeRequestBody(desc, ContentTypeOctetStream, data, required)
+}
+
 func MakeRequestBody(desc, contentType string, data interface{}, required bool) *RequestBody {
 	content := make(map[string]MediaType)
 	content[contentType] = MediaType{
@@ -549,6 +554,12 @@ func (r *RequestBody) ContentBytes() (b []byte, err error) {
 			return json.Marshal(mt.Example)
 		case ContentTypeXML:
 			return xml.Marshal(mt.Example)
+		case ContentTypeOctetStream:
+			var ok bool
+			if b, ok = mt.Example.([]byte); !ok {
+				return nil, fmt.Errorf("failed to cast Example to []byte")
+			}
+			return b, nil
 		default:
 			return nil, fmt.Errorf("unknown Content-Type: %s", ct)
 		}

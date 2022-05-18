@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/0xrawsec/toast"
-	"github.com/0xrawsec/whids/os"
+	"github.com/0xrawsec/whids/los"
 )
 
 var (
@@ -70,7 +70,7 @@ func TestConfig(t *testing.T) {
 	var sha256 string
 	tt := toast.FromT(t)
 	c := Config{}
-	c.OS = os.OS
+	c.OS = los.OS
 
 	if err := xml.Unmarshal([]byte(config), &c); err != nil {
 		t.Error(err)
@@ -108,7 +108,7 @@ func TestValidation(t *testing.T) {
 
 	// should return non nil error as os is not correct
 	tt.ExpectErr(c.Validate(), ErrUnknownOS)
-	c.OS = os.OS
+	c.OS = los.OS
 	tt.ExpectErr(c.Validate(), ErrInvalidSchemaVersion)
 
 	// testing onmatch validity

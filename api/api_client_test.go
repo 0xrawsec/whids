@@ -14,7 +14,7 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/ioc"
-	"github.com/0xrawsec/whids/os"
+	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -80,8 +80,8 @@ func TestClientContainer(t *testing.T) {
 	niocs := 1000
 	iocs := make([]ioc.IOC, 0, niocs)
 	del := 0
-	guuid := UUIDGen().String()
-	toDelGuuid := UUIDGen().String()
+	guuid := utils.UnsafeUUIDGen().String()
+	toDelGuuid := utils.UnsafeUUIDGen().String()
 	for i := 0; i < niocs; i++ {
 		key := guuid
 		if rand.Int()%3 == 0 {
@@ -90,7 +90,7 @@ func TestClientContainer(t *testing.T) {
 		}
 
 		iocs = append(iocs, ioc.IOC{
-			Uuid:      UUIDGen().String(),
+			Uuid:      utils.UnsafeUUIDGen().String(),
 			GroupUuid: key,
 			Source:    "Test",
 			Value:     fmt.Sprintf("%d.random.com", i),
@@ -223,7 +223,7 @@ func TestClientSysmonConfig(t *testing.T) {
 	// preparing sysmon config structure
 	cfg := &sysmon.Config{}
 	tt.CheckErr(xml.Unmarshal([]byte(sysmonXMLConfig), &cfg))
-	cfg.OS = os.OS
+	cfg.OS = los.OS
 	cfgSha256, err := cfg.Sha256()
 	tt.CheckErr(err)
 

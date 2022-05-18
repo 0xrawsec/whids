@@ -42,12 +42,14 @@ type Command struct {
 	ExpectJSON bool                     `json:"expect-json"`
 	Timeout    time.Duration            `json:"timeout"`
 	SentTime   time.Time                `json:"sent-time"`
-	runnable   bool
+
+	runnable bool
+	path     []string
 }
 
 // NewCommand creates a new Command to run on an endpoint
 func NewCommand() *Command {
-	id := UUIDGen()
+	id := utils.UnsafeUUIDGen()
 	cmd := &Command{
 		UUID:     id.String(),
 		Drop:     make([]*EndpointFile, 0),
@@ -78,7 +80,7 @@ func (c *Command) AddDropFile(filename, filepath string) error {
 	var err error
 
 	ef := EndpointFile{
-		UUID: UUIDGen().String(),
+		UUID: utils.UnsafeUUIDGen().String(),
 		Name: filename}
 	if ef.Data, err = ioutil.ReadFile(filepath); err != nil {
 		return fmt.Errorf("failed at reading file to drop: %w", err)
@@ -97,7 +99,7 @@ func (c *Command) AddDropFileFromPath(path string) error {
 
 // AddFetchFile adds a file to fetch from the endpoint.
 func (c *Command) AddFetchFile(filepath string) {
-	c.Fetch[filepath] = &EndpointFile{UUID: UUIDGen().String()}
+	c.Fetch[filepath] = &EndpointFile{UUID: utils.UnsafeUUIDGen().String()}
 }
 
 func (c *Command) FromExecCmd(cmd *exec.Cmd) {
@@ -170,6 +172,7 @@ func (c *Command) Run() (err error) {
 		} else {
 			cmd = command.Command(c.Name, c.Args...)
 		}
+
 		defer cmd.Terminate()
 
 		// ToDo consider removing that !

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/0xrawsec/golang-win32/win32/advapi32"
-	"github.com/0xrawsec/whids/os"
+	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -29,7 +29,10 @@ var (
 )
 
 func NewSystemInfo() (info *SystemInfo) {
-	info = &SystemInfo{}
+	info = &SystemInfo{
+		Edr: edrInfo,
+	}
+
 	info.System.Manufacturer = utils.RegValueToString(pathSystemInfo, "SystemManufacturer")
 	info.System.Name = utils.RegValueToString(pathSystemInfo, "SystemProductName")
 	// cheap VM detection
@@ -40,7 +43,7 @@ func NewSystemInfo() (info *SystemInfo) {
 	info.BIOS.Version = utils.RegValueToString(pathSystemInfo, "BIOSVersion")
 	info.BIOS.Date = utils.RegValueToString(pathSystemInfo, "BIOSReleaseDate")
 
-	info.OS.Name = os.OS
+	info.OS.Name = los.OS
 	info.OS.Build = utils.RegValueToString(pathBuildInfo, "CurrentBuild")
 	info.OS.Version = version
 	info.OS.Product = utils.RegValueToString(pathBuildInfo, "ProductName")

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"github.com/0xrawsec/whids/tools"
 )
 
 // Report structure
@@ -71,7 +73,6 @@ var (
 
 // OSQueryConfig holds configuration about OSQuery tool
 type OSQueryConfig struct {
-	Bin    string   `toml:"bin" comment:"Path to osqueryi binary"`
 	Tables []string `toml:"tables" comment:"OSQuery tables to add to the report"`
 }
 
@@ -81,7 +82,7 @@ func (c *OSQueryConfig) PrepareCommands() (cmds []ReportCommand) {
 
 	for i, t := range c.Tables {
 		cmds[i].Description = fmt.Sprintf("OSQuery %s table", t)
-		cmds[i].Name = c.Bin
+		cmds[i].Name = tools.ToolOSQueryi
 		cmds[i].Args = osqueryiArgs
 		cmds[i].Args = append(cmds[i].Args, t)
 

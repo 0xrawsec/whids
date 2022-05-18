@@ -17,6 +17,7 @@ import (
 	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/utils"
 )
 
 const (
@@ -173,7 +174,7 @@ func validateOperation(output interface{}) (err error) {
 func prep() (m *Manager, c *ManagerClient) {
 	var err error
 
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)
@@ -305,7 +306,7 @@ func TestOpenApi(t *testing.T) {
 			},
 		)
 
-		guid := UUIDGen().String()
+		guid := utils.UnsafeUUIDGen().String()
 		openAPI.Do(usersPath,
 			openapi.Operation{
 				Method:  "POST",
@@ -587,6 +588,7 @@ func TestOpenApiArtifacts(t *testing.T) {
 	f := func(t *testing.T) {
 
 		sum := "Artifact Search and Retrieval"
+
 		artifactsPath := openapi.PathItem{
 			Summary: sum,
 			Value:   AdmAPIEndpointsArtifactsPath,
@@ -603,7 +605,8 @@ func TestOpenApiArtifacts(t *testing.T) {
 			Method:  "GET",
 			Summary: "Artifacts on all endpoints",
 			Parameters: []*openapi.Parameter{
-				openapi.QueryParameter(qpSince, nowStr, "Retrieve artifacts received since date (RFC3339)").Skip()},
+				openapi.QueryParameter(qpSince, nowStr, "Retrieve artifacts received since date (RFC3339)").Skip(),
+			},
 			Output: AdminAPIResponse{},
 		})
 
@@ -651,8 +654,8 @@ func TestOpenApiIoCs(t *testing.T) {
 			RequestBody: openapi.JsonRequestBody("",
 				[]ioc.IOC{
 					{
-						Uuid:      UUIDGen().String(),
-						GroupUuid: UUIDGen().String(),
+						Uuid:      utils.UnsafeUUIDGen().String(),
+						GroupUuid: utils.UnsafeUUIDGen().String(),
 						Source:    provider,
 						Value:     "some.random.domain",
 						Type:      "domain",
@@ -764,14 +767,14 @@ func TestOpenApiRules(t *testing.T) {
 	t.Log(prettyJSON(openAPI))
 }
 
-func TestOpenApiSysmonConfig(t *testing.T) {
+func TestOpenApiSysmon(t *testing.T) {
 
 	f := func(t *testing.T) {
 
 		tt := toast.FromT(t)
 
 		path := openapi.PathItem{
-			Summary: "Manage sysmon configuration",
+			Summary: "Manage sysmon deployment",
 			Value:   AdmAPIEndpointsPath,
 		}
 
@@ -815,6 +818,91 @@ func TestOpenApiSysmonConfig(t *testing.T) {
 			},
 			Output: AdminAPIResponse{},
 		})
+
+		// Manage Sysmon installer
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "POST",
+			Summary: "Add or update sysmon binary to deploy on all endpoints",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			RequestBody: openapi.BinaryRequestBody(
+				"Sysmon binary to deploy",
+				[]byte("MZfoobar"),
+				true,
+			),
+			Output: AdminAPIResponse{},
+		})
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "GET",
+			Summary: "Get information about sysmon binary",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			Output: AdminAPIResponse{},
+		})
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "DELETE",
+			Summary: "Delete Sysmon binary",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			Output: AdminAPIResponse{},
+		})
+	}
+
+	runAdminApiTest(t, f)
+}
+
+func TestOpenApiOSQueryi(t *testing.T) {
+	f := func(t *testing.T) {
+
+		path := openapi.PathItem{
+			Summary: "Managing OSQueryi binary deployed on endpoints",
+			Value:   AdmAPIEndpointsPath,
+		}
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "POST",
+			Summary: "Add or update OSQueryi binary to deploy on all endpoints",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			RequestBody: openapi.BinaryRequestBody(
+				"OSQueryi binary to deploy",
+				[]byte("MZfoobar"),
+				true,
+			),
+			Output: AdminAPIResponse{},
+		})
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "GET",
+			Summary: "Get information about OSQueryi binary to be deployed on endpoints",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			Output: AdminAPIResponse{},
+		})
+
+		openAPI.Do(path, openapi.Operation{
+			Method:  "DELETE",
+			Summary: "Delete OSQueryi binary from manager server",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
+				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
+			},
+			Output: AdminAPIResponse{},
+		})
+
 	}
 
 	runAdminApiTest(t, f)

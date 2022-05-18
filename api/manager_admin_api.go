@@ -21,6 +21,8 @@ import (
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/tools"
+	"github.com/0xrawsec/whids/utils"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
@@ -29,6 +31,11 @@ import (
 
 const (
 	MaxLimitLogAPI = 10000
+)
+
+var (
+	// Used to specify a command timeout for command execution
+	CommandTimeout = 15 * time.Second
 )
 
 func admApiParseDuration(pLast string) (d time.Duration, err error) {
@@ -185,8 +192,8 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 
 		user := AdminAPIUser{
 			Identifier: identifier,
-			Uuid:       UUIDGen().String(),
-			Key:        KeyGen(DefaultKeySize),
+			Uuid:       utils.UnsafeUUIDGen().String(),
+			Key:        utils.UnsafeKeyGen(DefaultKeySize),
 		}
 
 		if err = m.CreateNewAdminAPIUser(&user); err != nil {
@@ -214,12 +221,12 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 		// force UUID to lower case
 		user.Uuid = strings.ToLower(user.Uuid)
 		if !noBracketGuidRe.MatchString(user.Uuid) {
-			user.Uuid = UUIDGen().String()
+			user.Uuid = utils.UnsafeUUIDGen().String()
 		}
 
 		// we generate a new key if needed
 		if user.Key == "" {
-			user.Key = KeyGen(DefaultKeySize)
+			user.Key = utils.UnsafeKeyGen(DefaultKeySize)
 		}
 
 		if err = m.CreateNewAdminAPIUser(&user); err != nil {
@@ -257,7 +264,7 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 
 				// updating only some allowed fields of existing user
 				if newKey {
-					user.Key = KeyGen(DefaultKeySize)
+					user.Key = utils.UnsafeKeyGen(DefaultKeySize)
 				}
 
 				if new.Key != "" {
@@ -302,7 +309,7 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 	switch {
 	case rq.Method == "GET":
 		// we return the list of all endpoints
-		if endpoints, err := m.MutEndpoints(); err != nil {
+		if endpoints, err := m.Endpoints(); err != nil {
 			wt.Write(admErr(err))
 		} else {
 			out := make([]*Endpoint, 0, len(endpoints))
@@ -333,7 +340,7 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 		}
 
 	case rq.Method == "PUT":
-		endpt := NewEndpoint(UUIDGen().String(), KeyGen(DefaultKeySize))
+		endpt := NewEndpoint(utils.UnsafeUUIDGen().String(), utils.UnsafeKeyGen(DefaultKeySize))
 		m.db.InsertOrUpdate(endpt)
 		// save endpoint to database
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
@@ -351,7 +358,7 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	newKey, _ := strconv.ParseBool(rq.URL.Query().Get(qpNewKey))
 
 	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
-		if endpt, ok := m.MutEndpoint(euuid); ok {
+		if endpt, ok := m.Endpoint(euuid); ok {
 			var err error
 
 			switch rq.Method {
@@ -377,7 +384,7 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 
 				// if we want to generate a new random key
 				if newKey {
-					endpt.Key = KeyGen(DefaultKeySize)
+					endpt.Key = utils.UnsafeKeyGen(DefaultKeySize)
 				}
 
 				// save endpoint to database
@@ -458,10 +465,11 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(admErr(err))
 		} else {
-			if endpt, ok := m.MutEndpoint(euuid); ok {
+			if endpt, ok := m.Endpoint(euuid); ok {
 				if endpt.Command != nil {
 					for wait && !endpt.Command.Completed {
 						time.Sleep(time.Millisecond * 50)
+						endpt, _ = m.Endpoint(euuid)
 					}
 				}
 				wt.Write(admJSONResp(endpt.Command))
@@ -473,8 +481,12 @@ func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request
 		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 			wt.Write(admErr(err))
 		} else {
-			if endpt, ok := m.MutEndpoint(euuid); ok {
-				c := CommandAPI{}
+			if endpt, ok := m.Endpoint(euuid); ok {
+				// add a default timeout if not specified
+				c := CommandAPI{
+					Timeout: CommandTimeout,
+				}
+
 				if err = readPostAsJSON(rq, &c); err != nil {
 					wt.Write(admErr(err))
 				} else {
@@ -504,7 +516,7 @@ func (m *Manager) admAPIEndpointCommandField(wt http.ResponseWriter, rq *http.Re
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(admErr(err))
 	} else {
-		if endpt, ok := m.MutEndpoint(euuid); ok {
+		if endpt, ok := m.Endpoint(euuid); ok {
 			if field, err = muxGetVar(rq, "field"); err != nil {
 				wt.Write(admErr(err))
 			} else {
@@ -681,7 +693,7 @@ func (m *Manager) admAPIEndpointReport(wt http.ResponseWriter, rq *http.Request)
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(admErr(err))
 	} else {
-		if endpt, ok := m.MutEndpoint(euuid); ok {
+		if endpt, ok := m.Endpoint(euuid); ok {
 			// we return the report anyway
 			rs := m.gene.reducer.ReduceCopy(endpt.Uuid)
 			switch rq.Method {
@@ -771,7 +783,7 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(admErr(err))
 	} else {
-		if endpt, ok := m.MutEndpoint(euuid); ok {
+		if endpt, ok := m.Endpoint(euuid); ok {
 			search := m.db.Search(&ArchivedReport{}, "Identifier", "=", endpt.Uuid).
 				And("ArchivedTimestamp", ">=", since).
 				And("ArchivedTimestamp", "<=", until)
@@ -791,7 +803,7 @@ func (m *Manager) admAPIEndpointReportArchive(wt http.ResponseWriter, rq *http.R
 
 func (m *Manager) admAPIEndpointsReports(wt http.ResponseWriter, rq *http.Request) {
 	out := make(map[string]*reducer.ReducedStats)
-	if endpoints, err := m.MutEndpoints(); err != nil {
+	if endpoints, err := m.Endpoints(); err != nil {
 		wt.Write(admErr(err))
 	} else {
 		for _, e := range endpoints {
@@ -932,7 +944,7 @@ func (m *Manager) admAPIEndpointArtifacts(wt http.ResponseWriter, rq *http.Reque
 	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
 		wt.Write(admErr(err))
 	} else {
-		if _, ok := m.MutEndpoint(euuid); ok {
+		if _, ok := m.Endpoint(euuid); ok {
 			if dumps, err = listEndpointDumps(m.Config.DumpDir, euuid, since); err != nil {
 				wt.Write(admErr(format("Failed to list dumps, %s", err)))
 				return
@@ -1082,6 +1094,101 @@ func (m *Manager) admAPIEndpointSysmonConfig(wt http.ResponseWriter, rq *http.Re
 	} else {
 		wt.Write(admErr(err))
 	}
+}
+
+func (m *Manager) admAPIEndpointToolMgmt(toolName string, wt http.ResponseWriter, rq *http.Request) {
+	var err error
+	var os string
+	var tool *tools.Tool
+	var s *sod.Search
+
+	binary, _ := strconv.ParseBool(rq.URL.Query().Get(qpBinary))
+
+	if os, err = muxGetVar(rq, "os"); err != nil {
+		goto fail
+	}
+
+	s = m.db.Search(&tools.Tool{}, "OS", "=", os).
+		And("Name", "=", toolName)
+
+	switch rq.Method {
+	case "GET":
+
+		if err = s.AssignUnique(&tool); err != nil {
+			goto fail
+		}
+
+		if !binary {
+			tool.Binary = nil
+		}
+
+		wt.Write(admJSONResp(tool))
+		return
+
+	case "POST":
+		defer rq.Body.Close()
+
+		var data []byte
+		if data, err = io.ReadAll(rq.Body); err != nil {
+			goto fail
+		}
+
+		if len(data) == 0 {
+			err = fmt.Errorf("empty content")
+			goto fail
+		}
+
+		err = s.AssignUnique(&tool)
+
+		switch {
+		case sod.IsNoObjectFound(err):
+			tool = tools.New(os, toolName, toolName, data)
+		case err == nil:
+			tool.Update(data)
+		default:
+			goto fail
+		}
+
+		if err = m.db.InsertOrUpdate(tool); err != nil {
+			goto fail
+		}
+
+		if !binary {
+			tool.Binary = nil
+		}
+
+		wt.Write(admJSONResp(tool))
+		return
+
+	case "DELETE":
+
+		if err = s.AssignUnique(&tool); err != nil {
+			goto fail
+		}
+
+		if err = s.Delete(); err != nil {
+			goto fail
+		}
+
+		if !binary {
+			tool.Binary = nil
+		}
+
+		wt.Write(admJSONResp(tool))
+		return
+	}
+
+fail:
+	wt.Write(admErr(err))
+
+}
+
+func (m *Manager) admAPIEndpointSysmonBinary(wt http.ResponseWriter, rq *http.Request) {
+	m.admAPIEndpointToolMgmt(tools.ToolSysmon, wt, rq)
+}
+
+func (m *Manager) admAPIEndpointOSQueryiBinary(wt http.ResponseWriter, rq *http.Request) {
+	m.admAPIEndpointToolMgmt(tools.ToolOSQueryi, wt, rq)
 }
 
 type stats struct {
@@ -1312,6 +1419,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 				wt.Write(admErr(err))
 			} else if err := m.initializeGeneFromDB(); err != nil {
 				// we need to re-init gene engine in case of update
+				err := fmt.Errorf("failed to re-initialize engine due to error: %s", err)
 				wt.Write(admErr(err))
 			} else {
 				wt.Write(admJSONResp(rules))
@@ -1418,6 +1526,8 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(AdmAPIEndpointArtifacts, m.admAPIEndpointArtifacts).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointArtifact, m.admAPIEndpointArtifact).Methods("GET")
 		rt.HandleFunc(AdmAPIEndpointsSysmonConfig, m.admAPIEndpointSysmonConfig).Methods("GET", "POST", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointsSysmonBinary, m.admAPIEndpointSysmonBinary).Methods("GET", "POST", "DELETE")
+		rt.HandleFunc(AdmAPIEndpointsOSQueryiBinary, m.admAPIEndpointOSQueryiBinary).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIIocsPath, m.admAPIIocs).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIRulesPath, m.admAPIRules).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(AdmAPIStatsPath, m.admAPIStats).Methods("GET")

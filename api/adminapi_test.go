@@ -22,7 +22,7 @@ import (
 var (
 	testAdminUser = &AdminAPIUser{
 		Identifier: "test",
-		Key:        KeyGen(DefaultKeySize),
+		Key:        utils.UnsafeKeyGen(DefaultKeySize),
 	}
 )
 
@@ -132,7 +132,7 @@ func getEndpointUUID() string {
 func prepareTest() (m *Manager, c *ManagerClient) {
 	var err error
 
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)

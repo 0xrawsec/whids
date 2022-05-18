@@ -11,6 +11,7 @@ const (
 	// EptAPIRulesSha256Path API route used to retrieve sha256 of latest batch of Gene rules
 	EptAPIRulesSha256Path = "/rules/sha256"
 
+	// Routes to work with sysmon configuration
 	EptAPISysmonConfigPath       = "/sysmon/config"
 	EptAPISysmonConfigSha256Path = "/sysmon/config/sha256"
 
@@ -18,6 +19,8 @@ const (
 	EptAPIIoCsPath = "/iocs"
 	// EptAPIIoCsSha256Path API route used to serve sha256 of IOC container
 	EptAPIIoCsSha256Path = "/iocs/sha256"
+	// EptAPITools API route used to update local tools
+	EptAPITools = "/tools"
 
 	// POST based API routes
 
@@ -50,12 +53,23 @@ const (
 	AdmAPIUsers    = "/users"
 	AdmAPIUserByID = AdmAPIUsers + "/{uuuid:" + uuidRe + "}"
 
-	AdmAPIStatsPath             = "/stats"
-	AdmAPIIocsPath              = "/iocs"
-	AdmAPIRulesPath             = "/rules"
-	AdmAPIEndpointsPath         = "/endpoints"
-	AdmAPIEndpointsSysmonConfig = AdmAPIEndpointsPath + `/{os:\w+}/sysmon/config`
-	AdmAPIEndpointsByIDPath     = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
+	AdmAPIStatsPath     = "/stats"
+	AdmAPIIocsPath      = "/iocs"
+	AdmAPIRulesPath     = "/rules"
+	AdmAPIEndpointsPath = "/endpoints"
+
+	AdmAPIEndpointsOSPath = AdmAPIEndpointsPath + `/{os:\w+}`
+
+	// Sysmon related
+	AdmAPIEndpointsSysmonPath   = AdmAPIEndpointsOSPath + `/sysmon`
+	AdmAPIEndpointsSysmonBinary = AdmAPIEndpointsSysmonPath + `/binary`
+	AdmAPIEndpointsSysmonConfig = AdmAPIEndpointsSysmonPath + `/config`
+
+	// OSQueryi related
+	AdmAPIEndpointsOSQueryiPath   = AdmAPIEndpointsOSPath + `/osqueryi`
+	AdmAPIEndpointsOSQueryiBinary = AdmAPIEndpointsOSQueryiPath + `/binary`
+
+	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
 	// Command related
 	AdmAPICommandSuffix            = "/command"
 	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + AdmAPICommandSuffix

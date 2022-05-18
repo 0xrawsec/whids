@@ -15,7 +15,10 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/api"
+	"github.com/0xrawsec/whids/los"
+	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -49,22 +52,18 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 	// Aliases
 	case "contain":
 		cmd.FromExecCmd(h.containCmd())
+
 	case "uncontain":
 		cmd.FromExecCmd(h.uncontainCmd())
+
 	case "osquery":
-		osquery := h.config.Report.OSQuery.Bin
-		switch {
-		case fsutil.IsFile(h.config.Report.OSQuery.Bin):
-			cmd.Name = h.config.Report.OSQuery.Bin
-			cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
-			cmd.ExpectJSON = true
-		case osquery == "":
-			cmd.Unrunnable()
-			cmd.Error = "OSQuery binary file configured does not exist"
-		default:
-			cmd.Unrunnable()
-			cmd.Error = fmt.Sprintf("OSQuery binary file configured does not exist: %s", osquery)
-		}
+		// osquery alias
+		cmd.Name = tools.ToolOSQueryi
+		cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
+		cmd.ExpectJSON = true
+
+	case "sysmon":
+		cmd.Name = tools.ToolSysmon
 
 	// internal commands
 	case "terminate":
@@ -77,6 +76,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 				cmd.Error = err.Error()
 			}
 		}
+
 	case "hash":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -87,6 +87,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 				cmd.Json = out
 			}
 		}
+
 	case "stat":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -97,6 +98,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 				cmd.Json = out
 			}
 		}
+
 	case "dir":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -107,12 +109,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 				cmd.Json = out
 			}
 		}
+
 	case "walk":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
 			cmd.Json = cmdWalk(cmd.Args[0])
 		}
+
 	case "find":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -123,22 +127,26 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 				cmd.Json = out
 			}
 		}
+
 	case "report":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		cmd.Json = h.Report(false)
+
 	case "processes":
 		h.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		cmd.Json = h.tracker.PS()
 		h.tracker.RUnlock()
+
 	case "modules":
 		h.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		cmd.Json = h.tracker.Modules()
 		h.tracker.RUnlock()
+
 	case "drivers":
 		h.tracker.RLock()
 		cmd.Unrunnable()
@@ -286,34 +294,126 @@ func (h *HIDS) taskUploadDumps() {
 	}
 }
 
+func (h *HIDS) updateTools() (err error) {
+	var mtools map[string]*tools.Tool
+	var locToolNames []string
+
+	// getting the list of tools from the manager, only metatada are returned
+	if mtools, err = h.forwarder.Client.ListTools(); err != nil {
+		return
+	}
+
+	// updating local tools from remote
+	for _, t := range mtools {
+		var old *tools.Tool
+
+		// if the tool is already there we continue
+		if h.db.Search(&tools.Tool{}, "Metadata.Sha512", "=", t.Metadata.Sha512).Len() == 1 {
+			continue
+		}
+
+		// we get the tool from manager
+		if t, err = h.forwarder.Client.GetTool(t.Metadata.Sha256); err != nil {
+			return
+		}
+
+		// search for a tool with the same name
+		if err = h.db.Search(&tools.Tool{}, "Name", "=", t.Name).And("OS", "=", los.OS).AssignUnique(&old); err != nil && !sod.IsNoObjectFound(err) {
+			return
+		} else if err == nil {
+			// we use same UUID not to duplicate entry
+			t.Initialize(old.UUID())
+		}
+
+		// we update local database
+		if err = h.db.InsertOrUpdate(t); err != nil {
+			return
+		}
+
+		// dumping the tool on local folder
+		if err = t.Dump(toolsDir); err != nil {
+			return
+		}
+	}
+
+	// We retrieve the names of the local files
+	if err = h.db.AssignIndex(&tools.Tool{}, "Name", &locToolNames); err != nil {
+		return
+	}
+
+	// deleting local tools
+	for _, locName := range locToolNames {
+		// if we have a tool locally that has been deleted from remote
+		if _, ok := mtools[locName]; !ok {
+			var t *tools.Tool
+			s := h.db.Search(&tools.Tool{}, "Name", "=", locName)
+			if err = s.AssignUnique(&t); err != nil {
+				return
+			}
+
+			if err = t.Remove(toolsDir); err != nil {
+				return
+			}
+
+			if err = s.Delete(); err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}
+
 func (h *HIDS) scheduleTasks() {
+	inLittleWhile := time.Now().Add(time.Second * 5)
+
 	if h.config.IsForwardingEnabled() {
 		// command runner routine, we run it only once as it creates a go routine to handle commands
-		h.scheduler.Schedule(crony.NewAsyncTask("Command handler goroutine").Func(h.taskCommandRunner).Schedule(time.Now()), crony.PrioHigh)
+		h.scheduler.Schedule(crony.NewAsyncTask("Command handler goroutine").Func(h.taskCommandRunner).Schedule(time.Now()),
+			crony.PrioHigh)
 
 		// updating engine
 		h.scheduler.Schedule(crony.NewTask("Rule/IOC Update").Func(func() {
+			task := "[rule/ioc update]"
+			log.Info(task, "update starting")
 			if err := h.update(false); err != nil {
-				log.Error("[rule/ioc update]", err)
+				log.Error(task, err)
 			}
-		}).Ticker(h.config.RulesConfig.UpdateInterval), crony.PrioHigh)
+		}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+			crony.PrioHigh)
 
 		// uploading dumps
 		h.scheduler.Schedule(crony.NewTask("Upload Dump").Func(h.taskUploadDumps).Ticker(time.Minute), crony.PrioMedium)
 
 		// updating system information
 		h.scheduler.Schedule(crony.NewTask("System Info Update").Func(func() {
+			task := "[system info update]"
+			log.Info(task, "update starting")
 			if err := h.updateSystemInfo(); err != nil {
-				log.Error("[system info update]", err)
+				log.Error(task, err)
 			}
-		}).Ticker(h.config.RulesConfig.UpdateInterval), crony.PrioLow)
+		}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+			crony.PrioLow)
 
 		// updating sysmon configuration
 		h.scheduler.Schedule(crony.NewTask("Sysmon configuration update").Func(func() {
+			task := "[sysmon config update]"
+			log.Info(task, "update starting")
 			if err := h.updateSysmonConfig(); err != nil {
-				log.Error("[sysmon config update]", err)
+				log.Error(task, err)
 			}
-		}).Ticker(time.Minute*15), crony.PrioMedium)
+		}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+			crony.PrioMedium)
+
+		// updating tools
+		h.scheduler.Schedule(crony.NewTask("Utilities update").Func(func() {
+			task := "[utilities update]"
+			log.Info(task, "update starting")
+			if err := h.updateTools(); err != nil {
+				log.Error(task, err)
+			}
+		}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+			crony.PrioMedium)
 	}
 
 	if err := h.scheduleCleanArchivedTask(); err != nil {

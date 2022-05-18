@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 
 	"github.com/0xrawsec/golang-utils/log"
@@ -28,7 +30,7 @@ var (
 
 func (m *Manager) eptAPIMutEndpointFromRequest(rq *http.Request) *Endpoint {
 	uuid := rq.Header.Get(EndpointUUIDHeader)
-	if endpt, ok := m.MutEndpoint(uuid); ok {
+	if endpt, ok := m.Endpoint(uuid); ok {
 		return endpt
 	}
 	return nil
@@ -46,7 +48,7 @@ func (m *Manager) endpointAuthorizationMiddleware(next http.Handler) http.Handle
 		hostname := rq.Header.Get(EndpointHostnameHeader)
 		ip := rq.Header.Get(EndpointIPHeader)
 
-		if endpt, ok = m.MutEndpoint(uuid); !ok {
+		if endpt, ok = m.Endpoint(uuid); !ok {
 			http.Error(wt, "Not Authorized", http.StatusForbidden)
 			// we have to return not to reach ServeHTTP
 			return
@@ -145,6 +147,7 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(EptAPIIoCsSha256Path, m.eptAPIIoCsSha256).Methods("GET")
 		rt.HandleFunc(EptAPISysmonConfigPath, m.eptAPISysmonConfig).Methods("GET")
 		rt.HandleFunc(EptAPISysmonConfigSha256Path, m.eptAPISysmonConfigSha256).Methods("GET")
+		rt.HandleFunc(EptAPITools, m.eptAPITools).Methods("GET")
 
 		// GET and POST
 		rt.HandleFunc(EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
@@ -245,7 +248,7 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 	funcName := utils.GetCurFuncName()
 	cnt := 0
 	uuid := rq.Header.Get(EndpointUUIDHeader)
-	endpt, _ := m.MutEndpoint(uuid)
+	endpt, _ := m.Endpoint(uuid)
 
 	etid := m.eventLogger.InitTransaction()
 	dtid := m.detectionLogger.InitTransaction()
@@ -274,6 +277,8 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 				// updating reducer
 				m.UpdateReducer(endpt.Uuid, &e)
 
+				// updating last event
+				endpt.LastEvent = e.Timestamp()
 				// updating last detection
 				if e.IsDetection() {
 					endpt.LastDetection = e.Timestamp()
@@ -422,5 +427,52 @@ func (m *Manager) eptAPISysmonConfigSha256(wt http.ResponseWriter, rq *http.Requ
 		wt.Write([]byte(config.XmlSha256))
 	} else {
 		http.Error(wt, "no config available", http.StatusNoContent)
+	}
+}
+
+func (m *Manager) eptAPITools(wt http.ResponseWriter, rq *http.Request) {
+	var stools []*tools.Tool
+
+	binary, _ := strconv.ParseBool(rq.URL.Query().Get(qpBinary))
+	os := rq.URL.Query().Get(qpOS)
+	hash := rq.URL.Query().Get(qpHash)
+
+	search := m.db.Search(&tools.Tool{}, "OS", "=", os)
+
+	// key=name value=tool
+	out := make(map[string]*tools.Tool)
+
+	// if we want to get a single file
+	switch len(hash) {
+	case 32:
+		search = search.And("Metadata.Md5", "=", hash)
+	case 40:
+		search = search.And("Metadata.Sha1", "=", hash)
+	case 64:
+		search = search.And("Metadata.Sha256", "=", hash)
+	case 128:
+		search = search.And("Metadata.Sha512", "=", hash)
+	}
+
+	if err := search.Assign(&stools); err != nil {
+		http.Error(wt, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// create map to send to endpoints
+	for _, t := range stools {
+		// if binary content is not needed we don't transfer it
+		if !binary {
+			t.Binary = nil
+		}
+
+		out[t.Name] = t
+	}
+
+	if json, err := json.Marshal(out); err != nil {
+		http.Error(wt, "failed to marshal data", http.StatusInternalServerError)
+		return
+	} else {
+		wt.Write(json)
 	}
 }

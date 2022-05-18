@@ -193,6 +193,7 @@ var (
 	certgen     bool
 	dumpConfig  bool
 	openapi     bool
+	repairDB    bool
 	fingerprint string
 	user        string
 	imprules    string
@@ -204,7 +205,8 @@ func main() {
 	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
 		"The certificate gets generated for the IP address specified in the configuration file.")
 	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
-	flag.BoolVar(&openapi, "openapi", openapi, "Prints JSON formatted OpenAPI definition")
+	flag.BoolVar(&openapi, "openapi", openapi, "Prints JSON formatted OpenAPI definition")
+	flag.BoolVar(&repairDB, "repair", repairDB, "Attempt to repair database")
 	flag.StringVar(&fingerprint, "fingerprint", fingerprint, "Retrieve fingerprint of certificate to set in client configuration")
 	flag.StringVar(&user, "user", user, "Creates a new user")
 	flag.StringVar(&imprules, "import", imprules, "Import Gene rules from a directory")
@@ -220,7 +222,7 @@ func main() {
 	config := flag.Arg(0)
 
 	if keygen {
-		key := api.KeyGen(api.DefaultKeySize)
+		key := utils.UnsafeKeyGen(api.DefaultKeySize)
 		fmt.Printf("New API key: %s\n", key)
 		fmt.Printf("Please manually update client and manager configuration file to make it effective\n")
 		os.Exit(0)
@@ -229,7 +231,7 @@ func main() {
 	if fingerprint != "" {
 		fing, err := computeFingerprint(fingerprint)
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed at computing fingerprint: %s", err))
+			log.Abort(exitFail, fmt.Errorf("failed at computing fingerprint: %s", err))
 		}
 		fmt.Printf("Certificate fingerprint to set in client configuration to enable certificate pinning\n%s\n", fing)
 		os.Exit(0)
@@ -256,12 +258,13 @@ func main() {
 
 	if user != "" {
 		u := &api.AdminAPIUser{
-			Uuid:       api.UUIDGen().String(),
+			Uuid:       utils.UnsafeUUIDGen().String(),
 			Identifier: user,
-			Key:        api.KeyGen(api.DefaultKeySize),
+			Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
 		}
 
 		manager, err = api.NewManager(managerConf)
+
 		if err != nil {
 			log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
 		}
@@ -285,7 +288,7 @@ func main() {
 			log.Abort(exitFail, err)
 		}
 
-		log.Abort(0, "Rules import: SUCCESS")
+		log.Abort(0, "Rules import: SUCCESS")
 	}
 
 	if certgen {
@@ -295,6 +298,11 @@ func main() {
 		}
 		log.Infof("Certificate and key generated should be used for testing purposes only.")
 		os.Exit(0)
+	}
+
+	managerConf.Repair = repairDB
+	if repairDB {
+		log.Infof("Attempting to repair broken database")
 	}
 
 	manager, err = api.NewManager(managerConf)

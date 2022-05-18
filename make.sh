@@ -10,11 +10,11 @@ function check_err() {
     fi
 }
 
-pushd tools/sysmon && make -j 8 $@ || check_err && popd
+pushd utilities/sysmon && make -j 8 $@ || check_err && popd
 
-pushd tools/whids && make -j 8 $@ || check_err && popd
+pushd utilities/whids && make -j 8 $@ || check_err && popd
 
-pushd tools/manager && make -j 8 $@ || check_err && popd
+pushd utilities/manager && make -j 8 $@ || check_err && popd
 
 pushd ${RELEASE}
 # Remove previous bundles

@@ -168,7 +168,7 @@ func TestForwarderBasic(t *testing.T) {
 	//defer clean(&mconf, &fconf)
 
 	nevents := 1000
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 	testfile := "Testlog.gz"
 	mconf.Logging.LogBasename = testfile
 
@@ -211,7 +211,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 
 	nevents := 1000
 	testfile := "TestServerAuthFailure.log.gz"
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 	serverKey := "rogueserver"
 	mconf.Logging.LogBasename = testfile
 
@@ -227,7 +227,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 	defer r.Shutdown()
 
 	fconf.Client.Key = key
-	fconf.Client.ServerKey = KeyGen(DefaultKeySize)
+	fconf.Client.ServerKey = utils.UnsafeKeyGen(DefaultKeySize)
 	f, err := NewForwarder(&fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
@@ -258,8 +258,8 @@ func TestCollectorAuthSuccess(t *testing.T) {
 
 	nevents := 1000
 	testfile := "TestServerAuthSuccess.log.gz"
-	key := KeyGen(DefaultKeySize)
-	serverKey := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
+	serverKey := utils.UnsafeKeyGen(DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 	mconf.EndpointAPI.ServerKey = serverKey
 
@@ -310,7 +310,7 @@ func TestForwarderParallel(t *testing.T) {
 	nclients, nevents := 1000, 1000
 	wg := sync.WaitGroup{}
 	testfile := "TestCollectorParallel.log.gz"
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 
 	r, err := NewManager(&mconf)
@@ -361,7 +361,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	//outfile := fmt.Sprintf("%s.1", testfile)
 
 	// Initialize the receiver
-	key := KeyGen(DefaultKeySize)
+	key := utils.UnsafeKeyGen(DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 	clean(&mconf, &fconf)
 

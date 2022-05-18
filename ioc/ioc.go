@@ -42,12 +42,12 @@ const (
 
 type IOC struct {
 	sod.Item
-	Uuid string `json:"uuid" sod:"unique"`
+	Uuid string `json:"uuid" sod:"unique,lower"`
 	// GroupUuid can be used to group IoCs
-	GroupUuid string `json:"guuid" sod:"index"`
+	GroupUuid string `json:"guuid" sod:"index,lower"`
 	Source    string `json:"source" sod:"index"`
 	Value     string `json:"value" sod:"index"`
-	Type      string `json:"type" sod:"index"`
+	Type      string `json:"type" sod:"index,lower"`
 }
 
 func HasValidType(ioc *IOC) bool {

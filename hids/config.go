@@ -108,6 +108,7 @@ func (c *AuditConfig) Restore() {
 // Config structure
 type Config struct {
 	//Channels        []string             `toml:"channels" comment:"Windows log channels to listen to. Either channel names\n can be used (i.e. Microsoft-Windows-Sysmon/Operational) or aliases"`
+	DatabasePath    string               `toml:"db-path" comment:"Path to local database root directory"`
 	CritTresh       int                  `toml:"criticality-treshold" comment:"Dumps/forward only events above criticality threshold\n or filtered events (i.e. Gene filtering rules)"`
 	EnableHooks     bool                 `toml:"en-hooks" comment:"Enable enrichment hooks and dump hooks"`
 	EnableFiltering bool                 `toml:"en-filters" comment:"Enable event filtering (log filtered events, not only alerts)\n See documentation: https://github.com/0xrawsec/gene"`

@@ -18,6 +18,7 @@ import (
 	"github.com/0xrawsec/golang-etw/etw"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
+	"github.com/0xrawsec/sod"
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/crypto/data"
@@ -27,7 +28,9 @@ import (
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/hids/sysinfo"
+	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -54,6 +57,8 @@ var (
 	uploadExts = datastructs.NewInitSyncedSet(".gz", ".sha256")
 
 	archivedRe = regexp.MustCompile(`(CLIP-)??[0-9A-F]{32,}(\..*)?`)
+
+	toolsDir = utils.RelativePath("Tools")
 )
 
 // HIDS structure
@@ -86,6 +91,9 @@ type HIDS struct {
 	filedumped    *datastructs.SyncedSet
 
 	systemInfo *sysinfo.SystemInfo
+
+	// local structure database
+	db *sod.DB
 
 	Engine   *engine.Engine
 	DryRun   bool
@@ -133,6 +141,7 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 		filedumped:      datastructs.NewSyncedSet(),
 		// has to be empty to post structure the first time
 		systemInfo: &sysinfo.SystemInfo{},
+		db:         sod.Open(c.DatabasePath),
 	}
 
 	// initializing action manager
@@ -146,20 +155,26 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 		log.SetLogfile(c.Logfile, 0600)
 	}
 
+	// initialize database
+	if err = h.initDB(); err != nil {
+		return
+	}
+
 	// Verify configuration
 	if err = c.Verify(); err != nil {
-		return nil, err
+		return
 	}
 
 	// loading forwarder config
 	if h.forwarder, err = api.NewForwarder(c.FwdConfig); err != nil {
-		return nil, err
+		return
 	}
 
 	// cleaning up previous runs
 	h.cleanup()
 
 	// initialization
+	h.initEnvVariables()
 	h.initEventProvider()
 	h.initHooks(c.EnableHooks)
 	// initializing canaries
@@ -168,14 +183,27 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h.config.AuditConfig.Configure()
 
 	// update and load engine
-	if err := h.update(true); err != nil {
-		return h, err
+	if err = h.update(true); err != nil {
+		return
 	}
 
-	return h, nil
+	return
 }
 
 /** Private Methods **/
+
+func (h *HIDS) initEnvVariables() {
+	os.Setenv(los.PathEnvVar, los.BuildPathEnv(los.GetPathEnv(), toolsDir))
+}
+
+func (h *HIDS) initDB() (err error) {
+
+	if err = h.db.Create(&tools.Tool{}, sod.DefaultSchema); err != nil {
+		return
+	}
+
+	return
+}
 
 func (h *HIDS) initEventProvider() {
 

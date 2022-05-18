@@ -2,7 +2,23 @@ package sysinfo
 
 import "github.com/0xrawsec/whids/sysmon"
 
+var (
+	// must be set by main package
+	edrInfo *EdrInfo
+)
+
+type EdrInfo struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+func RegisterEdrInfo(i *EdrInfo) {
+	edrInfo = i
+}
+
 type SystemInfo struct {
+	Edr *EdrInfo `json:"edr"`
+
 	System struct {
 		// HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\SystemInformation
 		//SystemManufacturer

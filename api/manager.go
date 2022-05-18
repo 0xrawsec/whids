@@ -28,10 +28,9 @@ import (
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
-
-	"github.com/google/uuid"
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"
@@ -130,35 +129,6 @@ func (t *TLSConfig) Verify() error {
 
 /////////////////////// Manager
 
-// UUIDGen generates a random UUID
-func UUIDGen() uuid.UUID {
-	uuid := uuid.UUID{}
-	for i := 0; i < len(uuid); i++ {
-		uuid[i] = uint8(rand.Uint32() >> 24)
-	}
-	return uuid
-}
-
-// KeyGen is an API key generator, supposed to generate an [[:alnum:]] key
-func KeyGen(size int) string {
-	key := make([]byte, 0, DefaultKeySize)
-	for len(key) < size {
-		b := uint8(rand.Uint32() >> 24)
-		switch {
-		case b > 47 && b < 58:
-			// 0 to 9
-			key = append(key, b)
-		case b > 65 && b < 90:
-			// A to Z
-			key = append(key, b)
-		case b > 96 && b < 123:
-			// a to z
-			key = append(key, b)
-		}
-	}
-	return string(key)
-}
-
 // EndpointAPIConfig structure holding configuration for the API used by endpoints
 type EndpointAPIConfig struct {
 	Host      string `toml:"host" comment:"Hostname or IP where the API should listen to"`
@@ -177,6 +147,7 @@ type ManagerLogConfig struct {
 type ManagerConfig struct {
 	// TOML strings need to be first otherwise issue parsing back config
 	Database    string            `toml:"db" comment:"Path to store database"`
+	Repair      bool              `toml:"repair-db" comment:"Attempt to repair broken database"`
 	DumpDir     string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
 	AdminAPI    AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
 	EndpointAPI EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
@@ -242,10 +213,9 @@ type Manager struct {
 	detectionLogger   *logger.EventLogger
 	detectionSearcher *logger.EventSearcher
 	endpointAPI       *http.Server
-	//endpoints         Endpoints
-	adminAPI *http.Server
-	stop     chan bool
-	done     bool
+	adminAPI          *http.Server
+	stop              chan bool
+	done              bool
 
 	// Gene related members
 	gene struct {
@@ -266,7 +236,7 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	var err error
 
 	m := Manager{Config: c, iocs: ioc.NewIocs()}
-	//logPath := filepath.Join(c.Logging.Root, c.Logging.LogBasename)
+
 	eventDir := filepath.Join(c.Logging.Root, "events")
 	m.eventLogger = logger.NewEventLogger(eventDir, c.Logging.LogBasename, utils.Giga)
 	m.eventSearcher = logger.NewEventSearcher(eventDir)
@@ -293,8 +263,9 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	}
 
 	if err := m.initializeDB(); err != nil {
-		return nil, fmt.Errorf("failed to initialize manager's database: %w", err)
+		return nil, fmt.Errorf("failed to initialize manager's database: %w", err)
 	}
+
 	// initialize IoCs from db
 	m.iocs.FromDB(m.db)
 
@@ -317,47 +288,72 @@ func NewManager(c *ManagerConfig) (*Manager, error) {
 	return &m, nil
 }
 
+func (m *Manager) createTableOrRepair(o sod.Object, s sod.Schema) (err error) {
+	// if everything went fine we return
+	if err = m.db.Create(o, s); err == nil {
+		return
+	}
+
+	// if err is something else than an index corruption error
+	if !sod.IsIndexCorrupted(err) {
+		return
+	}
+
+	// we repair DB if wanted
+	if m.Config.Repair {
+		return m.db.Repair(o)
+	}
+
+	return
+}
+
 func (m *Manager) initializeDB() (err error) {
+
 	// Creating Endpoint table
 	endpointSchema := sod.DefaultSchema
 	endpointSchema.Asynchrone(100, 10*time.Second)
-	if err = m.db.Create(&Endpoint{}, endpointSchema); err != nil {
+	if err = m.createTableOrRepair(&Endpoint{}, endpointSchema); err != nil {
 		return
 	}
 
 	// Creating AdminAPIUser table
-	if err = m.db.Create(&AdminAPIUser{}, sod.DefaultSchema); err != nil {
+	if err = m.createTableOrRepair(&AdminAPIUser{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
 	// Creating IOC table
-	if err = m.db.Create(&ioc.IOC{}, sod.DefaultSchema); err != nil {
+	if err = m.createTableOrRepair(&ioc.IOC{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
 	// Creating Sysmon config table
-	if err = m.db.Create(&sysmon.Config{}, sod.DefaultSchema); err != nil {
+	if err = m.createTableOrRepair(&sysmon.Config{}, sod.DefaultSchema); err != nil {
 		return
 	}
 
+	// Creating Tools table
+	if err = m.createTableOrRepair(&tools.Tool{}, sod.DefaultSchema); err != nil {
+		return
+	}
+
+	// Create schema for ArchivedReport
 	// we need to set indexed fields manually here as we don't
 	// have access to ReducedStats structure
-	archivedReportSchema := sod.DefaultSchema
-	descriptors := []sod.FieldDescriptor{
-		{Name: "Identifier", Index: true},
-		{Name: "ArchivedTimestamp", Index: true}}
-	archivedReportSchema.ObjectsIndex = sod.NewIndex(descriptors...)
-	if err = m.db.Create(&ArchivedReport{}, archivedReportSchema); err != nil {
+	archReportsDesc := sod.FieldDescriptors(&ArchivedReport{})
+	archReportsDesc.Constraint("Identifier", sod.Constraints{Index: true})
+	archReportsDesc.Constraint("ArchivedTimestamp", sod.Constraints{Index: true})
+	archivedReportSchema := sod.NewCustomSchema(archReportsDesc, sod.DefaultExtension)
+
+	if err = m.createTableOrRepair(&ArchivedReport{}, archivedReportSchema); err != nil {
 		return
 	}
 
-	rulesSchema := sod.DefaultSchema
-	rulesSchema.Extension = ".gen"
-	rulesDesc := []sod.FieldDescriptor{
-		{Name: "Name", Index: true, Constraint: sod.Constraints{Unique: true}},
-	}
-	rulesSchema.ObjectsIndex = sod.NewIndex(rulesDesc...)
-	if err = m.db.Create(&EdrRule{}, rulesSchema); err != nil {
+	// Create schema for EdrRule
+	rulesDesc := sod.FieldDescriptors(&EdrRule{})
+	rulesDesc.Constraint("Name", sod.Constraints{Index: true, Unique: true})
+	rulesSchema := sod.NewCustomSchema(rulesDesc, ".gen")
+
+	if err = m.createTableOrRepair(&EdrRule{}, rulesSchema); err != nil {
 		return
 	}
 
@@ -404,7 +400,7 @@ func (m *Manager) updateRulesCache() {
 
 // AddCommand sets a command to be executed on endpoint specified by UUID
 func (m *Manager) AddCommand(uuid string, c *Command) error {
-	if endpt, ok := m.MutEndpoint(uuid); ok {
+	if endpt, ok := m.Endpoint(uuid); ok {
 		endpt.Command = c
 		return m.db.InsertOrUpdate(endpt)
 	}
@@ -413,7 +409,7 @@ func (m *Manager) AddCommand(uuid string, c *Command) error {
 
 // GetCommand gets the command set for an endpoint specified by UUID
 func (m *Manager) GetCommand(uuid string) (*Command, error) {
-	if endpt, ok := m.MutEndpoint(uuid); ok {
+	if endpt, ok := m.Endpoint(uuid); ok {
 		// We return the command of an unmutable endpoint struct
 		// so if Command is modified this will not affect Endpoint
 		return endpt.Command, nil
@@ -421,12 +417,12 @@ func (m *Manager) GetCommand(uuid string) (*Command, error) {
 	return nil, ErrUnkEndpoint
 }
 
-// MutEndpoint returns an Endpoint pointer from database
+// Endpoint returns an Endpoint pointer from database
 // Result must be handled with care as any change to the Endpoint
 // might be commited to the database. If an Endpoint needs to be
 // modified but changes don't need to be commited, use Endpoint.Copy()
 // to work on a copy
-func (m *Manager) MutEndpoint(uuid string) (*Endpoint, bool) {
+func (m *Manager) Endpoint(uuid string) (*Endpoint, bool) {
 	if o, err := m.db.GetByUUID(&Endpoint{}, uuid); err == nil {
 		// we return copy to endpoints not to modify cached structures
 		return o.(*Endpoint), true
@@ -434,22 +430,24 @@ func (m *Manager) MutEndpoint(uuid string) (*Endpoint, bool) {
 	return nil, false
 }
 
-// MutEndpoints returns a slice of Endpoint pointers from database
+// Endpoints returns a slice of Endpoint pointers from database
 // Result must be handled with care as any change to the Endpoint
 // might be commited to the database. If an Endpoint needs to be
 // modified but changes don't need to be commited, use Endpoint.Copy()
 // to work on a copy
-func (m *Manager) MutEndpoints() (endpoints []*Endpoint, err error) {
+func (m *Manager) Endpoints() (endpoints []*Endpoint, err error) {
 	var all []sod.Object
 
 	if all, err = m.db.All(&Endpoint{}); err != nil {
 		return
 	}
+
 	endpoints = make([]*Endpoint, 0, len(all))
 	for _, o := range all {
 		// we return copy to endpoints not to modify cached structures
 		endpoints = append(endpoints, o.(*Endpoint))
 	}
+
 	return
 }
 
