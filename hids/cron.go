@@ -395,6 +395,16 @@ func (h *HIDS) scheduleTasks() {
 		}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
 			crony.PrioLow)
 
+		// updating sysmon
+		h.scheduler.Schedule(crony.NewTask("Sysmon update").Func(func() {
+			task := "[sysmon update]"
+			log.Info(task, "update starting")
+			if err := h.updateSysmon(); err != nil {
+				log.Error(task, err)
+			}
+		}).Ticker(time.Hour).Schedule(inLittleWhile),
+			crony.PrioMedium)
+
 		// updating sysmon configuration
 		h.scheduler.Schedule(crony.NewTask("Sysmon configuration update").Func(func() {
 			task := "[sysmon config update]"
@@ -413,7 +423,7 @@ func (h *HIDS) scheduleTasks() {
 				log.Error(task, err)
 			}
 		}).Ticker(time.Minute*15).Schedule(inLittleWhile),
-			crony.PrioMedium)
+			crony.PrioHigh)
 	}
 
 	if err := h.scheduleCleanArchivedTask(); err != nil {

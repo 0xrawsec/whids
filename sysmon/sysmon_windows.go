@@ -28,14 +28,55 @@ const (
 
 var (
 	versionRe = regexp.MustCompile(
-		`(?s:System\sMonitor\s(?P<version>v\d+\.\d+)\s-[.\s].*` +
-			`<manifest schemaversion="(?P<schemaversion>\d+\.\d+)" binaryversion="(?P<binaryversion>\d+\.\d+)">)`,
+		`(?s:System\sMonitor\s(?P<version>v\d+(\.\d+)?)\s-[.\s].*` +
+			`<manifest schemaversion="(?P<schemaversion>\d+(\.\d+)?)" binaryversion="(?P<binaryversion>\d+(\.\d+)?)">)`,
 	)
 )
 
-func Install(image string) (err error) {
+func Versions(image string) (version, schema, binary string, err error) {
+	var out []byte
+
+	sh := submatch.NewHelper(versionRe)
+
+	if fsutil.IsFile(image) {
+
+		c := command.CommandTimeout(
+			time.Second*2,
+			image,
+			"-s",
+		)
+		defer c.Terminate()
+
+		if out, err = c.CombinedOutput(); err != nil {
+			err = fmt.Errorf("failed to run sysmon command: %s", err)
+			return
+		}
+
+		if len(out) >= 2 {
+			// check UTF16 BOM
+			if out[1] == '\xfe' && out[0] == '\xff' {
+				out = []byte(win32.UTF16BytesToString(out))
+			}
+		}
+		sh.Prepare(out)
+		if v, err := sh.GetBytes("version"); err == nil {
+			version = string(v)
+		}
+		if sv, err := sh.GetBytes("schemaversion"); err == nil {
+			schema = string(sv)
+		}
+		if bv, err := sh.GetBytes("binaryversion"); err == nil {
+			binary = string(bv)
+		}
+	}
+
+	return
+}
+
+func InstallOrUpdate(image string) (err error) {
 
 	// we first uninstall existing installation
+	// if Sysmon is not installed yet we should not get any error
 	if err = Uninstall(); err != nil {
 		return
 	}
@@ -68,13 +109,14 @@ func Configure(r io.Reader) (err error) {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
-	if fsutil.IsFile(image) {
-		c := command.CommandTimeout(5*time.Second, image, "-c", config)
-		defer c.Terminate()
-		return c.Run()
+	if !fsutil.IsFile(image) {
+		return ErrSysmonNotInstalled
 	}
 
-	return ErrSysmonNotInstalled
+	c := command.CommandTimeout(5*time.Second, image, "-c", config)
+	defer c.Terminate()
+	return c.Run()
+
 }
 
 func Uninstall() (err error) {
@@ -87,11 +129,17 @@ func Uninstall() (err error) {
 		// we uninstall it
 		c := command.CommandTimeout(60*time.Second, image, "-u")
 		defer c.Terminate()
+
 		if err = c.Run(); err != nil {
 			return fmt.Errorf("failed to uninstall sysmon: %w", err)
 		}
+
+		if err = os.Remove(image); err != nil {
+			return fmt.Errorf("failed to remove sysmon binary: %w", err)
+		}
 	}
 
+	// we don't return any error if Sysmon is not yet installed
 	return
 }
 
@@ -178,36 +226,9 @@ func (i *Info) ConfigHash() string {
 }
 
 func (i *Info) parseSchema() {
-	sh := submatch.NewHelper(versionRe)
-
-	if fsutil.IsFile(i.Service.Image) {
-
-		c := command.CommandTimeout(
-			time.Second*2,
-			i.Service.Image,
-			"-s",
-		)
-		defer c.Terminate()
-
-		if out, err := c.CombinedOutput(); err == nil {
-			if len(out) >= 2 {
-				// check UTF16 BOM
-				if out[1] == '\xfe' && out[0] == '\xff' {
-					out = []byte(win32.UTF16BytesToString(out))
-				}
-			}
-			sh.Prepare(out)
-			if v, err := sh.GetBytes("version"); err == nil {
-				i.Version = string(v)
-			}
-			if sv, err := sh.GetBytes("schemaversion"); err == nil {
-				i.Config.Version.Schema = string(sv)
-			}
-			if bv, err := sh.GetBytes("binaryversion"); err == nil {
-				i.Config.Version.Binary = string(bv)
-			}
-		} else {
-			i.Err = fmt.Errorf("failed to run sysmon command: %s", err)
-		}
-	}
+	version, schema, binary, err := Versions(i.Service.Image)
+	i.Version = version
+	i.Config.Version.Schema = schema
+	i.Config.Version.Binary = binary
+	i.Err = err
 }

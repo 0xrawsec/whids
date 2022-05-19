@@ -23,6 +23,7 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api"
@@ -529,6 +530,54 @@ func (h *HIDS) updateSystemInfo() (err error) {
 	if hnew != hold {
 		h.systemInfo = new
 		return h.forwarder.Client.PostSystemInfo(h.systemInfo)
+	}
+
+	return
+}
+
+/*
+Warning: we cannot use binary hash information to decide wether we
+need to update because Sysmon.exe (32 bit version) contains both the
+32 and 64 bit version of the tool. When Sysmon gets installed only one
+of the two versions is installed.
+*/
+func (h *HIDS) updateSysmon() (err error) {
+	var version string
+
+	si := sysmon.NewSysmonInfo()
+	sysmonPath := filepath.Join(toolsDir, tools.WithExecExt(tools.ToolSysmon))
+
+	if !fsutil.IsFile(sysmonPath) {
+		// no Sysmon tool so nothing to do
+		return
+	}
+
+	if version, _, _, err = sysmon.Versions(sysmonPath); err != nil {
+		return fmt.Errorf("failed to retrieve tool's version: %w", err)
+	}
+
+	if si.Version == version {
+		// Sysmon in tools' directory is same version as
+		// the one installed -> nothing to do
+		return
+	}
+
+	// we install or update Sysmon
+	log.Infof("Install/updating sysmon old=%s new=%s", si.Version, version)
+	if err = sysmon.InstallOrUpdate(sysmonPath); err != nil {
+		return fmt.Errorf("failed to install/update sysmon: %w", err)
+	}
+
+	// updating system information before config update as config update
+	// may return on error
+	if err = h.updateSystemInfo(); err != nil {
+		return fmt.Errorf("failed to update system info: %w", err)
+	}
+
+	log.Info("Updating sysmon config")
+	// we update configuration
+	if err = h.updateSysmonConfig(); err != nil {
+		return fmt.Errorf("failed to update sysmon config: %w", err)
 	}
 
 	return

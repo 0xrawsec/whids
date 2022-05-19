@@ -13,6 +13,8 @@ github.com/0xrawsec/golang-utils v1.3.1/go.mod h1:DADTtCFY10qXjWmUVhhJqQIZdSweaH
 github.com/0xrawsec/golang-win32 v1.0.6/go.mod h1:MAxVU7dr8lujwknuhf4TwjYm8tVEELi2zwx1zDTu/RM=
 github.com/0xrawsec/golang-win32 v1.0.12 h1:n7KxFvO2cMr9MrXMlt+F54kLHcQBp0bBjR0wegb+h7Y=
 github.com/0xrawsec/golang-win32 v1.0.12/go.mod h1:LDGq8VzCwLZccK1qg7oKBc8n5DmPLi79w+wjew1UApg=
+github.com/0xrawsec/golang-win32 v1.0.13 h1:vbRW6CIlsgNCZ8tSm+jfo+zDexrXH2dVJuV9rpzkMVM=
+github.com/0xrawsec/golang-win32 v1.0.13/go.mod h1:LDGq8VzCwLZccK1qg7oKBc8n5DmPLi79w+wjew1UApg=
 github.com/0xrawsec/sod v1.6.9 h1:6fqhbXkL6X3S1fssBiaanxTiZxjKCWacNVP5awrQDNY=
 github.com/0xrawsec/sod v1.6.9/go.mod h1:AWB2VrKUriy5RZff2qmYkEtjcCS8NBYp0E/TUdoo+fE=
 github.com/0xrawsec/sod v1.8.0 h1:YxKju2uYBq69nQZL5JgWsmPMxy7BViRAC5WNxRPzG5A=

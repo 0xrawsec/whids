@@ -17,6 +17,10 @@ const (
 	ToolOSQueryi = "osqueryi"
 )
 
+func WithExecExt(name string) string {
+	return fmt.Sprintf("%s%s", name, los.ExecExt)
+}
+
 type Metadata struct {
 	Md5    string `sod:"lower,index" json:"md5"`
 	Sha1   string `sod:"lower,index" json:"sha1"`

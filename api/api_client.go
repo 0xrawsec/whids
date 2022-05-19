@@ -21,7 +21,7 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/hids/sysinfo"
-	edrOS "github.com/0xrawsec/whids/los"
+	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
@@ -30,7 +30,7 @@ import (
 var (
 	ErrServerUnauthenticated    = errors.New("server authentication failed")
 	ErrUnexpectedResponseStatus = errors.New("unexpected response status code")
-	ErrNoSysmonConfig           = errors.New("no sysmon config available")
+	ErrNoSysmonConfig           = errors.New("no sysmon config available in manager")
 )
 
 func ValidateRespStatus(resp *http.Response, status ...int) error {
@@ -600,7 +600,7 @@ func (m *ManagerClient) GetSysmonConfigSha256(schemaVersion string) (sha256 stri
 		return
 	}
 
-	requestAddURLParam(req, qpOS, edrOS.OS)
+	requestAddURLParam(req, qpOS, los.OS)
 	requestAddURLParam(req, qpVersion, schemaVersion)
 
 	if resp, err = m.HTTPClient.Do(req); err != nil {
@@ -632,7 +632,7 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 		return
 	}
 
-	requestAddURLParam(req, qpOS, edrOS.OS)
+	requestAddURLParam(req, qpOS, los.OS)
 	requestAddURLParam(req, qpVersion, schemaVersion)
 
 	if resp, err = m.HTTPClient.Do(req); err != nil {
@@ -665,7 +665,7 @@ func (m *ManagerClient) ListTools() (t map[string]*tools.Tool, err error) {
 		return
 	}
 
-	requestAddURLParam(req, qpOS, edrOS.OS)
+	requestAddURLParam(req, qpOS, los.OS)
 
 	if resp, err = m.HTTPClient.Do(req); err != nil {
 		return
@@ -694,7 +694,7 @@ func (m *ManagerClient) GetTool(hash string) (t *tools.Tool, err error) {
 		return
 	}
 
-	requestAddURLParam(req, qpOS, edrOS.OS)
+	requestAddURLParam(req, qpOS, los.OS)
 	requestAddURLParam(req, qpHash, hash)
 	requestAddURLParam(req, qpBinary, "true")
 

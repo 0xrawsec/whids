@@ -864,7 +864,7 @@ func TestOpenApiOSQueryi(t *testing.T) {
 	f := func(t *testing.T) {
 
 		path := openapi.PathItem{
-			Summary: "Manage OSQueryi binary deployed on endpoints",
+			Summary: "Manage OSQueryi installation",
 			Value:   AdmAPIEndpointsPath,
 		}
 
