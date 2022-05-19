@@ -19,7 +19,7 @@ github.com/0xrawsec/whids/api/api_client.go:414:		IsFileAboveUploadLimit		0.0%
 github.com/0xrawsec/whids/api/api_client.go:425:		PostDump			65.0%
 github.com/0xrawsec/whids/api/api_client.go:461:		PostLogs			68.8%
 github.com/0xrawsec/whids/api/api_client.go:493:		PostCommand			76.5%
-github.com/0xrawsec/whids/api/api_client.go:527:		FetchCommand			73.7%
+github.com/0xrawsec/whids/api/api_client.go:527:		FetchCommand			68.4%
 github.com/0xrawsec/whids/api/api_client.go:566:		PostSystemInfo			61.5%
 github.com/0xrawsec/whids/api/api_client.go:591:		GetSysmonConfigSha256		82.4%
 github.com/0xrawsec/whids/api/api_client.go:623:		GetSysmonConfig			83.3%
@@ -259,4 +259,4 @@ github.com/0xrawsec/whids/sysmon/config.go:191:			XML				100.0%
 github.com/0xrawsec/whids/sysmon/config.go:195:			Sha256				80.0%
 github.com/0xrawsec/whids/sysmon/config.go:210:			MarshalXML			100.0%
 github.com/0xrawsec/whids/sysmon/config.go:214:			UnmarshalXML			80.0%
-total:								(statements)			69.8%
+total:								(statements)			69.7%

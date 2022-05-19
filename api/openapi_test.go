@@ -774,7 +774,7 @@ func TestOpenApiSysmon(t *testing.T) {
 		tt := toast.FromT(t)
 
 		path := openapi.PathItem{
-			Summary: "Manage sysmon deployment",
+			Summary: "Manage Sysmon",
 			Value:   AdmAPIEndpointsPath,
 		}
 
@@ -784,7 +784,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "POST",
-			Summary: "Add or update a sysmon configuration",
+			Summary: "Add or update a Sysmon configuration",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/config"),
 				openapi.QueryParameter("format", "xml"),
@@ -799,7 +799,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "GET",
-			Summary: "Get a sysmon configuration",
+			Summary: "Get a Sysmon configuration",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/config"),
 				openapi.QueryParameter("version", "4.70").Require(),
@@ -811,7 +811,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "DELETE",
-			Summary: "Delete a sysmon configuration",
+			Summary: "Delete a Sysmon configuration",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/config"),
 				openapi.QueryParameter("version", "4.70").Require(),
@@ -823,7 +823,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "POST",
-			Summary: "Add or update sysmon binary to deploy on all endpoints",
+			Summary: "Add or update Sysmon binary to deploy on connected endpoints",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
@@ -838,7 +838,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "GET",
-			Summary: "Get information about sysmon binary",
+			Summary: "Get information about Sysmon binary",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
@@ -848,7 +848,7 @@ func TestOpenApiSysmon(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "DELETE",
-			Summary: "Delete Sysmon binary",
+			Summary: "Delete Sysmon binary from manager and connected endpoints",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/sysmon").Suffix("/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
@@ -864,13 +864,13 @@ func TestOpenApiOSQueryi(t *testing.T) {
 	f := func(t *testing.T) {
 
 		path := openapi.PathItem{
-			Summary: "Managing OSQueryi binary deployed on endpoints",
+			Summary: "Manage OSQueryi binary deployed on endpoints",
 			Value:   AdmAPIEndpointsPath,
 		}
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "POST",
-			Summary: "Add or update OSQueryi binary to deploy on all endpoints",
+			Summary: "Add or update OSQueryi binary to deploy on endpoints",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
@@ -885,7 +885,7 @@ func TestOpenApiOSQueryi(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "GET",
-			Summary: "Get information about OSQueryi binary to be deployed on endpoints",
+			Summary: "Get information about OSQueryi binary",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
@@ -895,7 +895,7 @@ func TestOpenApiOSQueryi(t *testing.T) {
 
 		openAPI.Do(path, openapi.Operation{
 			Method:  "DELETE",
-			Summary: "Delete OSQueryi binary from manager server",
+			Summary: "Delete OSQueryi binary from manager and connected endpoints",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("os", "windows").Suffix("/osqueryi/binary"),
 				openapi.QueryParameter(qpBinary, true, "Show binary in response"),
