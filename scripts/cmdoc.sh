@@ -18,7 +18,8 @@ echo
 cat << EOF
 This page documents the EDR specific commands endpoints can run.In addition to all the commands documented$br
 below, **any** other binary present on the endpoint can be executed, whether by absolute path or without if$br
-the binary is present in the PATH environment variable.
+the binary is present in the **PATH** environment variable. To understand how to send commands to endpoints and$br
+how to receive results, please take a look at the [**OpenAPI** documentation](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json).
 
 **IMPORTANT:** paths in command examples may contain escape sequences (Windows paths for instances).$br
 When such path is used inside JSON escape characters needs to be escaped once again (to be JSON valid).$br
