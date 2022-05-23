@@ -426,7 +426,7 @@ func TestOpenApiEndpointCommands(t *testing.T) {
 	f := func(t *testing.T) {
 
 		endpointPath := openapi.PathItem{
-			Summary: "Endpoint Execution",
+			Summary: "Endpoint Command Execution",
 			Value:   AdmAPIEndpointsPath,
 		}
 
@@ -440,7 +440,8 @@ func TestOpenApiEndpointCommands(t *testing.T) {
 				`Command to be executed. One can also specify files 
 				to drop from the manager to the endpoint prior to command execution 
 				and files to fetch after execution. A timeout for the can also 
-				be specified, if zero there will be no timeout.`,
+				be specified, if zero there will be no timeout. For a full list of 
+				available EDR specific commands check [documentation](https://github.com/0xrawsec/whids/blob/master/doc/edr-commands.md).`,
 				CommandAPI{CommandLine: `printf "Hello World"`},
 				true),
 			Output: AdminAPIResponse{},
