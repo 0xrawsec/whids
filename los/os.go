@@ -45,3 +45,7 @@ func GetPathEnv() string {
 func BuildPathEnv(value ...string) string {
 	return fmt.Sprintf("%s=%s", PathEnvVar, strings.Join(value, EnvVarSep))
 }
+
+func TrimPathSep(path string) string {
+	return strings.TrimRight(path, PathSep)
+}

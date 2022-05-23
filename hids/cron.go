@@ -47,25 +47,77 @@ func (h *HIDS) uncontainCmd() *exec.Cmd {
 
 func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 
+	// command documentation template:
+	/*
+		// after copying the template remove #
+		#@command: {
+			"name": "cmd",
+			"description": "Desc",
+			"help": "cmd [OPTIONS...] MANDATORY",
+			"example": "example"
+		}
+	*/
+
 	// Switch processing the commands
 	switch cmd.Name {
+
 	// Aliases
+	/*
+		@command: {
+				"name": "contain",
+				"description": "Isolate host at network level",
+				"help": "`contain`"
+			}
+	*/
 	case "contain":
 		cmd.FromExecCmd(h.containCmd())
 
+	/*
+		@command: {
+			"name": "uncontain",
+			"description": "Uncontain host (i.e. remove network isolation)",
+			"help": "`uncontain`"
+		}
+	*/
 	case "uncontain":
 		cmd.FromExecCmd(h.uncontainCmd())
 
+	/*
+		@command: {
+			"name": "osquery",
+			"description": "Alias to `osqueryi --json -A`",
+			"help": "`osquery OSQUERY_TABLE`",
+			"example": "`osquery processes`"
+		}
+	*/
 	case "osquery":
 		// osquery alias
 		cmd.Name = tools.ToolOSQueryi
 		cmd.Args = append([]string{"--json", "-A"}, cmd.Args...)
 		cmd.ExpectJSON = true
 
+	/*
+		@command: {
+			"name": "sysmon",
+			"description": "Alias to the sysmon binary deployed by the EDR. See sysmon binary command line switches for all available options.",
+			"help": "`sysmon [OPTIONS]`",
+			"example": "`sysmon -h`"
+		}
+	*/
 	case "sysmon":
+		// when installed, C:\\Windows\\ takes precedence over
+		// the tool present in toolsDir
 		cmd.Name = tools.ToolSysmon
 
 	// internal commands
+	/*
+		@command: {
+			"name": "terminate",
+			"description": "Terminate a process given its PID",
+			"help": "`terminate PID`",
+			"example": "`terminate 1337`"
+		}
+	*/
 	case "terminate":
 		cmd.Unrunnable()
 		if len(cmd.Args) > 0 {
@@ -77,6 +129,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			}
 		}
 
+	/*
+		@command: {
+			"name": "hash",
+			"description": "Hash a file",
+			"help": "`hash FILE`",
+			"example": "`hash C:\\\\Windows\\\\System32\\\\cmd.exe`"
+		}
+	*/
 	case "hash":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -88,6 +148,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			}
 		}
 
+	/*
+		@command: {
+			"name": "stat",
+			"description": "Stat a file or a directory",
+			"help": "`stat FILE|DIRECTORY`",
+			"example": "`stat C:\\\\Windows\\\\System32\\\\cmd.exe`"
+		}
+	*/
 	case "stat":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -99,7 +167,15 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			}
 		}
 
-	case "dir":
+	/*
+		@command: {
+			"name": "ls",
+			"description": "List a directory",
+			"help": "`ls DIRECTORY`",
+			"example": "`ls C:\\\\Windows\\\\`"
+		}
+	*/
+	case "ls":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
@@ -110,6 +186,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			}
 		}
 
+	/*
+		@command: {
+			"name": "walk",
+			"description": "Recursively list a directory",
+			"help": "`walk DIRECTORY`",
+			"example": "`walk C:\\\\Windows\\\\System32`"
+		}
+	*/
 	case "walk":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -117,6 +201,14 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			cmd.Json = cmdWalk(cmd.Args[0])
 		}
 
+	/*
+		@command: {
+			"name": "find",
+			"description": "Recursively find a pattern in filename",
+			"help": "`find DIRECTORY REGEX_PATTERN`",
+			"example": "`find C:\\\\Windows\\\\System32 cmd.*\\.exe`"
+		}
+	*/
 	case "find":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
@@ -128,11 +220,25 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 			}
 		}
 
+	/*
+		@command: {
+			"name": "report",
+			"description": "Generate a full IR ready report",
+			"help": "`report`"
+		}
+	*/
 	case "report":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		cmd.Json = h.Report(false)
 
+	/*
+		@command: {
+			"name": "processes",
+			"description": "Retrieve the full list of processes running (monitored from Sysmon logs)",
+			"help": "`processes`"
+		}
+	*/
 	case "processes":
 		h.tracker.RLock()
 		cmd.Unrunnable()
@@ -140,6 +246,13 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.Json = h.tracker.PS()
 		h.tracker.RUnlock()
 
+	/*
+		@command: {
+			"name": "modules",
+			"description": "Retrieve the full list of modules ever loaded since boot (monitored from Sysmon logs)",
+			"help": "`modules`"
+		}
+	*/
 	case "modules":
 		h.tracker.RLock()
 		cmd.Unrunnable()
@@ -147,6 +260,13 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.Json = h.tracker.Modules()
 		h.tracker.RUnlock()
 
+	/*
+		@command: {
+			"name": "drivers",
+			"description": "Retrieve the full list of drivers ever loaded since boot (monitored from Sysmon logs)",
+			"help": "`drivers`"
+		}
+	*/
 	case "drivers":
 		h.tracker.RLock()
 		cmd.Unrunnable()

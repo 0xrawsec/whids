@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
+	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -181,7 +182,7 @@ func cmdStat(path string) (nfi FileInfo, err error) {
 		return
 	}
 
-	nfi.Dir = filepath.Dir(path)
+	nfi.Dir = filepath.Dir(los.TrimPathSep(path))
 	nfi.FromFSFileInfo(fi)
 	return
 }
