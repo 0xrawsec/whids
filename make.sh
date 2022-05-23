@@ -2,6 +2,7 @@
 
 RELEASE=${GOPATH}/release
 VERSION=$(git tag | tail -n 1)
+TOOLS="utilities"
 
 function check_err() {
     if [[ $? != 0 ]]
@@ -10,11 +11,11 @@ function check_err() {
     fi
 }
 
-pushd utilities/sysmon && make -j 8 $@ || check_err && popd
+pushd $TOOLS/sysmon && make -j 8 $@ || check_err && popd
 
-pushd utilities/whids && make -j 8 $@ || check_err && popd
+pushd $TOOLS/whids && make -j 8 $@ || check_err && popd
 
-pushd utilities/manager && make -j 8 $@ || check_err && popd
+pushd $TOOLS/manager && make -j 8 $@ || check_err && popd
 
 pushd ${RELEASE}
 # Remove previous bundles
