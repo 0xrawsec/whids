@@ -45,6 +45,7 @@ type FileInfo struct {
 	ModTime time.Time         `json:"modtime"`
 	Type    string            `json:"type"`
 	Hashes  map[string]string `json:"hashes,omitempty"`
+	Err     error             `json:"error"`
 }
 
 func (fi *FileInfo) Path() string {
@@ -151,7 +152,7 @@ func cmdWalk(path string) []WalkItem {
 	return out
 }
 
-func cmdFind(path string, pattern string) (out []FileInfo, err error) {
+func cmdFind(path string, pattern string, hash bool) (out []FileInfo, err error) {
 	var pr *regexp.Regexp
 
 	out = make([]FileInfo, 0)
@@ -166,6 +167,10 @@ func cmdFind(path string, pattern string) (out []FileInfo, err error) {
 			if pr.MatchString(path) {
 				nfi := FileInfo{Dir: wi.Dirpath}
 				nfi.FromFSFileInfo(fi)
+				// we need to hash file
+				if hash {
+					nfi.Err = nfi.Hash()
+				}
 				out = append(out, nfi)
 			}
 

@@ -150,6 +150,25 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 
 	/*
 		@command: {
+			"name": "rexhash",
+			"description": "Recursively find files matching pattern and hashes them",
+			"help": "`rexhash DIRECTORY PATTERN`",
+			"example": "`rexhash C:\\\\Windows\\\\System32 cmd\\\\.exe`"
+		}
+	*/
+	case "rexhash":
+		cmd.Unrunnable()
+		cmd.ExpectJSON = true
+		if len(cmd.Args) == 2 {
+			if out, err := cmdFind(cmd.Args[0], cmd.Args[1], true); err != nil {
+				cmd.Error = err.Error()
+			} else {
+				cmd.Json = out
+			}
+		}
+
+	/*
+		@command: {
 			"name": "stat",
 			"description": "Stat a file or a directory",
 			"help": "`stat FILE|DIRECTORY`",
@@ -213,7 +232,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
 		if len(cmd.Args) == 2 {
-			if out, err := cmdFind(cmd.Args[0], cmd.Args[1]); err != nil {
+			if out, err := cmdFind(cmd.Args[0], cmd.Args[1], false); err != nil {
 				cmd.Error = err.Error()
 			} else {
 				cmd.Json = out

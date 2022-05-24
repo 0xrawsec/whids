@@ -18,6 +18,7 @@ be encoded as such `C:\\\\Windows\\\\System32\\\\tasklist.exe`
 * [sysmon](#sysmon)
 * [terminate](#terminate)
 * [hash](#hash)
+* [rexhash](#rexhash)
 * [stat](#stat)
 * [ls](#ls)
 * [walk](#walk)
@@ -75,6 +76,15 @@ be encoded as such `C:\\\\Windows\\\\System32\\\\tasklist.exe`
 **Help:** `hash FILE`
 
 **Example:** `hash C:\\Windows\\System32\\cmd.exe`
+
+
+## rexhash
+
+**Description:** Recursively find files matching pattern and hashes them
+
+**Help:** `rexhash DIRECTORY PATTERN`
+
+**Example:** `rexhash C:\\Windows\\System32 cmd\\.exe`
 
 
 ## stat
