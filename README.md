@@ -129,7 +129,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
   - [ ] find a new name to the project because we all agree it sucks
   - [ ] better sysmon integration (config, deployment, update)
   - [ ] endpoint configuration from manager
-  - [ ] tooling management (update, install), like OSQuery
+  - [X] tooling management (update, install), like OSQuery
   - [ ] code refactoring and optimization
   - [X] implement a performance monitor
   - [X] get rid of any on-disk configuration

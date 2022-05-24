@@ -593,16 +593,37 @@ func (h *HIDS) updateSysmonConfig() (err error) {
 	schemaVersion := systemInfo.Sysmon.Config.Version.Schema
 	sha256 := systemInfo.Sysmon.Config.Hash
 
-	if remoteSha256, err = c.GetSysmonConfigSha256(schemaVersion); err != nil {
+	remoteSha256, err = c.GetSysmonConfigSha256(schemaVersion)
+
+	switch err {
+	case nil:
+		// if we go here it means there is a configuration available in manager
+		// Nothing to do
+		if remoteSha256 == sha256 {
+			return
+		}
+
+		// getting sysmon configuration from manager
+		if cfg, err = c.GetSysmonConfig(schemaVersion); err != nil {
+			return
+		}
+
+	case api.ErrNoSysmonConfig:
+		// no configuration available on the manager
+
+		log.Info("No Sysmon config found on manager, trying to use default config")
+
+		if cfg, err = sysmon.AgnosticConfig(schemaVersion); err != nil {
+			return
+		}
+
+	default:
 		return
 	}
 
-	// Nothing to do
-	if remoteSha256 == sha256 {
-		return
-	}
-
-	if cfg, err = c.GetSysmonConfig(schemaVersion); err != nil {
+	if sha256 == cfg.XmlSha256 {
+		// we can skip sysmon configuration update as the current configuration
+		// is the same as the one we want to apply
 		return
 	}
 
