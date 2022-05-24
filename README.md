@@ -127,7 +127,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
 # Roadmap until next release
 
   - [ ] find a new name to the project because we all agree it sucks
-  - [ ] better sysmon integration (config, deployment, update)
+  - [X] better sysmon integration (config, deployment, update)
   - [ ] endpoint configuration from manager
   - [X] tooling management (update, install), like OSQuery
   - [ ] code refactoring and optimization
