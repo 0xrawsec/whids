@@ -10,7 +10,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/readers"
-	"github.com/0xrawsec/whids/utils"
+	"github.com/0xrawsec/toast"
 )
 
 var (
@@ -63,6 +63,7 @@ func emitEvents(count int, random bool) (ce chan *EdrEvent) {
 }
 
 func TestEventWithAction(t *testing.T) {
+	tt := toast.FromT(t)
 	str := `{"Event":{"EventData":{"AccessList":"%%4416\r\n\t\t\t\t","AccessMask":"0x1","CommandLine":"\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" ","HandleId":"0x1350","ImageHashes":"SHA1=957004ABEEF46EF5B5365F668F26868434E4D040,MD5=74859601FB4BEEA84B40D874CCB56CAB,SHA256=A35C86CCD3E26316C45A0E63EFA9CDD1E9D3B01B23F7829EAD9106FA5340066D,IMPHASH=891D2BAFA4260189E94CAC8FB19F369A","ObjectName":"C:\\Windows\\readme.pdf","ObjectServer":"Security","ObjectType":"File","ProcessGuid":"{515cd0d1-2921-6152-721b-000000008200}","ProcessId":"0xD8C","ProcessName":"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe","ResourceAttributes":"S:AI","SubjectDomainName":"DESKTOP-LJRVE06","SubjectLogonId":"0x361D5","SubjectUserName":"Generic","SubjectUserSid":"S-1-5-21-2915380141-4195670196-3871645020-1001"},"System":{"Channel":"Security","Computer":"DESKTOP-LJRVE06","EventID":4663,"Execution":{"ProcessID":4,"ThreadID":7136},"Keywords":{"Value":9232379236109517000,"Name":""},"Level":{"Value":0,"Name":""},"Opcode":{"Value":0,"Name":"Info"},"Task":{"Value":0,"Name":""},"Provider":{"Guid":"{54849625-5478-4994-A5BA-3E3B0328C30D}","Name":"Microsoft-Windows-Security-Auditing"},"TimeCreated":{"SystemTime":"2021-09-27T20:27:28.7685432Z"}},"Detection":{"Signature":["Builtin:CanaryAccessed"],"Criticality":10,"Actions":["kill","memdump","filedump","blacklist","report"]}}}`
 	event := EdrEvent{}
 	if err := json.Unmarshal([]byte(str), &event); err != nil {
@@ -70,24 +71,17 @@ func TestEventWithAction(t *testing.T) {
 	}
 	h := event.Hash()
 	for i := 0; i < 10000; i++ {
-		if h != event.Hash() {
-			t.Errorf("Event hashing function is not stable %s vs %s", h, event.Hash())
-		}
+		// testing hash stability
+		tt.Assert(h == event.Hash())
 	}
 }
 
 func TestEventHashStability(t *testing.T) {
+	tt := toast.FromT(t)
 	for event := range emitEvents(10000, true) {
 		h := event.Hash()
-		b1 := utils.Json(event)
 		for i := 0; i < 100; i++ {
-			if h != event.Hash() {
-				b2 := utils.Json(event)
-				t.Errorf("Event hashing function is not stable %s vs %s", h, event.Hash())
-				t.Error(string(b1))
-				t.Error(string(b2))
-				break
-			}
+			tt.Assert(h == event.Hash())
 		}
 	}
 }
@@ -181,49 +175,51 @@ func TestEventGetters(t *testing.T) {
 	}
 	}
 	`
+	tt := toast.FromT(t)
 	event := EdrEvent{}
-	if err := json.Unmarshal([]byte(str), &event); err != nil {
-		t.Error(err)
-	}
+
+	tt.CheckErr(json.Unmarshal([]byte(str), &event))
 
 	processId := engine.Path(eventData + "ProcessId")
 	description := engine.Path(eventData + "Description")
 	unknown := engine.Path(eventData + "Unknown")
-	assert(event.SetIfOr(processId, "666", true, "1928") == nil, "Failed to set field")
-	assert(event.SetIfOr(processId, "666", false, "1928") == nil, "Failed to set field")
-	assert(event.SetIf(processId, "42", true) == nil, "Failed to set field")
-	assert(event.SetIf(processId, "1928", true) == nil, "Failed to set field")
-	assert(event.GetIntOr(processId, -1) == 1928, "Wrong ProcessId value")
-	assert(event.GetIntOr(unknown, -1) == -1, "Wrong unknown field value")
-	assert(event.GetUintOr(processId, 0) == 1928, "Wrong ProcessId value")
-	assert(event.GetUintOr(unknown, 0) == 0, "Wrong unknown field value")
-	assert(event.GetStringOr(description, "?") == "Google Installer", "Wrong Description value")
-	assert(event.GetStringOr(unknown, "?") == "?", "Wrong unknown field value")
+	tt.CheckErr(event.SetIfOr(processId, "666", true, "1928"))
+	tt.CheckErr(event.SetIfOr(processId, "666", false, "1928"))
+	tt.CheckErr(event.SetIf(processId, "42", true))
+	tt.CheckErr(event.SetIf(processId, "1928", true))
+	tt.Assert(event.GetIntOr(processId, -1) == 1928)
+	tt.Assert(event.GetIntOr(unknown, -1) == -1)
+	tt.Assert(event.GetUintOr(processId, 0) == 1928)
+	tt.Assert(event.GetUintOr(unknown, 0) == 0)
+	tt.Assert(event.GetStringOr(description, "?") == "Google Installer")
+	tt.Assert(event.GetStringOr(unknown, "?") == "?")
+
+	// testing SetIfMissing
+	// description is there so the attempt to set the value should fail
+	tt.CheckErr(event.SetIfMissing(description, "?"))
+	tt.Assert(event.GetStringOr(description, "?") == "Google Installer")
+	// unknown is not set so it should set it
+	tt.CheckErr(event.SetIfMissing(unknown, "unk"))
+	tt.Assert(event.GetStringOr(unknown, "?") == "unk")
 
 	// skip event
-	assert(event.IsSkipped() == false, "Event should not be skipped")
+	tt.Assert(!event.IsSkipped())
 	event.Skip()
-	assert(event.IsSkipped(), "Event should be skipped")
+	tt.Assert(event.IsSkipped())
 
-	assert(event.Channel() == "Microsoft-Windows-Sysmon/Operational", "Wrong channel")
-	assert(event.IsDetection(), "Event should be a detection")
-	assert(event.GetDetection().Criticality == 10, "Wrong criticality")
+	tt.Assert(event.Channel() == "Microsoft-Windows-Sysmon/Operational")
+	tt.Assert(event.IsDetection())
+	tt.Assert(event.GetDetection().Criticality == 10)
 	event.SetDetection(nil)
 	event.SetDetection(&engine.Detection{Criticality: 0})
 	event.Event.Detection = nil
-	assert(!event.IsDetection(), "Event should not be a detection")
-	assert(event.Computer() == "DESKTOP-LJRVE06", "Wrong computer name")
-	assert(event.EventID() == 1, "Wrong event ID")
+	tt.Assert(!event.IsDetection(), "Event should not be a detection")
+	tt.Assert(event.Computer() == "DESKTOP-LJRVE06", "Wrong computer name")
+	tt.Assert(event.EventID() == 1, "Wrong event ID")
 	ts, _ := time.Parse(time.RFC3339Nano, "2021-08-28T14:49:40.20152Z")
-	assert(event.Timestamp().Equal(ts), "Wrong timestamp")
+	tt.Assert(event.Timestamp().Equal(ts), "Wrong timestamp")
 
-	assert(event.Event.EdrData.Endpoint.Hostname == event.Computer(), "Wrong computer name")
+	tt.Assert(event.Event.EdrData.Endpoint.Hostname == event.Computer(), "Wrong computer name")
 	event.InitEdrData()
-	assert(event.Event.EdrData.Endpoint.Hostname == "", "Computer name must be empty")
-}
-
-func assert(test bool, message string) {
-	if !test {
-		panic(message)
-	}
+	tt.Assert(event.Event.EdrData.Endpoint.Hostname == "", "Computer name must be empty")
 }

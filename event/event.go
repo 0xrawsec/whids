@@ -140,6 +140,15 @@ func (e *EdrEvent) SetIfOr(p engine.XPath, value interface{}, cond bool, other i
 	return e.Set(p, other)
 }
 
+func (e *EdrEvent) SetIfMissing(p engine.XPath, i interface{}) (err error) {
+	if _, ok := e.Get(p); ok {
+		// nothing to do as the field already exists
+		return
+	}
+
+	return e.Set(p, i)
+}
+
 func (e *EdrEvent) Set(p engine.XPath, i interface{}) (err error) {
 	switch {
 	case p.StartsWith(eventDataPath):
