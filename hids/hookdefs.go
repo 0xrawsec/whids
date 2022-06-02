@@ -39,8 +39,9 @@ var (
 // hook applying on Sysmon events containing image information and
 // adding a new field containing the image size
 func hookSetImageSize(h *HIDS, e *event.EdrEvent) {
-	var path engine.XPath
-	var modpath engine.XPath
+	var path *engine.XPath
+	var modpath *engine.XPath
+
 	switch e.EventID() {
 	case SysmonProcessCreate:
 		path = pathSysmonImage
@@ -104,11 +105,6 @@ func hookImageLoad(h *HIDS, e *event.EdrEvent) {
 func hookTrack(h *HIDS, e *event.EdrEvent) {
 	switch e.EventID() {
 	case SysmonProcessCreate:
-		// Default values
-		e.Set(pathAncestors, "?")
-		e.Set(pathParentUser, "?")
-		e.Set(pathParentIntegrityLevel, "?")
-		e.Set(pathParentServices, "?")
 		// We need to be sure that process termination is enabled
 		// before initiating process tracking not to fill up memory
 		// with structures that will never be freed
@@ -160,15 +156,15 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 														}
 
 														h.tracker.Add(track)
-														e.Set(pathAncestors, strings.Join(track.Ancestors, "|"))
+														e.SetIfMissing(pathAncestors, strings.Join(track.Ancestors, "|"))
 														if track.ParentUser != "" {
-															e.Set(pathParentUser, track.ParentUser)
+															e.SetIfMissing(pathParentUser, track.ParentUser)
 														}
 														if track.ParentIntegrityLevel != "" {
-															e.Set(pathParentIntegrityLevel, track.ParentIntegrityLevel)
+															e.SetIfMissing(pathParentIntegrityLevel, track.ParentIntegrityLevel)
 														}
 														if track.ParentServices != "" {
-															e.Set(pathParentServices, track.ParentServices)
+															e.SetIfMissing(pathParentServices, track.ParentServices)
 														}
 													}
 												}
@@ -182,6 +178,13 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 				}
 			}
 		}
+
+		// Default values
+		e.SetIfMissing(pathAncestors, "?")
+		e.SetIfMissing(pathParentUser, "?")
+		e.SetIfMissing(pathParentIntegrityLevel, "?")
+		e.SetIfMissing(pathParentServices, "?")
+
 	case SysmonDriverLoad:
 		d := DriverInfoFromEvent(e)
 		h.tracker.Drivers = append(h.tracker.Drivers, *d)
@@ -562,16 +565,6 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 
 	case SysmonCreateRemoteThread, SysmonAccessProcess:
 		// Handling CreateRemoteThread and ProcessAccess events
-		// Default Values for the fields
-		e.Set(pathSourceUser, "?")
-		e.Set(pathSourceIntegrityLevel, "?")
-		e.Set(pathTargetUser, "?")
-		e.Set(pathTargetIntegrityLevel, "?")
-		e.Set(pathTargetParentProcessGuid, "?")
-		e.Set(pathSourceHashes, "?")
-		e.Set(pathTargetHashes, "?")
-		e.Set(pathSrcProcessGeneScore, "-1")
-		e.Set(pathTgtProcessGeneScore, "-1")
 
 		sguidPath := pathSysmonSourceProcessGUID
 		tguidPath := pathSysmonTargetProcessGUID
@@ -580,89 +573,110 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 			sguidPath = pathSysmonCRTSourceProcessGuid
 			tguidPath = pathSysmonCRTTargetProcessGuid
 		}
+
 		if sguid, ok := e.GetString(sguidPath); ok {
 			if tguid, ok := e.GetString(tguidPath); ok {
+
+				// source process processing
 				if strack := h.tracker.GetByGuid(sguid); !strack.IsZero() {
 					if strack.User != "" {
-						e.Set(pathSourceUser, strack.User)
+						e.SetIfMissing(pathSourceUser, strack.User)
 					}
+
 					if strack.IntegrityLevel != "" {
-						e.Set(pathSourceIntegrityLevel, strack.IntegrityLevel)
+						e.SetIfMissing(pathSourceIntegrityLevel, strack.IntegrityLevel)
 					}
+
 					if strack.hashes != "" {
-						e.Set(pathSourceHashes, strack.hashes)
+						e.SetIfMissing(pathSourceHashes, strack.hashes)
 					}
+
 					// Source process score
 					e.Set(pathSrcProcessGeneScore, toString(strack.ThreatScore.Score))
 				}
+
+				// target process processing
 				if ttrack := h.tracker.GetByGuid(tguid); !ttrack.IsZero() {
 					if ttrack.User != "" {
-						e.Set(pathTargetUser, ttrack.User)
+						e.SetIfMissing(pathTargetUser, ttrack.User)
 					}
 					if ttrack.IntegrityLevel != "" {
-						e.Set(pathTargetIntegrityLevel, ttrack.IntegrityLevel)
+						e.SetIfMissing(pathTargetIntegrityLevel, ttrack.IntegrityLevel)
 					}
 					if ttrack.ParentProcessGUID != "" {
-						e.Set(pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
+						e.SetIfMissing(pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
 					}
 					if ttrack.hashes != "" {
-						e.Set(pathTargetHashes, ttrack.hashes)
+						e.SetIfMissing(pathTargetHashes, ttrack.hashes)
 					}
 					// Target process score
 					e.Set(pathTgtProcessGeneScore, toString(ttrack.ThreatScore.Score))
 				}
+
+				// Default Values for fields
+				e.SetIfMissing(pathSourceUser, "?")
+				e.SetIfMissing(pathSourceIntegrityLevel, "?")
+				e.SetIfMissing(pathTargetUser, "?")
+				e.SetIfMissing(pathTargetIntegrityLevel, "?")
+				e.SetIfMissing(pathTargetParentProcessGuid, "?")
+				e.SetIfMissing(pathSourceHashes, "?")
+				e.SetIfMissing(pathTargetHashes, "?")
 			}
 		}
 
+		// should be missing
+		e.SetIfMissing(pathSrcProcessGeneScore, "-1")
+		e.SetIfMissing(pathTgtProcessGeneScore, "-1")
+
 	default:
 
+		/* Any other event than CreateRemoteThread and ProcessAccess*/
 		if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
+
+			// Setting GeneScore only if we can identify process by its GUID
 			// Default value
 			e.Set(pathProcessGeneScore, "-1")
 
 			if track := h.tracker.GetByGuid(guid); !track.IsZero() {
-				// if event does not have CommandLine field
-				if !eventHas(e, pathSysmonCommandLine) {
-					e.Set(pathSysmonCommandLine, "?")
-					if track.CommandLine != "" {
-						e.Set(pathSysmonCommandLine, track.CommandLine)
-					}
-				}
 
-				// if event does not have User field
-				if !eventHas(e, pathSysmonUser) {
-					e.Set(pathSysmonUser, "?")
-					if track.User != "" {
-						e.Set(pathSysmonUser, track.User)
-					}
+				// setting CommandLine field
+				if track.CommandLine != "" {
+					e.SetIfMissing(pathSysmonCommandLine, track.CommandLine)
 				}
+				// default value set only if missing
+				e.SetIfMissing(pathSysmonCommandLine, "?")
 
-				// if event does not have IntegrityLevel field
-				if !eventHas(e, pathSysmonIntegrityLevel) {
-					e.Set(pathSysmonIntegrityLevel, "?")
-					if track.IntegrityLevel != "" {
-						e.Set(pathSysmonIntegrityLevel, track.IntegrityLevel)
-					}
+				// setting User field
+				if track.User != "" {
+					e.SetIfMissing(pathSysmonUser, track.User)
 				}
+				// default value set only if missing
+				e.SetIfMissing(pathSysmonUser, "?")
 
-				// if event does not have CurrentDirectory field
-				if !eventHas(e, pathSysmonCurrentDirectory) {
-					e.Set(pathSysmonCurrentDirectory, "?")
-					if track.CurrentDirectory != "" {
-						e.Set(pathSysmonCurrentDirectory, track.CurrentDirectory)
-					}
+				// setting IntegrityLevel
+				if track.IntegrityLevel != "" {
+					e.SetIfMissing(pathSysmonIntegrityLevel, track.IntegrityLevel)
 				}
+				// default value set only if missing
+				e.SetIfMissing(pathSysmonIntegrityLevel, "?")
+
+				// setting CurrentDirectory
+				if track.CurrentDirectory != "" {
+					e.SetIfMissing(pathSysmonCurrentDirectory, track.CurrentDirectory)
+				}
+				// default value set only if missing
+				e.SetIfMissing(pathSysmonCurrentDirectory, "?")
 
 				// event never has ImageHashes field since it is not Sysmon standard
-				e.Set(pathImageHashes, "?")
 				if track.hashes != "" {
 					e.Set(pathImageHashes, track.hashes)
 				}
+				e.SetIfMissing(pathImageHashes, "?")
 
 				// Signature information
-				e.Set(pathImageSigned, toString(track.Signed))
-				e.Set(pathImageSignature, track.Signature)
-				e.Set(pathImageSignatureStatus, track.SignatureStatus)
+				e.SetIfMissing(pathImageSigned, toString(track.Signed))
+				e.SetIfMissing(pathImageSignature, track.Signature)
+				e.SetIfMissing(pathImageSignatureStatus, track.SignatureStatus)
 
 				// Overal criticality score
 				e.Set(pathProcessGeneScore, toString(track.ThreatScore.Score))

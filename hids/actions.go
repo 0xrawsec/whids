@@ -46,7 +46,7 @@ var (
 		ActionBrief,
 	}
 
-	filedumpXPaths = []engine.XPath{
+	filedumpXPaths = []*engine.XPath{
 		pathSysmonImage,
 		pathSysmonParentImage,
 		pathSysmonSourceImage,

@@ -49,7 +49,7 @@ func srcPIDFromEvent(e *event.EdrEvent) int64 {
 }
 
 func srcGUIDFromEvent(e *event.EdrEvent) string {
-	var procGUIDPath engine.XPath
+	var procGUIDPath *engine.XPath
 
 	// the interesting pid to dump depends on the event
 	switch e.EventID() {
@@ -80,12 +80,6 @@ func hasAction(e *event.EdrEvent, action string) bool {
 		return d.Actions.Contains(action)
 	}
 	return false
-}
-
-// Todo: move this function into evtx package
-func eventHas(e *event.EdrEvent, p engine.XPath) bool {
-	_, ok := e.GetString(p)
-	return ok
 }
 
 func getCriticality(e *event.EdrEvent) int {

@@ -10,11 +10,6 @@ import (
 	"github.com/0xrawsec/whids/utils"
 )
 
-var (
-	eventDataPath = engine.Path("/Event/EventData")
-	userDataPath  = engine.Path("/Event/UserData")
-)
-
 type EdrData struct {
 	Endpoint struct {
 		UUID     string
@@ -55,14 +50,14 @@ func (e *EdrEvent) Hash() string {
 	return utils.HashEventBytes(utils.Json(tmp))
 }
 
-func (e *EdrEvent) GetStringOr(p engine.XPath, or string) string {
+func (e *EdrEvent) GetStringOr(p *engine.XPath, or string) string {
 	if s, ok := e.GetString(p); ok {
 		return s
 	}
 	return or
 }
 
-func (e *EdrEvent) GetString(p engine.XPath) (s string, ok bool) {
+func (e *EdrEvent) GetString(p *engine.XPath) (s string, ok bool) {
 	var i interface{}
 
 	if i, ok = e.Get(p); ok {
@@ -73,7 +68,7 @@ func (e *EdrEvent) GetString(p engine.XPath) (s string, ok bool) {
 	return
 }
 
-func (e *EdrEvent) GetInt(p engine.XPath) (i int64, ok bool) {
+func (e *EdrEvent) GetInt(p *engine.XPath) (i int64, ok bool) {
 	var s string
 	var err error
 
@@ -85,14 +80,14 @@ func (e *EdrEvent) GetInt(p engine.XPath) (i int64, ok bool) {
 	return
 }
 
-func (e *EdrEvent) GetIntOr(p engine.XPath, or int64) int64 {
+func (e *EdrEvent) GetIntOr(p *engine.XPath, or int64) int64 {
 	if i, ok := e.GetInt(p); ok {
 		return i
 	}
 	return or
 }
 
-func (e *EdrEvent) GetUint(p engine.XPath) (i uint64, ok bool) {
+func (e *EdrEvent) GetUint(p *engine.XPath) (i uint64, ok bool) {
 	var s string
 	var err error
 
@@ -104,14 +99,14 @@ func (e *EdrEvent) GetUint(p engine.XPath) (i uint64, ok bool) {
 	return
 }
 
-func (e *EdrEvent) GetUintOr(p engine.XPath, or uint64) uint64 {
+func (e *EdrEvent) GetUintOr(p *engine.XPath, or uint64) uint64 {
 	if u, ok := e.GetUint(p); ok {
 		return u
 	}
 	return or
 }
 
-func (e *EdrEvent) GetBool(p engine.XPath) (b bool, ok bool) {
+func (e *EdrEvent) GetBool(p *engine.XPath) (b bool, ok bool) {
 	var s string
 	var err error
 
@@ -125,7 +120,7 @@ func (e *EdrEvent) GetBool(p engine.XPath) (b bool, ok bool) {
 }
 
 // SetIfOr set value if cond == true
-func (e *EdrEvent) SetIf(p engine.XPath, value interface{}, cond bool) (err error) {
+func (e *EdrEvent) SetIf(p *engine.XPath, value interface{}, cond bool) (err error) {
 	if cond {
 		return e.Set(p, value)
 	}
@@ -133,14 +128,14 @@ func (e *EdrEvent) SetIf(p engine.XPath, value interface{}, cond bool) (err erro
 }
 
 // SetIfOr set value if cond == true or other
-func (e *EdrEvent) SetIfOr(p engine.XPath, value interface{}, cond bool, other interface{}) (err error) {
+func (e *EdrEvent) SetIfOr(p *engine.XPath, value interface{}, cond bool, other interface{}) (err error) {
 	if cond {
 		return e.Set(p, value)
 	}
 	return e.Set(p, other)
 }
 
-func (e *EdrEvent) SetIfMissing(p engine.XPath, i interface{}) (err error) {
+func (e *EdrEvent) SetIfMissing(p *engine.XPath, i interface{}) (err error) {
 	if _, ok := e.Get(p); ok {
 		// nothing to do as the field already exists
 		return
@@ -149,12 +144,12 @@ func (e *EdrEvent) SetIfMissing(p engine.XPath, i interface{}) (err error) {
 	return e.Set(p, i)
 }
 
-func (e *EdrEvent) Set(p engine.XPath, i interface{}) (err error) {
+func (e *EdrEvent) Set(p *engine.XPath, i interface{}) (err error) {
 	switch {
-	case p.StartsWith(eventDataPath):
+	case p.Flags.EventDataField:
 		e.Event.EventData[p.Last()] = i
 		return
-	case p.StartsWith(userDataPath):
+	case p.Flags.UserDataField:
 		e.Event.UserData[p.Last()] = i
 		return
 	}
@@ -184,12 +179,12 @@ func (e *EdrEvent) SetDetection(d *engine.Detection) {
 	}
 }
 
-func (e *EdrEvent) Get(p engine.XPath) (i interface{}, ok bool) {
+func (e *EdrEvent) Get(p *engine.XPath) (i interface{}, ok bool) {
 	switch {
-	case p.StartsWith(eventDataPath):
+	case p.Flags.EventDataField:
 		i, ok = e.Event.EventData[p.Last()]
 		return
-	case p.StartsWith(userDataPath):
+	case p.Flags.UserDataField:
 		i, ok = e.Event.UserData[p.Last()]
 		return
 	}
