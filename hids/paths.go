@@ -147,4 +147,10 @@ var (
 	pathFileCountByExt = engine.Path("/Event/EventData/CountByExt")
 	pathFileExtension  = engine.Path("/Event/EventData/Extension")
 	pathFileFrequency  = engine.Path("/Event/EventData/FrequencyEps")
+
+	// ProcessProtectionLevel
+	pathProtectionLevel       = engine.Path("/Event/EventData/ProtectionLevel")
+	pathSourceProtectionLevel = engine.Path("/Event/EventData/SourceProtectionLevel")
+	pathTargetProtectionLevel = engine.Path("/Event/EventData/TargetProtectionLevel")
+	pathParentProtectionLevel = engine.Path("/Event/EventData/ParentProtectionLevel")
 )

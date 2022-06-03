@@ -19,7 +19,7 @@ github.com/0xrawsec/whids/api/api_client.go:414:		IsFileAboveUploadLimit		0.0%
 github.com/0xrawsec/whids/api/api_client.go:425:		PostDump			65.0%
 github.com/0xrawsec/whids/api/api_client.go:461:		PostLogs			68.8%
 github.com/0xrawsec/whids/api/api_client.go:493:		PostCommand			76.5%
-github.com/0xrawsec/whids/api/api_client.go:527:		FetchCommand			68.4%
+github.com/0xrawsec/whids/api/api_client.go:527:		FetchCommand			73.7%
 github.com/0xrawsec/whids/api/api_client.go:566:		PostSystemInfo			61.5%
 github.com/0xrawsec/whids/api/api_client.go:591:		GetSysmonConfigSha256		82.4%
 github.com/0xrawsec/whids/api/api_client.go:623:		GetSysmonConfig			83.3%
@@ -132,7 +132,7 @@ github.com/0xrawsec/whids/api/manager_admin_api.go:1443:	admAPIStreamEvents		71.
 github.com/0xrawsec/whids/api/manager_admin_api.go:1466:	admAPIStreamDetections		0.0%
 github.com/0xrawsec/whids/api/manager_admin_api.go:1491:	runAdminAPI			87.5%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:31:	eptAPIMutEndpointFromRequest	75.0%
-github.com/0xrawsec/whids/api/manager_endpoint_api.go:41:	endpointAuthorizationMiddleware	82.6%
+github.com/0xrawsec/whids/api/manager_endpoint_api.go:41:	endpointAuthorizationMiddleware	73.9%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:84:	isVerboseURL			100.0%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:93:	endptLogHTTPMiddleware		0.0%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:101:	endptQuietLogHTTPMiddleware	100.0%

@@ -1,6 +1,7 @@
 package hids
 
 import (
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -124,6 +125,10 @@ func sysmonHashesToMap(hashes string) map[string]string {
 	return m
 }
 
+const (
+	ZeroProtectionLevel = uint32(math.MaxUint32)
+)
+
 type ProcessTrack struct {
 	/* Private */
 	hashes string
@@ -145,6 +150,8 @@ type ProcessTrack struct {
 	ParentProcessGUID      string            `json:"parent-process-guid"`
 	Services               string            `json:"services"`
 	ParentServices         string            `json:"parent-services"`
+	ProtectionLevel        uint32            `json:"protection-lvl"`
+	ParentProtectionLevel  uint32            `json:"parent-protection-lvl"`
 	HashesMap              map[string]string `json:"hashes"`
 	Signature              string            `json:"signature"`
 	SignatureStatus        string            `json:"signature-status"`
@@ -176,17 +183,19 @@ func EmptyProcessTrack() *ProcessTrack {
 // that minimal information is encoded (image, guid, pid)
 func NewProcessTrack(image, pguid, guid string, pid int64) *ProcessTrack {
 	return &ProcessTrack{
-		Image:             image,
-		ParentProcessGUID: pguid,
-		ProcessGUID:       guid,
-		PID:               pid,
-		Signature:         "?",
-		SignatureStatus:   "?",
-		Ancestors:         make([]string, 0),
-		Modules:           make([]*ModuleInfo, 0),
-		Integrity:         -1.0,
-		Stats:             NewProcStats(),
-		ThreatScore:       NewGeneScore(),
+		Image:                 image,
+		ParentProcessGUID:     pguid,
+		ProcessGUID:           guid,
+		PID:                   pid,
+		Signature:             "?",
+		SignatureStatus:       "?",
+		Ancestors:             make([]string, 0),
+		Modules:               make([]*ModuleInfo, 0),
+		Integrity:             -1.0,
+		ProtectionLevel:       ZeroProtectionLevel, // 0x0 is a valid protection level and 0xfffffffe is ProtectionNone
+		ParentProtectionLevel: ZeroProtectionLevel,
+		Stats:                 NewProcStats(),
+		ThreatScore:           NewGeneScore(),
 	}
 }
 

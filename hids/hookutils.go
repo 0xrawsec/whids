@@ -11,8 +11,16 @@ import (
 	"github.com/0xrawsec/whids/event"
 )
 
-func toString(i interface{}) string {
+func toString(i any) string {
 	return fmt.Sprintf("%v", i)
+}
+
+func toHex(i any) string {
+	switch i.(type) {
+	case int, uint, int8, int16, int32, int64, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("0x%x", i)
+	}
+	return "cannot format to hex"
 }
 
 func terminate(pid int) error {

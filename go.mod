@@ -6,7 +6,7 @@ require (
 	github.com/0xrawsec/golang-etw v1.4.5
 	github.com/0xrawsec/golang-evtx v1.2.9
 	github.com/0xrawsec/golang-utils v1.3.2
-	github.com/0xrawsec/golang-win32 v1.0.13
+	github.com/0xrawsec/golang-win32 v1.0.14
 	github.com/0xrawsec/sod v1.9.10
 	github.com/0xrawsec/toast v1.2.3
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
@@ -17,4 +17,6 @@ require (
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 )
 
-go 1.13
+require golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
+
+go 1.18

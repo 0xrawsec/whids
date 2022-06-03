@@ -25,7 +25,8 @@ import (
 
 const (
 	// Empty GUID
-	nullGUID = "{00000000-0000-0000-0000-000000000000}"
+	nullGUID      = "{00000000-0000-0000-0000-000000000000}"
+	unkFieldValue = "?"
 )
 
 var (
@@ -60,8 +61,8 @@ func hookSetImageSize(h *HIDS, e *event.EdrEvent) {
 }
 
 func hookImageLoad(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathImageLoadParentImage, "?")
-	e.Set(pathImageLoadParentCommandLine, "?")
+	e.Set(pathImageLoadParentImage, unkFieldValue)
+	e.Set(pathImageLoadParentCommandLine, unkFieldValue)
 	if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
 		if track := h.tracker.GetByGuid(guid); !track.IsZero() {
 			// we get a module info from cache or we update
@@ -135,12 +136,18 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 														track.IntegrityLevel = il
 														track.SetHashes(hashes)
 
+														// Getting process protection level first
+														if pl, err := kernel32.GetProcessProtectionLevel(uint32(pid)); err == nil {
+															track.ProtectionLevel = uint32(pl)
+														}
+
 														if parent := h.tracker.GetByGuid(pguid); !parent.IsZero() {
 															track.Ancestors = append(parent.Ancestors, parent.Image)
 															track.ParentUser = parent.User
 															track.ParentIntegrityLevel = parent.IntegrityLevel
 															track.ParentServices = parent.Services
 															track.ParentCurrentDirectory = parent.CurrentDirectory
+															track.ParentProtectionLevel = parent.ProtectionLevel
 														} else {
 															// For processes created by System
 															if pimage, ok := e.GetString(pathSysmonParentImage); ok {
@@ -157,6 +164,8 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 
 														h.tracker.Add(track)
 														e.SetIfMissing(pathAncestors, strings.Join(track.Ancestors, "|"))
+														e.SetIfMissing(pathProtectionLevel, fmt.Sprintf("0x%x", track.ProtectionLevel))
+														e.SetIfMissing(pathParentProtectionLevel, fmt.Sprintf("0x%x", track.ParentProtectionLevel))
 														if track.ParentUser != "" {
 															e.SetIfMissing(pathParentUser, track.ParentUser)
 														}
@@ -180,10 +189,10 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 		}
 
 		// Default values
-		e.SetIfMissing(pathAncestors, "?")
-		e.SetIfMissing(pathParentUser, "?")
-		e.SetIfMissing(pathParentIntegrityLevel, "?")
-		e.SetIfMissing(pathParentServices, "?")
+		e.SetIfMissing(pathAncestors, unkFieldValue)
+		e.SetIfMissing(pathParentUser, unkFieldValue)
+		e.SetIfMissing(pathParentIntegrityLevel, unkFieldValue)
+		e.SetIfMissing(pathParentServices, unkFieldValue)
 
 	case SysmonDriverLoad:
 		d := DriverInfoFromEvent(e)
@@ -229,9 +238,9 @@ func hookStats(h *HIDS, e *event.EdrEvent) {
 					now := time.Now()
 
 					// Set new fields
-					e.Set(pathFileCount, "?")
-					e.Set(pathFileCountByExt, "?")
-					e.Set(pathFileExtension, "?")
+					e.Set(pathFileCount, unkFieldValue)
+					e.Set(pathFileCountByExt, unkFieldValue)
+					e.Set(pathFileExtension, unkFieldValue)
 
 					if pt.Stats.Files.TimeFirstFileCreated.IsZero() {
 						pt.Stats.Files.TimeFirstFileCreated = now
@@ -263,9 +272,9 @@ func hookStats(h *HIDS, e *event.EdrEvent) {
 					now := time.Now()
 
 					// Set new fields
-					e.Set(pathFileCount, "?")
-					e.Set(pathFileCountByExt, "?")
-					e.Set(pathFileExtension, "?")
+					e.Set(pathFileCount, unkFieldValue)
+					e.Set(pathFileCountByExt, unkFieldValue)
+					e.Set(pathFileExtension, unkFieldValue)
 
 					if pt.Stats.Files.TimeFirstFileDeleted.IsZero() {
 						pt.Stats.Files.TimeFirstFileDeleted = now
@@ -373,10 +382,10 @@ func hookSelfGUID(h *HIDS, e *event.EdrEvent) {
 }
 
 func hookFileSystemAudit(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathSysmonCommandLine, "?")
+	e.Set(pathSysmonCommandLine, unkFieldValue)
 	e.Set(pathSysmonProcessGUID, nullGUID)
-	e.Set(pathSysmonImage, "?")
-	e.Set(pathImageHashes, "?")
+	e.Set(pathSysmonImage, unkFieldValue)
+	e.Set(pathImageHashes, unkFieldValue)
 	if pid, ok := e.GetInt(pathFSAuditProcessId); ok {
 		if pt := h.tracker.GetByPID(pid); !pt.IsZero() {
 
@@ -462,8 +471,8 @@ func hookEnrichServices(h *HIDS, e *event.EdrEvent) {
 			// Nothing to do
 			break
 		case SysmonCreateRemoteThread, SysmonAccessProcess:
-			e.Set(pathSourceServices, "?")
-			e.Set(pathTargetServices, "?")
+			e.Set(pathSourceServices, unkFieldValue)
+			e.Set(pathTargetServices, unkFieldValue)
 
 			sguidPath := pathSysmonSourceProcessGUID
 			tguidPath := pathSysmonTargetProcessGUID
@@ -507,7 +516,7 @@ func hookEnrichServices(h *HIDS, e *event.EdrEvent) {
 				}
 			}
 		default:
-			e.Set(pathServices, "?")
+			e.Set(pathServices, unkFieldValue)
 			// image, guid and pid are supposed to be available for all the remaining Sysmon logs
 			if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
 				if pid, ok := e.GetInt(pathSysmonProcessId); ok {
@@ -591,6 +600,9 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 						e.SetIfMissing(pathSourceHashes, strack.hashes)
 					}
 
+					// Source Protection level
+					e.SetIfMissing(pathSourceProtectionLevel, toHex(strack.ProtectionLevel))
+
 					// Source process score
 					e.Set(pathSrcProcessGeneScore, toString(strack.ThreatScore.Score))
 				}
@@ -609,20 +621,25 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 					if ttrack.hashes != "" {
 						e.SetIfMissing(pathTargetHashes, ttrack.hashes)
 					}
+
+					e.SetIfMissing(pathTargetProtectionLevel, toHex(ttrack.ProtectionLevel))
+
 					// Target process score
 					e.Set(pathTgtProcessGeneScore, toString(ttrack.ThreatScore.Score))
 				}
-
-				// Default Values for fields
-				e.SetIfMissing(pathSourceUser, "?")
-				e.SetIfMissing(pathSourceIntegrityLevel, "?")
-				e.SetIfMissing(pathTargetUser, "?")
-				e.SetIfMissing(pathTargetIntegrityLevel, "?")
-				e.SetIfMissing(pathTargetParentProcessGuid, "?")
-				e.SetIfMissing(pathSourceHashes, "?")
-				e.SetIfMissing(pathTargetHashes, "?")
 			}
 		}
+
+		// Default Values for fields
+		e.SetIfMissing(pathSourceUser, unkFieldValue)
+		e.SetIfMissing(pathSourceIntegrityLevel, unkFieldValue)
+		e.SetIfMissing(pathTargetUser, unkFieldValue)
+		e.SetIfMissing(pathTargetIntegrityLevel, unkFieldValue)
+		e.SetIfMissing(pathTargetParentProcessGuid, unkFieldValue)
+		e.SetIfMissing(pathSourceHashes, unkFieldValue)
+		e.SetIfMissing(pathTargetHashes, unkFieldValue)
+		e.SetIfMissing(pathSourceProtectionLevel, toHex(ZeroProtectionLevel))
+		e.SetIfMissing(pathTargetProtectionLevel, toHex(ZeroProtectionLevel))
 
 		// should be missing
 		e.SetIfMissing(pathSrcProcessGeneScore, "-1")
@@ -633,60 +650,63 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 		/* Any other event than CreateRemoteThread and ProcessAccess*/
 		if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
 
-			// Setting GeneScore only if we can identify process by its GUID
-			// Default value
-			e.Set(pathProcessGeneScore, "-1")
-
 			if track := h.tracker.GetByGuid(guid); !track.IsZero() {
 
 				// setting CommandLine field
 				if track.CommandLine != "" {
 					e.SetIfMissing(pathSysmonCommandLine, track.CommandLine)
 				}
-				// default value set only if missing
-				e.SetIfMissing(pathSysmonCommandLine, "?")
 
 				// setting User field
 				if track.User != "" {
 					e.SetIfMissing(pathSysmonUser, track.User)
 				}
-				// default value set only if missing
-				e.SetIfMissing(pathSysmonUser, "?")
 
 				// setting IntegrityLevel
 				if track.IntegrityLevel != "" {
 					e.SetIfMissing(pathSysmonIntegrityLevel, track.IntegrityLevel)
 				}
-				// default value set only if missing
-				e.SetIfMissing(pathSysmonIntegrityLevel, "?")
 
 				// setting CurrentDirectory
 				if track.CurrentDirectory != "" {
 					e.SetIfMissing(pathSysmonCurrentDirectory, track.CurrentDirectory)
 				}
-				// default value set only if missing
-				e.SetIfMissing(pathSysmonCurrentDirectory, "?")
 
 				// event never has ImageHashes field since it is not Sysmon standard
 				if track.hashes != "" {
 					e.Set(pathImageHashes, track.hashes)
 				}
-				e.SetIfMissing(pathImageHashes, "?")
 
 				// Signature information
 				e.SetIfMissing(pathImageSigned, toString(track.Signed))
 				e.SetIfMissing(pathImageSignature, track.Signature)
 				e.SetIfMissing(pathImageSignatureStatus, track.SignatureStatus)
 
+				// Protection level
+				e.SetIfMissing(pathProtectionLevel, toHex(track.ProtectionLevel))
+
 				// Overal criticality score
 				e.Set(pathProcessGeneScore, toString(track.ThreatScore.Score))
 			}
+
+			// Setting GeneScore only if we can identify process by its GUID
+			// Default values
+			e.Set(pathProcessGeneScore, "-1")
+			e.SetIfMissing(pathSysmonCommandLine, unkFieldValue)
+			e.SetIfMissing(pathSysmonUser, unkFieldValue)
+			e.SetIfMissing(pathSysmonIntegrityLevel, unkFieldValue)
+			e.SetIfMissing(pathSysmonCurrentDirectory, unkFieldValue)
+			e.SetIfMissing(pathImageHashes, unkFieldValue)
+			e.SetIfMissing(pathImageSigned, unkFieldValue)
+			e.SetIfMissing(pathImageSignature, unkFieldValue)
+			e.SetIfMissing(pathImageSignatureStatus, unkFieldValue)
+			e.SetIfMissing(pathProtectionLevel, toHex(ZeroProtectionLevel))
 		}
 	}
 }
 
 func hookClipboardEvents(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathSysmonClipboardData, "?")
+	e.Set(pathSysmonClipboardData, unkFieldValue)
 	if hashes, ok := e.GetString(pathSysmonHashes); ok {
 		fname := fmt.Sprintf("CLIP-%s", sysmonArcFileRe.ReplaceAllString(hashes, ""))
 		path := filepath.Join(h.config.Sysmon.ArchiveDirectory, fname)
@@ -713,7 +733,7 @@ var (
 )
 
 func hookKernelFiles(h *HIDS, e *event.EdrEvent) {
-	fileName := "?"
+	fileName := unkFieldValue
 
 	// Enrich all events with Sysmon Info
 	pt := h.tracker.GetByPID(int64(e.Event.System.Execution.ProcessID))
@@ -762,18 +782,18 @@ func hookKernelFiles(h *HIDS, e *event.EdrEvent) {
 
 	if !e.IsSkipped() {
 		// We enrich event with other data
-		e.SetIfOr(pathSysmonProcessGUID, pt.ProcessGUID, !pt.IsZero(), "?")
-		e.SetIfOr(pathSysmonImage, pt.Image, !pt.IsZero(), "?")
-		e.SetIfOr(pathSysmonCommandLine, pt.CommandLine, !pt.IsZero(), "?")
+		e.SetIfOr(pathSysmonProcessGUID, pt.ProcessGUID, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathSysmonImage, pt.Image, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathSysmonCommandLine, pt.CommandLine, !pt.IsZero(), unkFieldValue)
 		// put hashes in ImageHashes field to avoid confusion in analyst's mind
 		// not to think it is file content hashes
-		e.SetIfOr(pathImageHashes, pt.hashes, !pt.IsZero(), "?")
+		e.SetIfOr(pathImageHashes, pt.hashes, !pt.IsZero(), unkFieldValue)
 		e.SetIfOr(pathSysmonProcessId, toString(pt.PID), !pt.IsZero(), toString(-1))
-		e.SetIfOr(pathSysmonIntegrityLevel, pt.IntegrityLevel, !pt.IsZero(), "?")
-		e.SetIfOr(pathSysmonUser, pt.User, !pt.IsZero(), "?")
-		e.SetIfOr(pathServices, pt.Services, !pt.IsZero(), "?")
-		e.SetIfOr(pathImageSignature, pt.Signature, !pt.IsZero(), "?")
-		e.SetIfOr(pathImageSignatureStatus, pt.SignatureStatus, !pt.IsZero(), "?")
+		e.SetIfOr(pathSysmonIntegrityLevel, pt.IntegrityLevel, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathSysmonUser, pt.User, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathServices, pt.Services, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathImageSignature, pt.Signature, !pt.IsZero(), unkFieldValue)
+		e.SetIfOr(pathImageSignatureStatus, pt.SignatureStatus, !pt.IsZero(), unkFieldValue)
 		e.Set(pathSysmonEventType, KernelFileOperations[e.EventID()])
 	}
 }
