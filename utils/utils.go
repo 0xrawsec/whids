@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -168,32 +167,6 @@ func (w *WindowsLogger) Close() error {
 func Round(f float64, precision int) float64 {
 	pow := math.Pow10(precision)
 	return float64(int64(f*pow)) / pow
-}
-
-// SvcFromPid returns the list of services hosted by a given PID
-// interesting to know what service is hosted by svchost
-func SvcFromPid(pid int32) string {
-	c := exec.Command("tasklist", "/SVC", "/FO", "CSV", "/NH", "/FI", fmt.Sprintf("PID eq %d", pid))
-
-	out, err := c.Output()
-	if err != nil {
-		log.Errorf("Failed to run tasklist: %s", err)
-		return "ERROR"
-	}
-
-	r := csv.NewReader(bytes.NewBuffer(out))
-	rec, err := r.Read()
-	if err != nil {
-		log.Errorf("Failed to read tasklist output: %s", err)
-		return "ERROR"
-	}
-
-	// Expect three fields
-	if len(rec) == 3 {
-		return rec[2]
-	}
-	log.Errorf("Unexpected tasklist output: %s", out)
-	return "ERROR"
 }
 
 // RegQuery issues a reg query command to dump registry

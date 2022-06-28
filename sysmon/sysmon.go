@@ -7,7 +7,6 @@ var (
 )
 
 type Info struct {
-	Err     error  `json:"error,omitempty"`
 	Version string `json:"version"`
 
 	Service struct {

@@ -57,4 +57,6 @@ type SystemInfo struct {
 	} `json:"cpu"`
 
 	Sysmon *sysmon.Info `json:"sysmon"`
+
+	Err error `json:"error"`
 }

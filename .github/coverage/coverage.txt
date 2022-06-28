@@ -83,7 +83,7 @@ github.com/0xrawsec/whids/api/manager.go:411:			GetCommand			66.7%
 github.com/0xrawsec/whids/api/manager.go:425:			Endpoint			100.0%
 github.com/0xrawsec/whids/api/manager.go:438:			Endpoints			85.7%
 github.com/0xrawsec/whids/api/manager.go:454:			ImportRules			0.0%
-github.com/0xrawsec/whids/api/manager.go:479:			CreateNewAdminAPIUser		83.3%
+github.com/0xrawsec/whids/api/manager.go:479:			CreateNewAdminAPIUser		50.0%
 github.com/0xrawsec/whids/api/manager.go:492:			AddEndpoint			100.0%
 github.com/0xrawsec/whids/api/manager.go:497:			UpdateReducer			100.0%
 github.com/0xrawsec/whids/api/manager.go:512:			logAPIErrorf			100.0%
@@ -261,4 +261,4 @@ github.com/0xrawsec/whids/sysmon/config.go:195:			Sha256				80.0%
 github.com/0xrawsec/whids/sysmon/config.go:210:			MarshalXML			100.0%
 github.com/0xrawsec/whids/sysmon/config.go:214:			UnmarshalXML			80.0%
 github.com/0xrawsec/whids/sysmon/default.go:64:			AgnosticConfig			0.0%
-total:								(statements)			69.6%
+total:								(statements)			69.5%

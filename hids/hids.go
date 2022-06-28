@@ -543,8 +543,12 @@ of the two versions is installed.
 */
 func (h *HIDS) updateSysmon() (err error) {
 	var version string
+	var si *sysmon.Info
 
-	si := sysmon.NewSysmonInfo()
+	if si, err = sysmon.NewSysmonInfo(); err != nil {
+		return
+	}
+
 	sysmonPath := filepath.Join(toolsDir, tools.WithExecExt(tools.ToolSysmon))
 
 	if !fsutil.IsFile(sysmonPath) {

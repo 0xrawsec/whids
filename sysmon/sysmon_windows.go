@@ -4,6 +4,7 @@
 package sysmon
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,8 @@ var (
 		`(?s:System\sMonitor\s(?P<version>v\d+(\.\d+)?)\s-[.\s].*` +
 			`<manifest schemaversion="(?P<schemaversion>\d+(\.\d+)?)" binaryversion="(?P<binaryversion>\d+(\.\d+)?)">)`,
 	)
+
+	defaultTimeout = 5 * time.Second
 )
 
 func Versions(image string) (version, schema, binary string, err error) {
@@ -41,14 +44,14 @@ func Versions(image string) (version, schema, binary string, err error) {
 	if fsutil.IsFile(image) {
 
 		c := command.CommandTimeout(
-			time.Second*2,
+			defaultTimeout,
 			image,
 			"-s",
 		)
 		defer c.Terminate()
 
 		if out, err = c.CombinedOutput(); err != nil {
-			err = fmt.Errorf("failed to run sysmon command: %s", err)
+			err = fmt.Errorf("failed to run sysmon schema command: %s", err)
 			return
 		}
 
@@ -77,12 +80,12 @@ func InstallOrUpdate(image string) (err error) {
 
 	// we first uninstall existing installation
 	// if Sysmon is not installed yet we should not get any error
-	if err = Uninstall(); err != nil {
+	if err = Uninstall(); err != nil && !errors.Is(err, ErrSysmonNotInstalled) {
 		return
 	}
 
 	// we run install
-	c := command.CommandTimeout(30*time.Second, image, "-accepteula", "-i")
+	c := command.CommandTimeout(defaultTimeout, image, "-accepteula", "-i")
 	defer c.Terminate()
 	if err = c.Run(); err != nil {
 		return fmt.Errorf("failed to install sysmon: %w", err)
@@ -93,10 +96,18 @@ func InstallOrUpdate(image string) (err error) {
 
 func Configure(r io.Reader) (err error) {
 	var tmp, config string
+	var i *Info
 
-	i := NewSysmonInfo()
+	// retrieve sysmon information
+	if i, err = NewSysmonInfo(); err != nil {
+		return
+	}
 
 	image := i.Service.Image
+
+	if !fsutil.IsFile(image) {
+		return ErrSysmonNotInstalled
+	}
 
 	if tmp, err = utils.HidsMkTmpDir(); err != nil {
 		return fmt.Errorf("failed to create tmp dir: %w", err)
@@ -109,25 +120,29 @@ func Configure(r io.Reader) (err error) {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
-	if !fsutil.IsFile(image) {
-		return ErrSysmonNotInstalled
+	c := command.CommandTimeout(defaultTimeout, image, "-c", config)
+	defer c.Terminate()
+	if err = c.Run(); err != nil {
+		return fmt.Errorf("command to configure sysmon failed: %w", err)
 	}
 
-	c := command.CommandTimeout(5*time.Second, image, "-c", config)
-	defer c.Terminate()
-	return c.Run()
-
+	return
 }
 
 func Uninstall() (err error) {
-	i := NewSysmonInfo()
+	var i *Info
+
+	// retrieve sysmon information
+	if i, err = NewSysmonInfo(); err != nil {
+		return
+	}
 
 	image := i.Service.Image
 
 	//means sysmon is already installed
 	if fsutil.IsFile(image) {
 		// we uninstall it
-		c := command.CommandTimeout(60*time.Second, image, "-u")
+		c := command.CommandTimeout(defaultTimeout, image, "-u")
 		defer c.Terminate()
 
 		if err = c.Run(); err != nil {
@@ -162,18 +177,27 @@ func findMatchingSysmonServiceKeys() (keys []string) {
 	return
 }
 
-func NewSysmonInfo() (i *Info) {
+func NewSysmonInfo() (i *Info, err error) {
 	var sysmonRegPath string
 
 	i = &Info{}
 
 	// validate that we find only one entry in registry
-	if keys := findMatchingSysmonServiceKeys(); len(keys) != 1 {
-		i.Err = fmt.Errorf("more than one key looking like Sysmon: %v", keys)
+	keys := findMatchingSysmonServiceKeys()
+
+	// sysmon is not installed
+	if len(keys) == 0 {
+		err = ErrSysmonNotInstalled
 		return
-	} else {
-		i.Service.Name = keys[0]
 	}
+
+	// more than one key found -> not normal
+	if len(keys) > 1 {
+		err = fmt.Errorf("more than one key looking like Sysmon: %v", keys)
+		return
+	}
+
+	i.Service.Name = keys[0]
 
 	sysmonRegPath = utils.RegJoin(servicesPath, i.Service.Name)
 	i.Service.Image = utils.RegValueToString(sysmonRegPath, "ImagePath")
@@ -186,7 +210,7 @@ func NewSysmonInfo() (i *Info) {
 	i.Config.Hash = i.ConfigHash()
 
 	// parse schema and populate version information
-	i.parseSchema()
+	err = i.parseSchema()
 
 	return
 }
@@ -225,10 +249,13 @@ func (i *Info) ConfigHash() string {
 	return hash
 }
 
-func (i *Info) parseSchema() {
-	version, schema, binary, err := Versions(i.Service.Image)
+func (i *Info) parseSchema() (err error) {
+	var version, schema, binary string
+
+	version, schema, binary, err = Versions(i.Service.Image)
 	i.Version = version
 	i.Config.Version.Schema = schema
 	i.Config.Version.Binary = binary
-	i.Err = err
+
+	return
 }

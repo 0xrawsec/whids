@@ -29,6 +29,8 @@ var (
 )
 
 func NewSystemInfo() (info *SystemInfo) {
+	var err error
+
 	info = &SystemInfo{
 		Edr: edrInfo,
 	}
@@ -54,6 +56,9 @@ func NewSystemInfo() (info *SystemInfo) {
 	procs, _ := advapi32.RegEnumKeys(pathProcInfo)
 	info.CPU.Count = len(procs)
 
-	info.Sysmon = sysmon.NewSysmonInfo()
+	if info.Sysmon, err = sysmon.NewSysmonInfo(); err != nil {
+		info.Err = err
+	}
+
 	return
 }

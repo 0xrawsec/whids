@@ -8,10 +8,6 @@ var (
 	pid = 604
 )
 
-func TestSvcFromPid(t *testing.T) {
-	t.Logf("SVC from PID=%d: %s", pid, SvcFromPid(int32(pid)))
-}
-
 func TestRegQuery(t *testing.T) {
 	/*path := `HKLM\System\CurrentControlSet\Services\SysmonDrv\Parameters\HashingAlgorithm`
 	key, value := filepath.Split(path)
@@ -19,19 +15,19 @@ func TestRegQuery(t *testing.T) {
 }
 
 var (
-	aclDirectories = []string{"C:\\"}
+	aclDirectories = []string{"C:\\Windows\\System32"}
 )
 
 func TestSetAuditACL(t *testing.T) {
 	if err := SetEDRAuditACL(aclDirectories...); err != nil {
-		t.Logf("Failed at setting Audit ACL: %s", err)
+		t.Logf("Failed at setting Audit ACL: %s", err)
 		t.FailNow()
 	}
 	t.Logf("Successfully set audit ACL")
 }
 func TestRemoveAuditACL(t *testing.T) {
 	if err := RemoveEDRAuditACL(aclDirectories...); err != nil {
-		t.Logf("Failed at setting Audit ACL: %s", err)
+		t.Logf("Failed at setting Audit ACL: %s", err)
 		t.FailNow()
 	}
 	t.Logf("Successfully set audit ACL")
