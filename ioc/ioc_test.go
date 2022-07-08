@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/0xrawsec/sod"
+	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -15,20 +16,27 @@ const (
 	dbpath = "data/database"
 )
 
+var (
+	format = fmt.Sprintf
+)
+
+func uuidGen() string {
+	return utils.UnsafeUUIDGen().String()
+}
+
 func createIocDB(t *testing.T, size int) (db *sod.DB) {
+
+	tt := toast.FromT(t)
 
 	db = sod.Open(dbpath)
 
 	schema := sod.DefaultSchema
 	schema.Cache = true
-	if err := db.Create(&IOC{}, sod.DefaultSchema); err != nil {
-		t.Error(err)
-	}
+	tt.CheckErr(db.Create(&IOC{}, sod.DefaultSchema))
 
-	if n, err := db.Count(&IOC{}); err != nil {
-		t.Error(err)
-		return
-	} else if n != size {
+	n, err := db.Count(&IOC{})
+	tt.CheckErr(err)
+	if n != size {
 		t.Logf("Dropping db n=%d size=%d", n, size)
 		db.DeleteAll(&IOC{})
 	} else {
@@ -42,50 +50,54 @@ func createIocDB(t *testing.T, size int) (db *sod.DB) {
 		switch rand.Int() % 3 {
 		case 0:
 			ioc = &IOC{
-				Source: "Whatever",
-				Value:  fmt.Sprintf("%d.some.domain", i),
-				Type:   "domain",
+				Uuid:      uuidGen(),
+				GroupUuid: uuidGen(),
+				Source:    "Whatever",
+				Value:     fmt.Sprintf("%d.some.domain", i),
+				Type:      "domain",
 			}
 		case 1:
 			mod := i % 256
 			ioc = &IOC{
-				Source: "Whatever",
-				Value:  fmt.Sprintf("%d.%d.%d.%d", mod, mod, mod, mod),
-				Type:   "ip",
+				Uuid:      uuidGen(),
+				GroupUuid: uuidGen(),
+				Source:    "Whatever",
+				Value:     fmt.Sprintf("%d.%d.%d.%d", mod, mod, mod, mod),
+				Type:      "ip-dst",
 			}
 		case 2:
 			s := sha256.New()
 			v := fmt.Sprintf("random-value-%d", i)
 			s.Write([]byte(v))
 			ioc = &IOC{
-				Source: "Whatever",
-				Value:  hex.EncodeToString(s.Sum(nil)),
-				Type:   "domain",
+				Uuid:      uuidGen(),
+				GroupUuid: uuidGen(),
+				Source:    "Whatever",
+				Value:     hex.EncodeToString(s.Sum(nil)),
+				Type:      "domain",
 			}
 		}
 		iocs = append(iocs, ioc)
 	}
 
-	if err := db.InsertOrUpdateMany(iocs...); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	tt.CheckErr(db.InsertOrUpdateMany(iocs...))
 
 	return db
 }
 
 func TestIocs(t *testing.T) {
+	var db *sod.DB
+	tt := toast.FromT(t)
+
 	iocs := NewIocs()
-	db := createIocDB(t, 100000)
-	if err := iocs.FromDB(db); err != nil {
-		t.Error(err)
-	}
+
+	tt.TimeIt("creating DB", func() { db = createIocDB(t, 5000) })
+	defer db.Drop()
+	tt.CheckErr(iocs.FromDB(db))
 
 	t.Logf("len(iocs)=%d", iocs.iocs.Len())
 	hashSlice := utils.Sha256StringArray(iocs.StringSlice())
-	if iocs.Hash() != hashSlice {
-		t.Errorf("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice)
-	}
+	tt.Assert(iocs.Hash() == hashSlice, format("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice))
 
 	del := make([]*IOC, 0)
 	for _, v := range iocs.StringSlice() {
@@ -97,7 +109,5 @@ func TestIocs(t *testing.T) {
 
 	t.Logf("len(iocs)=%d", iocs.iocs.Len())
 	hashSlice = utils.Sha256StringArray(iocs.StringSlice())
-	if iocs.Hash() != hashSlice {
-		t.Errorf("hash is not stable after deletion: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice)
-	}
+	tt.Assert(iocs.Hash() == hashSlice, format("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice))
 }

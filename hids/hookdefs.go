@@ -33,166 +33,204 @@ var (
 	selfPath, _ = filepath.Abs(os.Args[0])
 )
 
-var (
-	errServiceResolution = fmt.Errorf("error resolving service name")
-)
-
 // hook applying on Sysmon events containing image information and
 // adding a new field containing the image size
+
 func hookSetImageSize(h *HIDS, e *event.EdrEvent) {
+	var image string
+	var ok bool
 	var path *engine.XPath
-	var modpath *engine.XPath
+	var imSzPath *engine.XPath
 
 	switch e.EventID() {
 	case SysmonProcessCreate:
 		path = pathSysmonImage
-		modpath = pathImSize
+		imSzPath = pathImSize
 	default:
 		path = pathSysmonImageLoaded
-		modpath = pathImLoadedSize
+		imSzPath = pathImLoadedSize
 	}
-	if image, ok := e.GetString(path); ok {
-		if fsutil.IsFile(image) {
-			if stat, err := os.Stat(image); err == nil {
-				e.Set(modpath, toString(stat.Size()))
-			}
-		}
+
+	if image, ok = e.GetString(path); !ok {
+		goto RETURN
 	}
+
+	if !fsutil.IsFile(image) {
+		goto RETURN
+	}
+
+	if stat, err := os.Stat(image); err == nil {
+		e.SetIfMissing(imSzPath, toString(stat.Size()))
+		return
+	}
+
+RETURN:
+	e.SetIfMissing(imSzPath, unkFieldValue)
 }
 
 func hookImageLoad(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathImageLoadParentImage, unkFieldValue)
-	e.Set(pathImageLoadParentCommandLine, unkFieldValue)
-	if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-		if track := h.tracker.GetByGuid(guid); !track.IsZero() {
-			// we get a module info from cache or we update
-			i := h.tracker.GetModuleOrUpdate(ModuleInfoFromEvent(e))
+	var ok bool
+	var guid string
+	var track *ProcessTrack
+	var mi *ModuleInfo
 
-			// make sure that we are taking signature of the image and not
-			// one of its DLL
-			if i.Image == track.Image {
-				track.Signed = i.Signed
-				track.Signature = i.Signature
-				track.SignatureStatus = i.SignatureStatus
-			} else {
-				// update module list
-				track.Modules = append(track.Modules, i)
-			}
-
-			e.Set(pathImageLoadParentImage, track.ParentImage)
-			e.Set(pathImageLoadParentCommandLine, track.ParentCommandLine)
-		}
+	if guid, ok = e.GetString(pathSysmonProcessGUID); !ok {
+		goto RETURN
 	}
+
+	if track = h.tracker.GetByGuid(guid); track.IsZero() {
+		goto RETURN
+	}
+
+	// we get a module info from cache or we update
+	mi = h.tracker.GetModuleOrUpdate(ModuleInfoFromEvent(e))
+
+	// make sure that we are taking signature of the image and not
+	// one of its DLL
+	if mi.Image == track.Image {
+		track.Signed = mi.Signed
+		track.Signature = mi.Signature
+		track.SignatureStatus = mi.SignatureStatus
+	} else {
+		// update module list
+		track.Modules = append(track.Modules, mi)
+	}
+
+	e.SetIfMissing(pathImageLoadParentImage, track.ParentImage)
+	e.SetIfMissing(pathImageLoadParentCommandLine, track.ParentCommandLine)
+	return
+
+RETURN:
+	e.SetIfMissing(pathImageLoadParentImage, unkFieldValue)
+	e.SetIfMissing(pathImageLoadParentCommandLine, unkFieldValue)
 }
 
-// hooks Windows DNS client logs and maintain a domain name resolution table
-/*func hookDNS(h *HIDS, e *event.EdrEvent) {
-	if qresults, err := e.GetString(pathQueryResults); err == nil {
-		if qresults != "" && qresults != "-" {
-			records := strings.Split(qresults, ";")
-			for _, r := range records {
-				// check if it is a valid IP
-				if net.ParseIP(r) != nil {
-					if qvalue, err := e.GetString(pathQueryName); err == nil {
-						dnsResolution[r] = qvalue
-					}
-				}
+func trackSysmonProcessCreate(h *HIDS, e *event.EdrEvent) {
+	var ok bool
+	var track *ProcessTrack
+	var pid int64
+	var guid, image, commandLine, pCommandLine, pImage, pguid, user, il, cd, hashes string
+
+	// We need to be sure that process termination is enabled
+	// before initiating process tracking not to fill up memory
+	// with structures that will never be freed
+	if h.bootCompleted && !h.flagProcTermEn {
+		goto DEFAULT
+	}
+
+	if guid, ok = e.GetString(pathSysmonProcessGUID); !ok {
+		goto DEFAULT
+	}
+
+	if pid, ok = e.GetInt(pathSysmonProcessId); !ok {
+		goto DEFAULT
+	}
+
+	if image, ok = e.GetString(pathSysmonImage); !ok {
+		goto DEFAULT
+	}
+
+	// Boot sequence is completed when LogonUI.exe is strarted
+	if strings.EqualFold(image, "C:\\Windows\\System32\\LogonUI.exe") {
+		log.Infof("Boot sequence completed")
+		h.bootCompleted = true
+	}
+
+	if commandLine, ok = e.GetString(pathSysmonCommandLine); !ok {
+		goto DEFAULT
+	}
+
+	if pCommandLine, ok = e.GetString(pathSysmonParentCommandLine); !ok {
+		goto DEFAULT
+	}
+
+	if pImage, ok = e.GetString(pathSysmonParentImage); !ok {
+		goto DEFAULT
+	}
+
+	if pguid, ok = e.GetString(pathSysmonParentProcessGUID); !ok {
+		goto DEFAULT
+	}
+
+	if user, ok = e.GetString(pathSysmonUser); !ok {
+		goto DEFAULT
+	}
+
+	if il, ok = e.GetString(pathSysmonIntegrityLevel); !ok {
+		goto DEFAULT
+	}
+
+	if cd, ok = e.GetString(pathSysmonCurrentDirectory); !ok {
+		goto DEFAULT
+	}
+
+	if hashes, ok = e.GetString(pathSysmonHashes); !ok {
+		goto DEFAULT
+	}
+
+	track = NewProcessTrack(image, pguid, guid, pid)
+	track.ParentImage = pImage
+	track.CommandLine = commandLine
+	track.ParentCommandLine = pCommandLine
+	track.CurrentDirectory = cd
+	track.User = user
+	track.IntegrityLevel = il
+	track.SetHashes(hashes)
+
+	// Getting process protection level first
+	if pl, err := kernel32.GetProcessProtectionLevel(uint32(pid)); err == nil {
+		track.ProtectionLevel = uint32(pl)
+	}
+
+	if parent := h.tracker.GetByGuid(pguid); !parent.IsZero() {
+		track.Ancestors = append(parent.Ancestors, parent.Image)
+		track.ParentUser = parent.User
+		track.ParentIntegrityLevel = parent.IntegrityLevel
+		track.ParentServices = parent.Services
+		track.ParentCurrentDirectory = parent.CurrentDirectory
+		track.ParentProtectionLevel = parent.ProtectionLevel
+	} else {
+		// For processes created by System
+		if pimage, ok := e.GetString(pathSysmonParentImage); ok {
+			track.Ancestors = append(track.Ancestors, pimage)
+			// if parent is System
+			if strings.EqualFold(pimage, "System") {
+				ptrack := NewProcessTrack(pimage,
+					nullGUID, pguid, e.GetIntOr(pathSysmonParentProcessId, -1))
+				h.tracker.Add(ptrack)
 			}
 		}
 	}
-}*/
+
+	h.tracker.Add(track)
+	e.SetIfMissing(pathAncestors, strings.Join(track.Ancestors, "|"))
+	e.SetIfMissing(pathProtectionLevel, fmt.Sprintf("0x%x", track.ProtectionLevel))
+	e.SetIfMissing(pathParentProtectionLevel, fmt.Sprintf("0x%x", track.ParentProtectionLevel))
+	if track.ParentUser != "" {
+		e.SetIfMissing(pathParentUser, track.ParentUser)
+	}
+	if track.ParentIntegrityLevel != "" {
+		e.SetIfMissing(pathParentIntegrityLevel, track.ParentIntegrityLevel)
+	}
+
+	if track.ParentServices != "" {
+		e.SetIfMissing(pathParentServices, track.ParentServices)
+	}
+
+DEFAULT:
+	// Default values
+	e.SetIfMissing(pathAncestors, unkFieldValue)
+	e.SetIfMissing(pathParentUser, unkFieldValue)
+	e.SetIfMissing(pathParentIntegrityLevel, unkFieldValue)
+	e.SetIfMissing(pathParentServices, unkFieldValue)
+}
 
 // hook tracking processes
 func hookTrack(h *HIDS, e *event.EdrEvent) {
 	switch e.EventID() {
 	case SysmonProcessCreate:
-		// We need to be sure that process termination is enabled
-		// before initiating process tracking not to fill up memory
-		// with structures that will never be freed
-		if h.flagProcTermEn || !h.bootCompleted {
-			if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-				if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-					if image, ok := e.GetString(pathSysmonImage); ok {
-						// Boot sequence is completed when LogonUI.exe is strarted
-						if strings.EqualFold(image, "C:\\Windows\\System32\\LogonUI.exe") {
-							log.Infof("Boot sequence completed")
-							h.bootCompleted = true
-						}
-						if commandLine, ok := e.GetString(pathSysmonCommandLine); ok {
-							if pCommandLine, ok := e.GetString(pathSysmonParentCommandLine); ok {
-								if pImage, ok := e.GetString(pathSysmonParentImage); ok {
-									if pguid, ok := e.GetString(pathSysmonParentProcessGUID); ok {
-										if user, ok := e.GetString(pathSysmonUser); ok {
-											if il, ok := e.GetString(pathSysmonIntegrityLevel); ok {
-												if cd, ok := e.GetString(pathSysmonCurrentDirectory); ok {
-													if hashes, ok := e.GetString(pathSysmonHashes); ok {
-
-														track := NewProcessTrack(image, pguid, guid, pid)
-														track.ParentImage = pImage
-														track.CommandLine = commandLine
-														track.ParentCommandLine = pCommandLine
-														track.CurrentDirectory = cd
-														track.User = user
-														track.IntegrityLevel = il
-														track.SetHashes(hashes)
-
-														// Getting process protection level first
-														if pl, err := kernel32.GetProcessProtectionLevel(uint32(pid)); err == nil {
-															track.ProtectionLevel = uint32(pl)
-														}
-
-														if parent := h.tracker.GetByGuid(pguid); !parent.IsZero() {
-															track.Ancestors = append(parent.Ancestors, parent.Image)
-															track.ParentUser = parent.User
-															track.ParentIntegrityLevel = parent.IntegrityLevel
-															track.ParentServices = parent.Services
-															track.ParentCurrentDirectory = parent.CurrentDirectory
-															track.ParentProtectionLevel = parent.ProtectionLevel
-														} else {
-															// For processes created by System
-															if pimage, ok := e.GetString(pathSysmonParentImage); ok {
-																track.Ancestors = append(track.Ancestors, pimage)
-																// if parent is System
-																if strings.EqualFold(pimage, "System") {
-																	ptrack := NewProcessTrack(pimage,
-																		nullGUID, pguid, e.GetIntOr(pathSysmonParentProcessId, -1))
-																	h.tracker.Add(ptrack)
-
-																}
-															}
-														}
-
-														h.tracker.Add(track)
-														e.SetIfMissing(pathAncestors, strings.Join(track.Ancestors, "|"))
-														e.SetIfMissing(pathProtectionLevel, fmt.Sprintf("0x%x", track.ProtectionLevel))
-														e.SetIfMissing(pathParentProtectionLevel, fmt.Sprintf("0x%x", track.ParentProtectionLevel))
-														if track.ParentUser != "" {
-															e.SetIfMissing(pathParentUser, track.ParentUser)
-														}
-														if track.ParentIntegrityLevel != "" {
-															e.SetIfMissing(pathParentIntegrityLevel, track.ParentIntegrityLevel)
-														}
-														if track.ParentServices != "" {
-															e.SetIfMissing(pathParentServices, track.ParentServices)
-														}
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Default values
-		e.SetIfMissing(pathAncestors, unkFieldValue)
-		e.SetIfMissing(pathParentUser, unkFieldValue)
-		e.SetIfMissing(pathParentIntegrityLevel, unkFieldValue)
-		e.SetIfMissing(pathParentServices, unkFieldValue)
+		// moved to a function to make code cleaner
+		trackSysmonProcessCreate(h, e)
 
 	case SysmonDriverLoad:
 		d := DriverInfoFromEvent(e)
@@ -203,136 +241,154 @@ func hookTrack(h *HIDS, e *event.EdrEvent) {
 // hook managing statistics about some events
 func hookStats(h *HIDS, e *event.EdrEvent) {
 	// We do not store stats if process termination is not enabled
-	if h.flagProcTermEn {
-		if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-			if pt := h.tracker.GetByGuid(guid); !pt.IsZero() {
-				switch e.EventID() {
-				case SysmonProcessCreate:
-					pt.Stats.CreateProcessCount++
+	if !h.flagProcTermEn {
+		return
+	}
 
-				case SysmonNetworkConnect:
-					if ip, ok := e.GetString(pathSysmonDestIP); ok {
-						if port, ok := e.GetInt(pathSysmonDestPort); ok {
-							if ts, ok := e.GetString(pathSysmonUtcTime); ok {
-								pt.Stats.UpdateCon(ts, ip, uint16(port))
-							}
-						}
-					}
-				case SysmonDNSQuery:
+	if pt := h.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+		switch e.EventID() {
+		case SysmonProcessCreate:
+			pt.Stats.CreateProcessCount++
+
+		case SysmonNetworkConnect:
+			if ip, ok := e.GetString(pathSysmonDestIP); ok {
+				if port, ok := e.GetInt(pathSysmonDestPort); ok {
 					if ts, ok := e.GetString(pathSysmonUtcTime); ok {
-						if qvalue, ok := e.GetString(pathQueryName); ok {
-							if qresults, ok := e.GetString(pathQueryResults); ok {
-								if qresults != "" && qresults != "-" {
-									records := strings.Split(qresults, ";")
-									for _, r := range records {
-										// check if it is a valid IP
-										if net.ParseIP(r) != nil {
-											pt.Stats.UpdateNetResolve(ts, r, qvalue)
-										}
-									}
+						pt.Stats.UpdateCon(ts, ip, uint16(port))
+					}
+				}
+			}
+
+		case SysmonDNSQuery:
+			if ts, ok := e.GetString(pathSysmonUtcTime); ok {
+				if qvalue, ok := e.GetString(pathQueryName); ok {
+					if qresults, ok := e.GetString(pathQueryResults); ok {
+						if qresults != "" && qresults != "-" {
+							records := strings.Split(qresults, ";")
+							for _, r := range records {
+								// check if it is a valid IP
+								if net.ParseIP(r) != nil {
+									pt.Stats.UpdateNetResolve(ts, r, qvalue)
 								}
 							}
 						}
 					}
-				case SysmonFileCreate:
-					now := time.Now()
-
-					// Set new fields
-					e.Set(pathFileCount, unkFieldValue)
-					e.Set(pathFileCountByExt, unkFieldValue)
-					e.Set(pathFileExtension, unkFieldValue)
-
-					if pt.Stats.Files.TimeFirstFileCreated.IsZero() {
-						pt.Stats.Files.TimeFirstFileCreated = now
-					}
-
-					if target, ok := e.GetString(pathSysmonTargetFilename); ok {
-						ext := filepath.Ext(target)
-						pt.Stats.Files.CountFilesCreatedByExt[ext]++
-						// Setting file count by extension
-						e.Set(pathFileCountByExt, toString(pt.Stats.Files.CountFilesCreatedByExt[ext]))
-						// Setting file extension
-						e.Set(pathFileExtension, ext)
-					}
-					pt.Stats.Files.CountFilesCreated++
-					// Setting total file count
-					e.Set(pathFileCount, toString(pt.Stats.Files.CountFilesCreated))
-					// Setting frequency
-					freq := now.Sub(pt.Stats.Files.TimeFirstFileCreated)
-					if freq != 0 {
-						eps := pt.Stats.Files.CountFilesCreated * int64(math.Pow10(9)) / freq.Nanoseconds()
-						e.Set(pathFileFrequency, toString(int64(eps)))
-					} else {
-						e.Set(pathFileFrequency, toString(0))
-					}
-					// Finally set last event timestamp
-					pt.Stats.Files.TimeLastFileCreated = now
-
-				case SysmonFileDelete, SysmonFileDeleteDetected:
-					now := time.Now()
-
-					// Set new fields
-					e.Set(pathFileCount, unkFieldValue)
-					e.Set(pathFileCountByExt, unkFieldValue)
-					e.Set(pathFileExtension, unkFieldValue)
-
-					if pt.Stats.Files.TimeFirstFileDeleted.IsZero() {
-						pt.Stats.Files.TimeFirstFileDeleted = now
-					}
-
-					if target, ok := e.GetString(pathSysmonTargetFilename); ok {
-						ext := filepath.Ext(target)
-						pt.Stats.Files.CountFilesDeletedByExt[ext]++
-						// Setting file count by extension
-						e.Set(pathFileCountByExt, toString(pt.Stats.Files.CountFilesDeletedByExt[ext]))
-						// Setting file extension
-						e.Set(pathFileExtension, ext)
-					}
-					pt.Stats.Files.CountFilesDeleted++
-					// Setting total file count
-					e.Set(pathFileCount, toString(pt.Stats.Files.CountFilesDeleted))
-
-					// Setting frequency
-					freq := now.Sub(pt.Stats.Files.TimeFirstFileDeleted)
-					if freq != 0 {
-						eps := pt.Stats.Files.CountFilesDeleted * int64(math.Pow10(9)) / freq.Nanoseconds()
-						e.Set(pathFileFrequency, toString(int64(eps)))
-					} else {
-						e.Set(pathFileFrequency, toString(0))
-					}
-
-					// Finally set last event timestamp
-					pt.Stats.Files.TimeLastFileDeleted = time.Now()
 				}
 			}
+
+		case SysmonFileCreate:
+			now := time.Now()
+
+			// Set new fields
+			e.Set(pathFileCount, unkFieldValue)
+			e.Set(pathFileCountByExt, unkFieldValue)
+			e.Set(pathFileExtension, unkFieldValue)
+
+			if pt.Stats.Files.TimeFirstFileCreated.IsZero() {
+				pt.Stats.Files.TimeFirstFileCreated = now
+			}
+
+			if target, ok := e.GetString(pathSysmonTargetFilename); ok {
+				ext := filepath.Ext(target)
+				pt.Stats.Files.CountFilesCreatedByExt[ext]++
+				// Setting file count by extension
+				e.Set(pathFileCountByExt, toString(pt.Stats.Files.CountFilesCreatedByExt[ext]))
+				// Setting file extension
+				e.Set(pathFileExtension, ext)
+			}
+			pt.Stats.Files.CountFilesCreated++
+			// Setting total file count
+			e.Set(pathFileCount, toString(pt.Stats.Files.CountFilesCreated))
+			// Setting frequency
+			freq := now.Sub(pt.Stats.Files.TimeFirstFileCreated)
+			if freq != 0 {
+				eps := pt.Stats.Files.CountFilesCreated * int64(math.Pow10(9)) / freq.Nanoseconds()
+				e.Set(pathFileFrequency, toString(int64(eps)))
+			} else {
+				e.Set(pathFileFrequency, toString(0))
+			}
+			// Finally set last event timestamp
+			pt.Stats.Files.TimeLastFileCreated = now
+
+		case SysmonFileDelete, SysmonFileDeleteDetected:
+			now := time.Now()
+
+			// Set new fields
+			e.Set(pathFileCount, unkFieldValue)
+			e.Set(pathFileCountByExt, unkFieldValue)
+			e.Set(pathFileExtension, unkFieldValue)
+
+			if pt.Stats.Files.TimeFirstFileDeleted.IsZero() {
+				pt.Stats.Files.TimeFirstFileDeleted = now
+			}
+
+			if target, ok := e.GetString(pathSysmonTargetFilename); ok {
+				ext := filepath.Ext(target)
+				pt.Stats.Files.CountFilesDeletedByExt[ext]++
+				// Setting file count by extension
+				e.Set(pathFileCountByExt, toString(pt.Stats.Files.CountFilesDeletedByExt[ext]))
+				// Setting file extension
+				e.Set(pathFileExtension, ext)
+			}
+			pt.Stats.Files.CountFilesDeleted++
+			// Setting total file count
+			e.Set(pathFileCount, toString(pt.Stats.Files.CountFilesDeleted))
+
+			// Setting frequency
+			freq := now.Sub(pt.Stats.Files.TimeFirstFileDeleted)
+			if freq != 0 {
+				eps := pt.Stats.Files.CountFilesDeleted * int64(math.Pow10(9)) / freq.Nanoseconds()
+				e.Set(pathFileFrequency, toString(int64(eps)))
+			} else {
+				e.Set(pathFileFrequency, toString(0))
+			}
+
+			// Finally set last event timestamp
+			pt.Stats.Files.TimeLastFileDeleted = time.Now()
 		}
 	}
 }
 
+// hook updating a threat score by process
 func hookUpdateGeneScore(h *HIDS, e *event.EdrEvent) {
+	var t *ProcessTrack
+
 	if h.IsHIDSEvent(e) {
 		return
 	}
 
-	if t := processTrackFromEvent(h, e); !t.IsZero() {
-		if d := e.GetDetection(); d != nil {
-			t.ThreatScore.Update(d)
-		}
+	if t := h.tracker.SourceTrackFromEvent(e); t.IsZero() {
+		return
+	}
+
+	if d := e.GetDetection(); d != nil {
+		t.ThreatScore.Update(d)
 	}
 }
 
 // hook terminating previously blacklisted processes (according to their CommandLine)
 func hookTerminator(h *HIDS, e *event.EdrEvent) {
-	if e.EventID() == SysmonProcessCreate {
-		if commandLine, ok := e.GetString(pathSysmonCommandLine); ok {
-			if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-				if h.tracker.IsBlacklisted(commandLine) {
-					log.Warnf("Terminating blacklisted  process PID=%d CommandLine=\"%s\"", pid, commandLine)
-					if err := terminate(int(pid)); err != nil {
-						log.Errorf("Failed to terminate process PID=%d: %s", pid, err)
-					}
-				}
-			}
+	var commandLine string
+	var pid int64
+	var ok bool
+
+	if e.EventID() != SysmonProcessCreate {
+		return
+	}
+
+	if commandLine, ok = e.GetString(pathSysmonCommandLine); !ok {
+		return
+	}
+
+	if pid, ok = e.GetInt(pathSysmonProcessId); !ok {
+		return
+	}
+
+	// terminate if blacklisted
+	if h.tracker.IsBlacklisted(commandLine) {
+		log.Warnf("Terminating blacklisted  process PID=%d CommandLine=\"%s\"", pid, commandLine)
+		if err := terminate(int(pid)); err != nil {
+			log.Errorf("Failed to terminate process PID=%d: %s", pid, err)
 		}
 	}
 }
@@ -340,41 +396,49 @@ func hookTerminator(h *HIDS, e *event.EdrEvent) {
 // hook setting flagProcTermEn variable
 // it is also used to cleanup any structures needing to be cleaned
 func hookProcTerm(h *HIDS, e *event.EdrEvent) {
+	var guid string
+	var ok bool
+
 	log.Debug("Process termination events are enabled")
 	h.flagProcTermEn = true
-	if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-		// Releasing resources
-		h.tracker.Terminate(guid)
-		h.memdumped.Del(guid)
+
+	if guid, ok = e.GetString(pathSysmonProcessGUID); !ok {
+		return
 	}
+
+	// Releasing resources
+	h.tracker.Terminate(guid)
+	h.memdumped.Del(guid)
 }
 
 func hookSelfGUID(h *HIDS, e *event.EdrEvent) {
-	if h.guid == "" {
-		if e.EventID() == SysmonProcessCreate {
-			// Sometimes it happens that other events are generated before process creation
-			// Check parent image first because we launch whids.exe -h to test process termination
-			// and we catch it up if we check image first
-			if pimage, ok := e.GetString(pathSysmonParentImage); ok {
-				if ppid, ok := e.GetInt(pathSysmonParentProcessId); ok {
-					if pimage == selfPath && ppid == int64(os.Getpid()) {
-						if pguid, ok := e.GetString(pathSysmonParentProcessGUID); ok {
-							h.guid = pguid
-							log.Infof("Found self GUID from PGUID: %s", h.guid)
-							return
-						}
-					}
+	// no need to continue if EDR guid is already known
+	if h.guid != "" {
+		return
+	}
+
+	// Sometimes it happens that other events are generated before process creation
+	// Check parent image first because we launch whids.exe -h to test process termination
+	// and we catch it up if we check image first
+	if pimage, ok := e.GetString(pathSysmonParentImage); ok {
+		if ppid, ok := e.GetInt(pathSysmonParentProcessId); ok {
+			if pimage == selfPath && ppid == int64(os.Getpid()) {
+				if pguid, ok := e.GetString(pathSysmonParentProcessGUID); ok {
+					h.guid = pguid
+					log.Infof("Found self GUID from PGUID: %s", h.guid)
+					return
 				}
 			}
-			if image, ok := e.GetString(pathSysmonImage); ok {
-				if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-					if image == selfPath && pid == int64(os.Getpid()) {
-						if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-							h.guid = guid
-							log.Infof("Found self GUID: %s", h.guid)
-							return
-						}
-					}
+		}
+	}
+
+	if image, ok := e.GetString(pathSysmonImage); ok {
+		if pid, ok := e.GetInt(pathSysmonProcessId); ok {
+			if image == selfPath && pid == int64(os.Getpid()) {
+				if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
+					h.guid = guid
+					log.Infof("Found self GUID: %s", h.guid)
+					return
 				}
 			}
 		}
@@ -382,80 +446,107 @@ func hookSelfGUID(h *HIDS, e *event.EdrEvent) {
 }
 
 func hookFileSystemAudit(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathSysmonCommandLine, unkFieldValue)
-	e.Set(pathSysmonProcessGUID, nullGUID)
-	e.Set(pathSysmonImage, unkFieldValue)
-	e.Set(pathImageHashes, unkFieldValue)
-	if pid, ok := e.GetInt(pathFSAuditProcessId); ok {
-		if pt := h.tracker.GetByPID(pid); !pt.IsZero() {
+	var ok bool
+	var pid int64
+	var pt *ProcessTrack
 
-			e.SetIf(pathSysmonImage, pt.Image, pt.Image != "")
-			e.SetIf(pathSysmonCommandLine, pt.CommandLine, pt.CommandLine != "")
-			e.SetIf(pathImageHashes, pt.hashes, pt.hashes != "")
-			e.SetIf(pathSysmonProcessGUID, pt.ProcessGUID, pt.ProcessGUID != "")
+	e.SetIfMissing(pathSysmonProcessGUID, nullGUID)
+	e.SetIfMissing(pathSysmonCommandLine, unkFieldValue)
+	e.SetIfMissing(pathSysmonImage, unkFieldValue)
+	e.SetIfMissing(pathImageHashes, unkFieldValue)
 
-			if obj, ok := e.GetString(pathFSAuditObjectName); ok {
-				if fsutil.IsFile(obj) {
-					pt.Stats.Files.LastAccessed.Add(obj)
-				}
-			}
+	if pid, ok = e.GetInt(pathFSAuditProcessId); !ok {
+		return
+	}
+
+	if pt = h.tracker.GetByPID(pid); pt.IsZero() {
+		return
+	}
+
+	e.SetIf(pathSysmonImage, pt.Image, pt.Image != "")
+	e.SetIf(pathSysmonCommandLine, pt.CommandLine, pt.CommandLine != "")
+	e.SetIf(pathImageHashes, pt.hashes, pt.hashes != "")
+	e.SetIf(pathSysmonProcessGUID, pt.ProcessGUID, pt.ProcessGUID != "")
+
+	if obj, ok := e.GetString(pathFSAuditObjectName); ok {
+		if fsutil.IsFile(obj) {
+			pt.Stats.Files.LastAccessed.Add(obj)
 		}
 	}
 }
 
 func hookProcessIntegrityProcTamp(h *HIDS, e *event.EdrEvent) {
+	var ok bool
+	var pid int64
+	var mainTid int
+
 	// Default values
-	e.Set(pathProcessIntegrity, toString(-1.0))
+	e.SetIfMissing(pathProcessIntegrity, toString(-1.0))
 
-	// Sysmon Create Process
-	if e.EventID() == SysmonProcessTampering {
-		if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-			// prevent stopping our own process, it may happen in some
-			// cases when selfGuid is not found fast enough
-			if pid != int64(os.Getpid()) {
-				if kernel32.IsPIDRunning(int(pid)) {
-					// we first need to wait main process thread
-					mainTid := kernel32.GetFirstTidOfPid(int(pid))
-					// if we found the main thread of pid
-					if mainTid > 0 {
-						hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-						if err != nil {
-							log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
-						} else {
-							defer kernel32.CloseHandle(hThread)
-							if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
-								// We check whether the thread still exists
-								checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
-								if err == nil {
-									log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
-								}
-								kernel32.CloseHandle(checkThread)
-							} else {
-								da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
-								hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
+	// if not Sysmon Process Tampering event
+	if e.EventID() != SysmonProcessTampering {
+		return
+	}
 
-								if err != nil {
-									log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
-								} else {
-									defer kernel32.CloseHandle(hProcess)
-									bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
-									if err != nil {
-										log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
-									} else {
-										if slen != 0 {
-											integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
-											e.Set(pathProcessIntegrity, toString(integrity))
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		} else {
-			log.Debugf("Cannot check integrity of PID=%d: process terminated", pid)
+	// getting pid from event
+	if pid, ok = e.GetInt(pathSysmonProcessId); !ok {
+		return
+	}
+
+	// prevents stopping ourselves
+	if pid == int64(os.Getpid()) {
+		return
+	}
+
+	if !kernel32.IsPIDRunning(int(pid)) {
+		log.Errorf("Cannot check process integrity process with PID=%d is stopped", pid)
+		return
+	}
+
+	if mainTid = kernel32.GetFirstTidOfPid(int(pid)); mainTid < 0 {
+		return
+	}
+
+	// if we found the main thread of pid
+	hThread, err := kernel32.OpenThread(kernel32.THREAD_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+	if err != nil {
+		log.Errorf("Cannot open main thread before checking integrity of PID=%d", pid)
+		return
+	}
+	// close thread
+	defer kernel32.CloseHandle(hThread)
+
+	// we first need to wait main process thread
+	if ok := kernel32.WaitThreadRuns(hThread, time.Millisecond*50, time.Millisecond*500); !ok {
+		// We check whether the thread still exists
+		checkThread, err := kernel32.OpenThread(kernel32.PROCESS_SUSPEND_RESUME, win32.FALSE, win32.DWORD(mainTid))
+		if err == nil {
+			log.Warnf("Timeout reached while waiting main thread of PID=%d", pid)
 		}
+		// close thread
+		kernel32.CloseHandle(checkThread)
+		return
+	}
+
+	da := win32.DWORD(kernel32.PROCESS_VM_READ | kernel32.PROCESS_QUERY_INFORMATION)
+	hProcess, err := kernel32.OpenProcess(da, win32.FALSE, win32.DWORD(pid))
+
+	if err != nil {
+		log.Errorf("Cannot open process to check integrity of PID=%d: %s", pid, err)
+		return
+	}
+	// close process
+	defer kernel32.CloseHandle(hProcess)
+
+	bdiff, slen, err := kernel32.CheckProcessIntegrity(hProcess)
+	if err != nil {
+		log.Errorf("Cannot check integrity of PID=%d: %s", pid, err)
+		return
+	}
+
+	if slen != 0 {
+		integrity := utils.Round(float64(bdiff)*100/float64(slen), 2)
+		e.Set(pathProcessIntegrity, toString(integrity))
 	}
 }
 
@@ -465,169 +556,130 @@ func hookEnrichServices(h *HIDS, e *event.EdrEvent) {
 
 	// We do this only if we can cleanup resources
 	eventID := e.EventID()
-	if h.flagProcTermEn {
-		switch eventID {
-		case SysmonDriverLoad, SysmonWMIBinding, SysmonWMIConsumer, SysmonWMIFilter:
-			// Nothing to do
-			break
-		case SysmonCreateRemoteThread, SysmonAccessProcess:
-			e.Set(pathSourceServices, unkFieldValue)
-			e.Set(pathTargetServices, unkFieldValue)
 
-			sguidPath := pathSysmonSourceProcessGUID
-			tguidPath := pathSysmonTargetProcessGUID
+	if !h.flagProcTermEn {
+		return
+	}
 
-			if eventID == 8 {
-				sguidPath = pathSysmonCRTSourceProcessGuid
-				tguidPath = pathSysmonCRTTargetProcessGuid
-			}
+	switch eventID {
+	case SysmonDriverLoad, SysmonWMIBinding, SysmonWMIConsumer, SysmonWMIFilter:
+		// Nothing to do
+		return
 
-			if sguid, ok := e.GetString(sguidPath); ok {
-				// First try to resolve it by tracked process
-				if t := h.tracker.GetByGuid(sguid); !t.IsZero() {
-					e.Set(pathSourceServices, t.Services)
+	case SysmonCreateRemoteThread, SysmonAccessProcess:
+		// First try to resolve it by tracked process
+		if src := h.tracker.SourceTrackFromEvent(e); !src.IsZero() {
+			e.Set(pathSourceServices, src.Services)
+		} else {
+			// If it fails we resolve the services by PID
+			if spid, ok := e.GetInt(pathSysmonSourceProcessId); ok {
+				if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(spid)); err == nil {
+					e.Set(pathSourceServices, svcs)
 				} else {
-					// If it fails we resolve the services by PID
-					if spid, ok := e.GetInt(pathSysmonSourceProcessId); ok {
-						if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(spid)); err == nil {
-							e.Set(pathSourceServices, svcs)
-						} else {
-							log.Errorf("Failed to resolve service from PID=%d: %s", spid, err)
-							e.Set(pathSourceServices, errServiceResolution.Error())
-						}
-					}
-				}
-			}
-
-			// First try to resolve it by tracked process
-			if tguid, ok := e.GetString(tguidPath); ok {
-				if t := h.tracker.GetByGuid(tguid); !t.IsZero() {
-					e.Set(pathTargetServices, t.Services)
-				} else {
-					// If it fails we resolve the services by PID
-					if tpid, ok := e.GetInt(pathSysmonTargetProcessId); ok {
-						if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(tpid)); err == nil {
-							e.Set(pathTargetServices, svcs)
-						} else {
-							log.Errorf("Failed to resolve service from PID=%d: %s", tpid, err)
-							e.Set(pathTargetServices, errServiceResolution)
-						}
-					}
-				}
-			}
-		default:
-			e.Set(pathServices, unkFieldValue)
-			// image, guid and pid are supposed to be available for all the remaining Sysmon logs
-			if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
-				if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-					if track := h.tracker.GetByGuid(guid); !track.IsZero() {
-						if track.Services == "" {
-							track.Services, err = advapi32.ServiceWin32NamesByPid(uint32(pid))
-							if err != nil {
-								log.Errorf("Failed to resolve service from PID=%d: %s", pid, ok)
-								track.Services = errServiceResolution.Error()
-							}
-						}
-						e.Set(pathServices, track.Services)
-					} else {
-						services, err := advapi32.ServiceWin32NamesByPid(uint32(pid))
-						if err != nil {
-							log.Errorf("Failed to resolve service from PID=%d: %s", pid, err)
-							services = errServiceResolution.Error()
-						}
-						e.Set(pathServices, services)
-					}
+					log.Errorf("Failed to resolve service from PID=%d: %s", spid, err)
 				}
 			}
 		}
+
+		// First try to resolve it by tracked process
+		if t := h.tracker.TargetTrackFromEvent(e); !t.IsZero() {
+			e.Set(pathTargetServices, t.Services)
+		} else {
+			// If it fails we resolve the services by PID
+			if tpid, ok := e.GetInt(pathSysmonTargetProcessId); ok {
+				if svcs, err := advapi32.ServiceWin32NamesByPid(uint32(tpid)); err == nil {
+					e.Set(pathTargetServices, svcs)
+				} else {
+					log.Errorf("Failed to resolve service from PID=%d: %s", tpid, err)
+				}
+			}
+		}
+
+		// Default
+		e.SetIfMissing(pathSourceServices, unkFieldValue)
+		e.SetIfMissing(pathTargetServices, unkFieldValue)
+
+	default:
+		// try to resolve by track
+		if track := h.tracker.SourceTrackFromEvent(e); !track.IsZero() {
+			if track.Services == "" {
+				track.Services, err = advapi32.ServiceWin32NamesByPid(uint32(track.PID))
+				if err != nil {
+					log.Errorf("Failed to resolve service from PID=%d Image=%s", track.PID, track.Image)
+					track.Services = unkFieldValue
+				}
+			}
+			e.Set(pathServices, track.Services)
+			return
+		}
+
+		// image, guid and pid are supposed to be available for all the remaining Sysmon logs
+		if pid, ok := e.GetInt(pathSysmonProcessId); ok {
+			services, err := advapi32.ServiceWin32NamesByPid(uint32(pid))
+			if err != nil {
+				log.Errorf("Failed to resolve service from PID=%d: %s", pid, err)
+				services = unkFieldValue
+			}
+			e.Set(pathServices, services)
+			return
+		}
+
+		// Default
+		e.SetIfMissing(pathServices, unkFieldValue)
 	}
 }
-
-func hookSetValueSize(h *HIDS, e *event.EdrEvent) {
-	e.Set(pathValueSize, toString(-1))
-	if targetObject, ok := e.GetString(pathSysmonTargetObject); ok {
-		size, err := advapi32.RegGetValueSizeFromString(targetObject)
-		if err != nil {
-			log.Errorf("Failed to get value size \"%s\": %s", targetObject, err)
-		}
-		e.Set(pathValueSize, toString(size))
-	}
-}
-
-// hook that replaces the destination hostname of Sysmon Network connection
-// event with the one previously found in the DNS logs
-/*func hookEnrichDNSSysmon(h *HIDS, e *event.EdrEvent) {
-	if ip, err := e.GetString(pathSysmonDestIP); err == nil {
-		if dom, ok := dnsResolution[ip]; ok {
-			e.Set(pathSysmonDestHostname, dom)
-		}
-	}
-}*/
 
 func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 	eventID := e.EventID()
 	switch eventID {
 	case SysmonProcessCreate, SysmonDriverLoad:
 		// ProcessCreation is already processed in hookTrack
-		// DriverLoad does not contain any GUID information
+		// DriverLoad does not contain any GUID information
 		break
 
 	case SysmonCreateRemoteThread, SysmonAccessProcess:
 		// Handling CreateRemoteThread and ProcessAccess events
 
-		sguidPath := pathSysmonSourceProcessGUID
-		tguidPath := pathSysmonTargetProcessGUID
+		// source process processing
+		if strack := h.tracker.SourceTrackFromEvent(e); !strack.IsZero() {
+			if strack.User != "" {
+				e.SetIfMissing(pathSourceUser, strack.User)
+			}
 
-		if eventID == SysmonCreateRemoteThread {
-			sguidPath = pathSysmonCRTSourceProcessGuid
-			tguidPath = pathSysmonCRTTargetProcessGuid
+			if strack.IntegrityLevel != "" {
+				e.SetIfMissing(pathSourceIntegrityLevel, strack.IntegrityLevel)
+			}
+
+			if strack.hashes != "" {
+				e.SetIfMissing(pathSourceHashes, strack.hashes)
+			}
+
+			// Source Protection level
+			e.SetIfMissing(pathSourceProtectionLevel, toHex(strack.ProtectionLevel))
+
+			// Source process score
+			e.Set(pathSrcProcessGeneScore, toString(strack.ThreatScore.Score))
 		}
 
-		if sguid, ok := e.GetString(sguidPath); ok {
-			if tguid, ok := e.GetString(tguidPath); ok {
-
-				// source process processing
-				if strack := h.tracker.GetByGuid(sguid); !strack.IsZero() {
-					if strack.User != "" {
-						e.SetIfMissing(pathSourceUser, strack.User)
-					}
-
-					if strack.IntegrityLevel != "" {
-						e.SetIfMissing(pathSourceIntegrityLevel, strack.IntegrityLevel)
-					}
-
-					if strack.hashes != "" {
-						e.SetIfMissing(pathSourceHashes, strack.hashes)
-					}
-
-					// Source Protection level
-					e.SetIfMissing(pathSourceProtectionLevel, toHex(strack.ProtectionLevel))
-
-					// Source process score
-					e.Set(pathSrcProcessGeneScore, toString(strack.ThreatScore.Score))
-				}
-
-				// target process processing
-				if ttrack := h.tracker.GetByGuid(tguid); !ttrack.IsZero() {
-					if ttrack.User != "" {
-						e.SetIfMissing(pathTargetUser, ttrack.User)
-					}
-					if ttrack.IntegrityLevel != "" {
-						e.SetIfMissing(pathTargetIntegrityLevel, ttrack.IntegrityLevel)
-					}
-					if ttrack.ParentProcessGUID != "" {
-						e.SetIfMissing(pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
-					}
-					if ttrack.hashes != "" {
-						e.SetIfMissing(pathTargetHashes, ttrack.hashes)
-					}
-
-					e.SetIfMissing(pathTargetProtectionLevel, toHex(ttrack.ProtectionLevel))
-
-					// Target process score
-					e.Set(pathTgtProcessGeneScore, toString(ttrack.ThreatScore.Score))
-				}
+		// target process processing
+		if ttrack := h.tracker.TargetTrackFromEvent(e); !ttrack.IsZero() {
+			if ttrack.User != "" {
+				e.SetIfMissing(pathTargetUser, ttrack.User)
 			}
+			if ttrack.IntegrityLevel != "" {
+				e.SetIfMissing(pathTargetIntegrityLevel, ttrack.IntegrityLevel)
+			}
+			if ttrack.ParentProcessGUID != "" {
+				e.SetIfMissing(pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
+			}
+			if ttrack.hashes != "" {
+				e.SetIfMissing(pathTargetHashes, ttrack.hashes)
+			}
+
+			e.SetIfMissing(pathTargetProtectionLevel, toHex(ttrack.ProtectionLevel))
+
+			// Target process score
+			e.Set(pathTgtProcessGeneScore, toString(ttrack.ThreatScore.Score))
 		}
 
 		// Default Values for fields
@@ -640,68 +692,62 @@ func hookEnrichAnySysmon(h *HIDS, e *event.EdrEvent) {
 		e.SetIfMissing(pathTargetHashes, unkFieldValue)
 		e.SetIfMissing(pathSourceProtectionLevel, toHex(ZeroProtectionLevel))
 		e.SetIfMissing(pathTargetProtectionLevel, toHex(ZeroProtectionLevel))
-
-		// should be missing
 		e.SetIfMissing(pathSrcProcessGeneScore, "-1")
 		e.SetIfMissing(pathTgtProcessGeneScore, "-1")
 
 	default:
 
-		/* Any other event than CreateRemoteThread and ProcessAccess*/
-		if guid, ok := e.GetString(pathSysmonProcessGUID); ok {
+		if track := h.tracker.SourceTrackFromEvent(e); !track.IsZero() {
 
-			if track := h.tracker.GetByGuid(guid); !track.IsZero() {
-
-				// setting CommandLine field
-				if track.CommandLine != "" {
-					e.SetIfMissing(pathSysmonCommandLine, track.CommandLine)
-				}
-
-				// setting User field
-				if track.User != "" {
-					e.SetIfMissing(pathSysmonUser, track.User)
-				}
-
-				// setting IntegrityLevel
-				if track.IntegrityLevel != "" {
-					e.SetIfMissing(pathSysmonIntegrityLevel, track.IntegrityLevel)
-				}
-
-				// setting CurrentDirectory
-				if track.CurrentDirectory != "" {
-					e.SetIfMissing(pathSysmonCurrentDirectory, track.CurrentDirectory)
-				}
-
-				// event never has ImageHashes field since it is not Sysmon standard
-				if track.hashes != "" {
-					e.Set(pathImageHashes, track.hashes)
-				}
-
-				// Signature information
-				e.SetIfMissing(pathImageSigned, toString(track.Signed))
-				e.SetIfMissing(pathImageSignature, track.Signature)
-				e.SetIfMissing(pathImageSignatureStatus, track.SignatureStatus)
-
-				// Protection level
-				e.SetIfMissing(pathProtectionLevel, toHex(track.ProtectionLevel))
-
-				// Overal criticality score
-				e.Set(pathProcessGeneScore, toString(track.ThreatScore.Score))
+			// setting CommandLine field
+			if track.CommandLine != "" {
+				e.SetIfMissing(pathSysmonCommandLine, track.CommandLine)
 			}
 
-			// Setting GeneScore only if we can identify process by its GUID
-			// Default values
-			e.Set(pathProcessGeneScore, "-1")
-			e.SetIfMissing(pathSysmonCommandLine, unkFieldValue)
-			e.SetIfMissing(pathSysmonUser, unkFieldValue)
-			e.SetIfMissing(pathSysmonIntegrityLevel, unkFieldValue)
-			e.SetIfMissing(pathSysmonCurrentDirectory, unkFieldValue)
-			e.SetIfMissing(pathImageHashes, unkFieldValue)
-			e.SetIfMissing(pathImageSigned, unkFieldValue)
-			e.SetIfMissing(pathImageSignature, unkFieldValue)
-			e.SetIfMissing(pathImageSignatureStatus, unkFieldValue)
-			e.SetIfMissing(pathProtectionLevel, toHex(ZeroProtectionLevel))
+			// setting User field
+			if track.User != "" {
+				e.SetIfMissing(pathSysmonUser, track.User)
+			}
+
+			// setting IntegrityLevel
+			if track.IntegrityLevel != "" {
+				e.SetIfMissing(pathSysmonIntegrityLevel, track.IntegrityLevel)
+			}
+
+			// setting CurrentDirectory
+			if track.CurrentDirectory != "" {
+				e.SetIfMissing(pathSysmonCurrentDirectory, track.CurrentDirectory)
+			}
+
+			// event never has ImageHashes field since it is not Sysmon standard
+			if track.hashes != "" {
+				e.Set(pathImageHashes, track.hashes)
+			}
+
+			// Signature information
+			e.SetIfMissing(pathImageSigned, toString(track.Signed))
+			e.SetIfMissing(pathImageSignature, track.Signature)
+			e.SetIfMissing(pathImageSignatureStatus, track.SignatureStatus)
+
+			// Protection level
+			e.SetIfMissing(pathProtectionLevel, toHex(track.ProtectionLevel))
+
+			// Overal criticality score
+			e.Set(pathProcessGeneScore, toString(track.ThreatScore.Score))
 		}
+
+		// Setting GeneScore only if we can identify process by its GUID
+		// Default values
+		e.SetIfMissing(pathProcessGeneScore, "-1")
+		e.SetIfMissing(pathSysmonCommandLine, unkFieldValue)
+		e.SetIfMissing(pathSysmonUser, unkFieldValue)
+		e.SetIfMissing(pathSysmonIntegrityLevel, unkFieldValue)
+		e.SetIfMissing(pathSysmonCurrentDirectory, unkFieldValue)
+		e.SetIfMissing(pathImageHashes, unkFieldValue)
+		e.SetIfMissing(pathImageSigned, unkFieldValue)
+		e.SetIfMissing(pathImageSignature, unkFieldValue)
+		e.SetIfMissing(pathImageSignatureStatus, unkFieldValue)
+		e.SetIfMissing(pathProtectionLevel, toHex(ZeroProtectionLevel))
 	}
 }
 

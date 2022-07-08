@@ -30,19 +30,7 @@ func IsValidUUID(uuid string) bool {
 	return RegexUuid.MatchString(uuid)
 }
 
-// EnableDNSLogs through wevutil command line
-func EnableDNSLogs() error {
-	cmd := exec.Command("wevtutil.exe", "sl", "Microsoft-Windows-DNS-Client/Operational", "/e:true")
-	return cmd.Run()
-}
-
-// FlushDNSCache executes windows command to flush the DNS cache
-func FlushDNSCache() error {
-	cmd := exec.Command("ipconfig.exe", "/flushdns")
-	return cmd.Run()
-}
-
-// PrettyJson returns a JSON pretty string out of i
+// PrettyJson returns a JSON pretty string out of i
 func PrettyJson(i interface{}) string {
 	b, err := json.MarshalIndent(i, "", "    ")
 	if err != nil {
@@ -61,11 +49,7 @@ func Json(i interface{}) []byte {
 
 // JsonString returns a Json string out of i
 func JsonString(i interface{}) string {
-	b, err := json.Marshal(i)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
+	return string(Json(i))
 }
 
 // ExpandEnvs expands several strings with environment variable
@@ -93,7 +77,8 @@ func HashEventBytes(b []byte) string {
 	return data.Sha1(bytes.Trim(b, " \n\r\t"))
 }
 
-func HashStruct(i interface{}) (h string, err error) {
+// HashInterface return a sha1 hash from an interface
+func HashInterface(i interface{}) (h string, err error) {
 	var b []byte
 
 	if b, err = json.Marshal(i); err != nil {

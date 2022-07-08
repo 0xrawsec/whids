@@ -28,7 +28,7 @@
 
 ## v1.5
   * Bunch of code rewritten to make things more consistent:
-    * WHIDS is no longer command line based, most of the options are configured via a configuration file
+    * WHIDS is no longer command line based, most of the options are configured via a configuration file
     * Some command line switches names have changed
   * WHIDS manager can now be used as a **true management server**:
     * Update clients' rules
@@ -48,7 +48,7 @@
     computed. Otherwise it is a float value in **[0;100]** measuring the degree of similarity between the image loaded in memory and the image on the disk. The **higher** the value is, the more likely the process image **has been modified**.
   * Builtin alert forwarder
     * New command line utility **whids-man** aiming at collecting the logs and being deployed on a remote machine (**windows, linux, macos ...**)
-      * HTTP / HTTPS are supported (HTTPS is preferred)
+      * HTTP / HTTPS are supported (HTTPS is preferred)
       * Builtin cert and key generation (convenient for testing but better with OpenSSL for prod)
       * Client authentication via API key to forward the logs
       * Server authentication can be enforced on client side via authentication key
@@ -77,7 +77,7 @@
     * agenerate an uninstall script dropped in the install folder
   * Number of new command lines arguments
     * **-hooks**: control event hook activation
-    * **-protect**: dummy protection against crypto-locker (can be seen as a nice POC of event hooks)
+    * **-protect**: dummy protection against crypto-locker (can be seen as a nice POC of event hooks)
     * **-all**: option to enable logging of **all** the events coming from the monitored channels
     should not be used in production, it is more for debugging purposes
     * ...
@@ -88,4 +88,4 @@
   * Updated with latest version of gene so it benefits of its new features
     * "Match extracts" feature to match parts of event fields against containers (blacklist/whitelist)
   * New channel Alias to Microsoft-Windows-DNS-Client/Operational
-  * Command line switch to enable DNS client logs (Microsoft-Windows-DNS-Client/Operational log channel)
+  * Command line switch to enable DNS client logs (Microsoft-Windows-DNS-Client/Operational log channel)

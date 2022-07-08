@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -20,15 +21,6 @@ import (
 )
 
 var (
-	cconf = ClientConfig{
-		Proto:             "https",
-		Host:              "localhost",
-		Port:              mconf.EndpointAPI.Port,
-		UUID:              "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-		Key:               "don'tcomplain",
-		ServerFingerprint: "511dc40cb2363974a97dfd47437feb8307cbd9d938645e1442775aa97ec14227",
-		Unsafe:            true,
-	}
 )
 
 func TestClientGetRules(t *testing.T) {
@@ -128,6 +120,7 @@ func TestClientContainer(t *testing.T) {
 }
 
 func TestClientExecuteCommand(t *testing.T) {
+	var cmdline string
 	var cmd *Command
 	var err error
 
@@ -137,7 +130,14 @@ func TestClientExecuteCommand(t *testing.T) {
 
 	cmd = NewCommand()
 
-	tt.CheckErr(cmd.SetCommandLine("/usr/bin/ls -hail ./"))
+	switch runtime.GOOS {
+	case "windows":
+		cmdline = "cmd /c dir"
+	default:
+		cmdline = "/usr/bin/ls -hail ./"
+	}
+
+	tt.CheckErr(cmd.SetCommandLine(cmdline))
 	tt.CheckErr(m.AddCommand(cconf.UUID, cmd))
 
 	// client fetching command to execute
@@ -160,21 +160,36 @@ func TestClientExecuteCommand(t *testing.T) {
 func TestClientExecuteDroppedCommand(t *testing.T) {
 	var cmd *Command
 	var err error
+	var dropname, dropfile, fetchfile, cmdline string
 
 	tt := toast.FromT(t)
 	m, c := prep()
 	defer cleanup(m)
 
+	switch runtime.GOOS {
+	case "windows":
+		dropname = `./dropped.exe`
+		dropfile = `C:\Windows\System32\cmd.exe`
+		fetchfile = `C:\Windows\System32\reg.exe`
+		cmdline = format("%s /c dir C:", dropname)
+
+	default:
+		dropname = "./dropped"
+		dropfile = "/usr/bin/ls"
+		fetchfile = "/usr/bin/true"
+		cmdline = format("%s -hail", dropname)
+	}
+
 	cmd = NewCommand()
 	// adding files to drop
-	tt.CheckErr(cmd.AddDropFile("droppedls", "/usr/bin/ls"))
+	tt.CheckErr(cmd.AddDropFile(dropname, dropfile))
 
 	// adding files to fetch
-	cmd.AddFetchFile("/usr/bin/ls")
+	cmd.AddFetchFile(fetchfile)
 	cmd.AddFetchFile("/nonexistingfile")
 
 	// setting up the command line to be executed
-	tt.CheckErr(cmd.SetCommandLine("./droppedls -hail ./"))
+	tt.CheckErr(cmd.SetCommandLine(cmdline))
 	// create the command on manager's side
 	tt.CheckErr(m.AddCommand(cconf.UUID, cmd))
 
@@ -183,6 +198,7 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 	tt.CheckErr(err)
 	// running command
 	tt.CheckErr(cmd.Run())
+	tt.CheckErr(cmd.Err())
 	// posting back command to manager
 	tt.CheckErr(c.PostCommand(cmd))
 
@@ -194,10 +210,10 @@ func TestClientExecuteDroppedCommand(t *testing.T) {
 
 	t.Logf("Stdout of command executed: %s", string(cmd.Stdout))
 
-	expMD5, err := file.Md5("/usr/bin/ls")
+	expMD5, err := file.Md5(fetchfile)
 	tt.CheckErr(err)
 	// checking that the file we fetched corresponds to the one on disk
-	tt.Assert(data.Md5(cmd.Fetch["/usr/bin/ls"].Data) == expMD5)
+	tt.Assert(data.Md5(cmd.Fetch[fetchfile].Data) == expMD5)
 	// we must get an error for non existing file
 	tt.Assert(cmd.Fetch["/nonexistingfile"].Error != "")
 

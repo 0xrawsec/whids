@@ -138,7 +138,7 @@ func (i *IndexEntry) Before(other *IndexEntry) bool {
 	return i.Start.Before(other.Start) && i.Stop.Before(other.Stop)
 }
 
-// ToCSV marshals an IndexEntry to CSV data
+// ToCSV marshals an IndexEntry to CSV data
 func (i *IndexEntry) ToCSV() string {
 	return fmt.Sprintf("%s,%s,%d,%d", fmtTime(i.Start), fmtTime(i.Stop), i.Offset, i.EventCount)
 }

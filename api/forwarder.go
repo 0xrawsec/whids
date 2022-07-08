@@ -21,7 +21,7 @@ import (
 const (
 	// DefaultLogfileSize default forwarder logfile size
 	DefaultLogfileSize = logfile.MB * 5
-	// DiskSpaceThreshold allow 1GB of queued events
+	// DiskSpaceThreshold allow 1GB of queued events
 	DiskSpaceThreshold = logfile.GB
 	// MinRotationInterval is the minimum rotation interval allowed
 	MinRotationInterval = time.Minute
@@ -47,6 +47,8 @@ type Forwarder struct {
 	stop      chan bool
 	done      chan bool
 	logfile   logfile.LogFile
+	sleep     time.Duration
+	closed    bool
 
 	Client      *ManagerClient
 	TimeTresh   time.Duration
@@ -65,12 +67,13 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	// TODO: better organize forwarder configuration
 	co := Forwarder{
 		fwdConfig: c,
+		stop:      make(chan bool),
+		done:      make(chan bool),
+		sleep:     time.Second,
 		TimeTresh: time.Second * 10,
 		// Writing events too quickly has a perf impact
 		EventTresh: 500,
 		Pipe:       new(bytes.Buffer),
-		stop:       make(chan bool),
-		done:       make(chan bool),
 		Local:      c.Local,
 	}
 
@@ -89,7 +92,7 @@ func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
 	if !fsutil.Exists(c.Logging.Dir) && !fsutil.IsDir(c.Logging.Dir) {
 		// TOCTU may happen here so we double check error code
 		if err = os.Mkdir(c.Logging.Dir, utils.DefaultPerms); err != nil && !os.IsExist(err) {
-			return nil, fmt.Errorf("cannot create queue directory : %s", err)
+			return nil, fmt.Errorf("cannot create queue directory : %s", err)
 		}
 	}
 
@@ -114,7 +117,7 @@ func (f *Forwarder) ArchiveLogs() {
 
 			if !strings.HasSuffix(fp, ".gz") {
 				if err := fileutils.GzipFile(fp); err != nil {
-					log.Errorf("Failed to archive log: %s", err)
+					log.Errorf("Failed to archive log: %s", err)
 				}
 			}
 		}
@@ -300,8 +303,9 @@ func (f *Forwarder) Reset() {
 }
 
 // Collect sends the piped event to the remote server
-// Todo: needs update with client
 func (f *Forwarder) Collect() {
+	var err error
+
 	// Locking collector for sending data
 	f.Lock()
 	// Unlocking collector after sending data
@@ -311,20 +315,16 @@ func (f *Forwarder) Collect() {
 
 	// if not a local forwarder
 	if !f.Local {
-		err := f.Client.PostLogs(bytes.NewBuffer(f.Pipe.Bytes()))
+		if err = f.Client.PostLogs(bytes.NewBuffer(f.Pipe.Bytes())); err == nil {
+			// no need to save logs on disk
+			return
+		}
+		log.Errorf("%s", err)
+	}
 
-		if err != nil {
-			log.Errorf("%s", err)
-			// Save the events in queue directory
-			if err := f.Save(); err != nil {
-				log.Errorf("Failed to save events: %s", err)
-			}
-		}
-	} else {
-		// Save the events in queue directory
-		if err := f.Save(); err != nil {
-			log.Errorf("Failed to save events: %s", err)
-		}
+	// Save the events in queue directory
+	if err = f.Save(); err != nil {
+		log.Errorf("Failed to save events: %s", err)
 	}
 }
 
@@ -356,13 +356,18 @@ func (f *Forwarder) Run() {
 				// reset timer
 				timer = time.Now()
 			}
-			time.Sleep(time.Second)
+
+			time.Sleep(f.sleep)
 		}
 	}()
 }
 
 // Close closes the forwarder properly
 func (f *Forwarder) Close() {
+	if f.closed {
+		return
+	}
+
 	// Close idle connections if not local
 	if !f.Local {
 		defer f.Client.Close()
@@ -376,4 +381,6 @@ func (f *Forwarder) Close() {
 	if f.logfile != nil {
 		f.logfile.Close()
 	}
+
+	f.closed = true
 }

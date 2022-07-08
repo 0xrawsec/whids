@@ -125,7 +125,7 @@ func DisableAuditPolicy(subCatOrGuid string) error {
 }
 
 const (
-	// source of inspiration: https://technochat.in/set-file-system-auditing-via-powershell/
+	// source of inspiration: https://technochat.in/set-file-system-auditing-via-powershell/
 	funcAuditACL = `Function SetAudit-ACL {
 	[cmdletbinding()]
 	Param (

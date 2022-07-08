@@ -50,7 +50,7 @@ func parseTime(s string) (time.Time, error) {
 // TransactionId type to identify a logging session
 type TransactionId uint64
 
-// EventLogger structure used to log EDR events
+// EventLogger structure used to log EDR events
 type EventLogger struct {
 	sync.RWMutex
 	root        string

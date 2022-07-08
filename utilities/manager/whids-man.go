@@ -202,7 +202,7 @@ var (
 func main() {
 
 	flag.BoolVar(&keygen, "key", keygen, "Generate a random client API key. Both client and manager configuration file will needs to be updated with it.")
-	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
+	flag.BoolVar(&certgen, "certgen", certgen, "Generate a couple (key and cert) to be used for TLS connections."+
 		"The certificate gets generated for the IP address specified in the configuration file.")
 	flag.BoolVar(&dumpConfig, "dump-config", dumpConfig, "Dumps a skeleton of manager configuration")
 	flag.BoolVar(&openapi, "openapi", openapi, "Prints JSON formatted OpenAPI definition")
@@ -275,7 +275,7 @@ func main() {
 
 		log.Infof("New user successfully created: %s", utils.PrettyJson(u))
 
-		log.Abort(0, "User creation: SUCCESS")
+		log.Abort(0, "User creation: SUCCESS")
 	}
 
 	if imprules != "" {

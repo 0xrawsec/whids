@@ -129,14 +129,23 @@ const (
 )
 
 var (
+	defaultServerConfig = ManagerConfig{
+		AdminAPI: AdminAPIConfig{
+			Host: "localhost",
+			Port: AdmAPIDefaultPort,
+		},
+		TLS: mconf.TLS,
+	}
+
 	openAPI = openapi.New(
 		"3.0.2",
 		&openapi.Info{
 			Title:   "WHIDS API documentation",
 			Version: "1.0",
 		},
+
 		&openapi.Server{
-			URL: mconf.AdminAPIUrl(),
+			URL: defaultServerConfig.AdminAPIUrl(),
 		})
 
 	systemInfo = &sysinfo.SystemInfo{}
@@ -146,6 +155,7 @@ func init() {
 	openAPI.AuthApiKey(AuthKeyHeader, testAdminUser.Key)
 	openAPI.Client = &http.Client{Transport: cconf.Transport()}
 	openAPI.ValidateOperation = validateOperation
+	openAPI.TestingServer = &openapi.Server{URL: mconf.AdminAPIUrl()}
 	Hostname = "OpenHappy"
 
 	if err := json.Unmarshal([]byte(fakeSystemInfo), systemInfo); err != nil {
@@ -173,6 +183,9 @@ func validateOperation(output interface{}) (err error) {
 
 func prep() (m *Manager, c *ManagerClient) {
 	var err error
+
+	mconf := mconf
+	cconf := makeClientConfig(&mconf)
 
 	key := utils.UnsafeKeyGen(DefaultKeySize)
 
@@ -267,6 +280,7 @@ func runAdminApiTest(t *testing.T, f func(*testing.T)) {
 		cancel()
 		cleanup(m)
 	}()
+
 	f(t)
 }
 
@@ -310,7 +324,7 @@ func TestOpenApi(t *testing.T) {
 		openAPI.Do(usersPath,
 			openapi.Operation{
 				Method:  "POST",
-				Summary: "Create a new user from POST data",
+				Summary: "Create a new user from POST data",
 				RequestBody: openapi.JsonRequestBody(
 					"Data to create the user with. Fields uuid and key if empty will be generated.",
 					AdminAPIUser{

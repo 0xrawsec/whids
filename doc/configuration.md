@@ -42,7 +42,7 @@ endpoint = true
     # Protocol to use to connect to manager (http or https)
     proto = "https"
 
-    # Hostname or IP of the manager
+    # Hostname or IP of the manager
     host = "192.168.56.1"
 
     # Port at which endpoint API is running on manager server
@@ -63,7 +63,7 @@ endpoint = true
     # Put here the manager's certificate fingerprint
     server-fingerprint = ""
 
-    # Allow unsafe HTTPS connection
+    # Allow unsafe HTTPS connection
     unsafe = true
 
     # Maximum allowed upload size
@@ -149,7 +149,7 @@ containers-dir = "./data/containers"
 # Settings to configure administrative API (not supposed to be reachable by endpoints)
 [admin-api]
 
-  # Hostname or IP address where the API should listen to
+  # Hostname or IP address where the API should listen to
   host = "localhost"
 
   # Port used by the API
@@ -159,10 +159,10 @@ containers-dir = "./data/containers"
     identifier = "admin"
     key = "admin"
 
-# Settings to configure API used by endpoints
+# Settings to configure API used by endpoints
 [endpoint-api]
 
-  # Hostname or IP where the API should listen to
+  # Hostname or IP where the API should listen to
   host = ""
 
   # Port used by the API
@@ -205,10 +205,10 @@ containers-dir = "./data/containers"
 # TLS settings. Leave empty, not to use TLS
 [tls]
 
-  # Path to the certificate file to use for TLS connections
+  # Path to the certificate file to use for TLS connections
   cert = "cert.pem"
 
-  # Path to the key to use for TLS connection
+  # Path to the key to use for TLS connection
   key = "key.pem"
 
 # MISP settings. Use this setting to push IOCs as containers on endpoints.
@@ -217,9 +217,9 @@ containers-dir = "./data/containers"
   # HTTP protocol to use (http or https)
   protocol = ""
 
-  # Hostname or IP address of MISP server
+  # Hostname or IP address of MISP server
   host = ""
 
-  # MISP API key
+  # MISP API key
   api-key = ""
 ```

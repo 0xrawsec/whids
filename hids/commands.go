@@ -20,24 +20,6 @@ import (
 	"github.com/0xrawsec/whids/utils"
 )
 
-func cmdHash(path string) (nfi FileInfo, err error) {
-	var fi fs.FileInfo
-
-	if fi, err = os.Stat(path); err != nil {
-		return
-	}
-
-	if !fi.Mode().IsRegular() {
-		err = fmt.Errorf("no such file: %s", path)
-		return
-	}
-
-	nfi.Dir = filepath.Dir(path)
-	nfi.FromFSFileInfo(fi)
-	err = nfi.Hash()
-	return
-}
-
 type FileInfo struct {
 	Dir     string            `json:"dir"`
 	Name    string            `json:"name"`
@@ -100,22 +82,6 @@ func (fi *FileInfo) FromFSFileInfo(fsfi fs.FileInfo) {
 	}
 }
 
-func cmdDir(path string) (sfi []FileInfo, err error) {
-	var ofi []fs.FileInfo
-
-	if ofi, err = ioutil.ReadDir(path); err != nil {
-		return
-	}
-
-	sfi = make([]FileInfo, len(ofi))
-	for i, fi := range ofi {
-		sfi[i].Dir = path
-		sfi[i].FromFSFileInfo(fi)
-	}
-
-	return
-}
-
 type WalkItem struct {
 	Dirs  []FileInfo `json:"dirs"`
 	Files []FileInfo `json:"files"`
@@ -138,6 +104,40 @@ func (wi *WalkItem) FromWalkerWalkItem(o fswalker.WalkItem) {
 	if o.Err != nil {
 		wi.Err = o.Err.Error()
 	}
+}
+  
+func cmdHash(path string) (nfi FileInfo, err error) {
+	var fi fs.FileInfo
+
+	if fi, err = os.Stat(path); err != nil {
+		return
+	}
+
+	if !fi.Mode().IsRegular() {
+		err = fmt.Errorf("no such file: %s", path)
+		return
+	}
+
+	nfi.Dir = filepath.Dir(path)
+	nfi.FromFSFileInfo(fi)
+	err = nfi.Hash()
+	return
+}
+
+func cmdDir(path string) (sfi []FileInfo, err error) {
+	var ofi []fs.FileInfo
+
+	if ofi, err = ioutil.ReadDir(path); err != nil {
+		return
+	}
+
+	sfi = make([]FileInfo, len(ofi))
+	for i, fi := range ofi {
+		sfi[i].Dir = path
+		sfi[i].FromFSFileInfo(fi)
+	}
+
+	return
 }
 
 func cmdWalk(path string) []WalkItem {

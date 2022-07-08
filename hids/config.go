@@ -84,7 +84,7 @@ func (c *AuditConfig) Configure() {
 		if len(dirs) > 0 {
 			log.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
 			if err := utils.SetEDRAuditACL(dirs...); err != nil {
-				log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
+				log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
 			}
 			log.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
 		}
@@ -101,7 +101,7 @@ func (c *AuditConfig) Restore() {
 
 	dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
 	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
-		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
+		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
 	}
 }
 
@@ -162,7 +162,7 @@ func (c *Config) Prepare() {
 	}
 }
 
-// Verify validate HIDS configuration object
+// Verify validate HIDS configuration object
 func (c *Config) Verify() error {
 	if !fsutil.IsDir(c.RulesConfig.RulesDB) {
 		return fmt.Errorf("rules database must be a directory")

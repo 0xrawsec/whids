@@ -69,12 +69,12 @@ func AgnosticConfig(schemaversion string) (c *Config, err error) {
 		return
 	}
 
-	// set sha256 of config structure
+	// set sha256 of config structure
 	if c.XmlSha256, err = c.Sha256(); err != nil {
 		return
 	}
 
-	// Config struct needs a valid OS to be validated
+	// Config struct needs a valid OS to be validated
 	c.OS = los.OS
 	err = c.Validate()
 	return

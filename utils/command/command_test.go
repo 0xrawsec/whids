@@ -2,21 +2,38 @@ package command
 
 import (
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/0xrawsec/toast"
 )
 
-func TestCommandeTimeout(t *testing.T) {
+func TestCommandTimeout(t *testing.T) {
+	var name string
+
+	args := make([]string, 0)
+
 	tt := toast.FromT(t)
 
-	c := CommandTimeout(1*time.Second, "yes")
-	defer c.Terminate()
-	tt.ExpectErr(c.Run(), &exec.ExitError{})
+	switch runtime.GOOS {
+	case "windows":
+		name = "cmd"
+		args = append(args, "/c", "timeout", "30")
+	case "linux":
+		name = "yes"
+	}
 
-	c = Command("yes")
+	c := CommandTimeout(1*time.Second, name, args...)
+	defer c.Terminate()
+	err := c.Run()
+	_, ok := err.(*exec.ExitError)
+	tt.Assert(ok)
+
+	c = Command(name, args...)
 	tt.CheckErr(c.Start())
 	c.Terminate()
-	tt.ExpectErr(c.Wait(), &exec.ExitError{})
+	err = c.Wait()
+	_, ok = err.(*exec.ExitError)
+	tt.Assert(ok)
 }

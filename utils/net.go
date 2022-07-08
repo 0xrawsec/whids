@@ -2,7 +2,7 @@ package utils
 
 import "net"
 
-// derived from: https://gist.github.com/kotakanbe/d3059af990252ba89a82
+// derived from: https://gist.github.com/kotakanbe/d3059af990252ba89a82
 func NextIP(ip net.IP) net.IP {
 	nip := net.IP(make(net.IP, len(ip)))
 	copy(nip, ip)

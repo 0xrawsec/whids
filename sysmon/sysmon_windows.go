@@ -33,8 +33,18 @@ var (
 			`<manifest schemaversion="(?P<schemaversion>\d+(\.\d+)?)" binaryversion="(?P<binaryversion>\d+(\.\d+)?)">)`,
 	)
 
-	defaultTimeout = 5 * time.Second
+	DefaultTimeout = 5 * time.Second
 )
+
+func stdCmdOutput(b []byte) []byte {
+	if len(b) >= 2 {
+		// check UTF16 BOM
+		if b[1] == '\xfe' && b[0] == '\xff' {
+			b = []byte(win32.UTF16BytesToString(b))
+		}
+	}
+	return b
+}
 
 func Versions(image string) (version, schema, binary string, err error) {
 	var out []byte
@@ -44,7 +54,7 @@ func Versions(image string) (version, schema, binary string, err error) {
 	if fsutil.IsFile(image) {
 
 		c := command.CommandTimeout(
-			defaultTimeout,
+			DefaultTimeout,
 			image,
 			"-s",
 		)
@@ -55,12 +65,9 @@ func Versions(image string) (version, schema, binary string, err error) {
 			return
 		}
 
-		if len(out) >= 2 {
-			// check UTF16 BOM
-			if out[1] == '\xfe' && out[0] == '\xff' {
-				out = []byte(win32.UTF16BytesToString(out))
-			}
-		}
+		// standardize output
+		out = stdCmdOutput(out)
+
 		sh.Prepare(out)
 		if v, err := sh.GetBytes("version"); err == nil {
 			version = string(v)
@@ -77,6 +84,7 @@ func Versions(image string) (version, schema, binary string, err error) {
 }
 
 func InstallOrUpdate(image string) (err error) {
+	var out []byte
 
 	// we first uninstall existing installation
 	// if Sysmon is not installed yet we should not get any error
@@ -85,10 +93,11 @@ func InstallOrUpdate(image string) (err error) {
 	}
 
 	// we run install
-	c := command.CommandTimeout(defaultTimeout, image, "-accepteula", "-i")
+	c := command.CommandTimeout(DefaultTimeout, image, "-accepteula", "-i")
 	defer c.Terminate()
-	if err = c.Run(); err != nil {
-		return fmt.Errorf("failed to install sysmon: %w", err)
+	if out, err = c.CombinedOutput(); err != nil {
+		out = stdCmdOutput(out)
+		return fmt.Errorf("failed to install sysmon: %w\n%s", err, out)
 	}
 
 	return
@@ -120,7 +129,7 @@ func Configure(r io.Reader) (err error) {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
-	c := command.CommandTimeout(defaultTimeout, image, "-c", config)
+	c := command.CommandTimeout(DefaultTimeout, image, "-c", config)
 	defer c.Terminate()
 	if err = c.Run(); err != nil {
 		return fmt.Errorf("command to configure sysmon failed: %w", err)
@@ -131,6 +140,7 @@ func Configure(r io.Reader) (err error) {
 
 func Uninstall() (err error) {
 	var i *Info
+	var out []byte
 
 	// retrieve sysmon information
 	if i, err = NewSysmonInfo(); err != nil {
@@ -142,11 +152,13 @@ func Uninstall() (err error) {
 	//means sysmon is already installed
 	if fsutil.IsFile(image) {
 		// we uninstall it
-		c := command.CommandTimeout(defaultTimeout, image, "-u")
+		// force flag forces all components to uninstall
+		c := command.CommandTimeout(DefaultTimeout, image, "-u", "force")
 		defer c.Terminate()
 
-		if err = c.Run(); err != nil {
-			return fmt.Errorf("failed to uninstall sysmon: %w", err)
+		if out, err = c.CombinedOutput(); err != nil {
+			out = stdCmdOutput(out)
+			return fmt.Errorf("failed to uninstall sysmon: %w\n%s", err, string(out))
 		}
 
 		if err = os.Remove(image); err != nil {

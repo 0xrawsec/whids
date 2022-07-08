@@ -1,82 +1,155 @@
 package hids
 
 import (
-	"encoding/json"
-	"net"
+	"bytes"
+	"encoding/xml"
+	"errors"
+	"fmt"
 	"os"
-	"strings"
 	"testing"
+	"time"
 
-	"github.com/0xrawsec/gene/v2/engine"
-	"github.com/0xrawsec/golang-evtx/evtx"
-	"github.com/0xrawsec/golang-utils/log"
-	"github.com/0xrawsec/golang-utils/readers"
+	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/sysmon"
+	"github.com/0xrawsec/whids/utils"
 )
 
 var (
-	// DNSFilter filters any Windows-DNS-Client log
-	DNSFilter = NewFilter([]int64{}, "Microsoft-Windows-DNS-Client/Operational")
-	// SysmonNetConnFilter filters any Sysmon network connection
-	SysmonNetConnFilter = NewFilter([]int64{3}, "Microsoft-Windows-Sysmon/Operational")
-	eventSource         = "test/new-events.json"
-	queryValue          = engine.Path("/Event/EventData/QueryName")
-	queryType           = engine.Path("/Event/EventData/QueryType")
-	queryResults        = engine.Path("/Event/EventData/QueryResults")
-	destIP              = engine.Path("/Event/EventData/DestinationIp")
-	destHostname        = engine.Path("/Event/EventData/DestinationHostname")
-	dnsResolution       = make(map[string]string)
+	sysmonInstalled bool
+
+	sysmonConfig = `<Sysmon schemaversion="4.70">
+  <HashAlgorithms>*</HashAlgorithms>
+  <EventFiltering>
+    <ProcessCreate onmatch="exclude"></ProcessCreate>
+    <FileCreateTime onmatch="exclude"></FileCreateTime>
+    <NetworkConnect onmatch="exclude"></NetworkConnect>
+    <ProcessTerminate onmatch="exclude"></ProcessTerminate>
+    <DriverLoad onmatch="exclude"></DriverLoad>
+    <CreateRemoteThread onmatch="exclude"></CreateRemoteThread>
+    <RawAccessRead onmatch="exclude"></RawAccessRead>
+    <FileCreate onmatch="exclude"></FileCreate>
+    <FileCreateStreamHash onmatch="exclude"></FileCreateStreamHash>
+    <PipeEvent onmatch="exclude"></PipeEvent>
+    <WmiEvent onmatch="exclude"></WmiEvent>
+    <FileDelete onmatch="exclude"></FileDelete>
+    <ClipboardChange onmatch="exclude"></ClipboardChange>
+    <ProcessTampering onmatch="exclude"></ProcessTampering>
+    <FileDeleteDetected onmatch="exclude"></FileDeleteDetected>
+    <RuleGroup groupRelation="or">
+      <ImageLoad onmatch="exclude">
+      </ImageLoad>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <ProcessAccess onmatch="exclude">
+        <SourceImage condition="is">C:\Windows\system32\wbem\wmiprvse.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\System32\VBoxService.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\taskmgr.exe</SourceImage>
+        <GrantedAccess condition="is">0x1000</GrantedAccess>
+        <GrantedAccess condition="is">0x2000</GrantedAccess>
+        <GrantedAccess condition="is">0x3000</GrantedAccess>
+        <GrantedAccess condition="is">0x100000</GrantedAccess>
+        <GrantedAccess condition="is">0x101000</GrantedAccess>
+      </ProcessAccess>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <RegistryEvent onmatch="exclude">
+        <EventType condition="is not">SetValue</EventType>
+        <Image condition="is">C:\Windows\Sysmon.exe</Image>
+        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+      </RegistryEvent>
+    </RuleGroup>
+    <RuleGroup groupRelation="or">
+      <DnsQuery onmatch="exclude">
+        <Image condition="is">C:\Windows\Sysmon.exe</Image>
+        <Image condition="is">C:\Windows\Sysmon64.exe</Image>
+      </DnsQuery>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>`
 )
 
-func hookDNS(h *HIDS, e *event.EdrEvent) {
-	if qtype, ok := e.GetInt(queryType); ok {
-		// request for A or AAAA records
-		if qtype == 1 || qtype == 28 {
-			if qresults, ok := e.GetString(queryResults); ok {
-				if qresults != "" {
-					records := strings.Split(qresults, ";")
-					for _, r := range records {
-						// check if it is a valid IP
-						if net.ParseIP(r) != nil {
-							if qv, ok := e.GetString(queryValue); ok {
-								log.Infof("%s : %s", r, qv)
-								dnsResolution[r] = qv
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}
+func installSysmon() {
+	var i *sysmon.Info
+	var c *sysmon.Config
+	var err error
 
-func hookNetConn(h *HIDS, e *event.EdrEvent) {
-	if ip, ok := e.GetString(destIP); ok {
-		if dom, ok := dnsResolution[ip]; ok {
-			e.Set(destHostname, dom)
-		}
-	}
-}
+	sysmon.DefaultTimeout = time.Second * 60
 
-func TestHook(t *testing.T) {
-	hm := NewHookMan()
-	hm.Hook(hookDNS, DNSFilter)
-	hm.Hook(hookNetConn, SysmonNetConnFilter)
-	f, err := os.Open(eventSource)
-	if err != nil {
-		t.Logf("Cannot open file: %s", eventSource)
-		t.Fail()
+	if sysmonInstalled {
 		return
 	}
-	for line := range readers.Readlines(f) {
-		e := event.EdrEvent{}
-		err := json.Unmarshal(line, &e)
-		if err != nil {
-			t.Logf("JSON deserialization issue")
-			t.Fail()
+
+	if i, err = sysmon.NewSysmonInfo(); errors.Is(err, sysmon.ErrSysmonNotInstalled) {
+		if err = sysmon.InstallOrUpdate("../sysmon/data/Sysmon64.exe"); err != nil {
+			panic(err)
 		}
-		if hm.RunHooksOn(nil, &e) {
-			t.Log(string(evtx.ToJSON(e)))
+
+		if i, err = sysmon.NewSysmonInfo(); err != nil {
+			panic(err)
 		}
 	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	// we deserialize config
+	if err = xml.Unmarshal([]byte(sysmonConfig), &c); err != nil {
+		panic(err)
+	}
+	// we force the good schema version to be the one of sysmon installed
+	c.SchemaVersion = i.Config.Version.Schema
+	if sha256, err := c.Sha256(); err != nil {
+		panic(err)
+	} else if sha256 == i.Config.Hash {
+		return
+	}
+
+	if xmlConfig, err := c.XML(); err != nil {
+		panic(err)
+	} else {
+		// configuring Sysmon
+		if err = sysmon.Configure(bytes.NewBuffer(xmlConfig)); err != nil {
+			panic(err)
+		}
+	}
+
+	sysmonInstalled = true
+}
+
+func testHook(h *HIDS, e *event.EdrEvent) {
+	fmt.Println(utils.PrettyJson(e))
+}
+
+func TestHooks(t *testing.T) {
+
+	installSysmon()
+
+	tt := toast.FromT(t)
+
+	tmp, err := utils.HidsMkTmpDir()
+	tt.CheckErr(err)
+	defer os.RemoveAll(tmp)
+
+	c := BuildDefaultConfig(tmp)
+	h, err := NewHIDS(c)
+
+	// add a final hook to catch all events after enrichment
+	h.preHooks.Hook(func(h *HIDS, e *event.EdrEvent) {
+		//_, ok := e.GetBool(EventDataPath("P"))
+		//tt.Assert(ok)
+	}, fltAnyEvent)
+
+	tt.TimeIt(
+		"configuring autologgers",
+		func() { tt.CheckErr(h.config.EtwConfig.ConfigureAutologger()) },
+	)
+
+	tt.CheckErr(err)
+	h.Run()
+	time.Sleep(10 * time.Second)
+	h.Stop()
+
+	t.Log(utils.PrettyJson(h.tracker.Modules()))
 }

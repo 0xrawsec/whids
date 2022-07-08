@@ -49,7 +49,7 @@ var (
 	fltFSObjectAccess = NewFilter([]int64{SecurityAccessObject}, securityChannel)
 )
 
-// ETW Kernel File related
+// ETW Kernel File related
 var (
 	kernelFileChannel = "Microsoft-Windows-Kernel-File/Analytic"
 	/*fltKernelFile     = NewFilter([]int64{

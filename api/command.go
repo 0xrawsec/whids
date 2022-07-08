@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -31,17 +32,18 @@ type Command struct {
 	// used to drop files on the endpoint
 	Drop []*EndpointFile `json:"drop"`
 	// used to fetch files from the endpoint
-	Fetch      map[string]*EndpointFile `json:"fetch"`
-	Json       interface{}              `json:"json"`
-	Stdout     []byte                   `json:"stdout"`
-	Stderr     []byte                   `json:"stderr"`
-	Error      string                   `json:"error"`
-	Sent       bool                     `json:"sent"`
-	Background bool                     `json:"background"`
-	Completed  bool                     `json:"completed"`
-	ExpectJSON bool                     `json:"expect-json"`
-	Timeout    time.Duration            `json:"timeout"`
-	SentTime   time.Time                `json:"sent-time"`
+	Fetch  map[string]*EndpointFile `json:"fetch"`
+	Json   interface{}              `json:"json"`
+	Stdout []byte                   `json:"stdout"`
+	Stderr []byte                   `json:"stderr"`
+	Error  string                   `json:"error"`
+	//Error      error         `json:"error"`
+	Sent       bool          `json:"sent"`
+	Background bool          `json:"background"`
+	Completed  bool          `json:"completed"`
+	ExpectJSON bool          `json:"expect-json"`
+	Timeout    time.Duration `json:"timeout"`
+	SentTime   time.Time     `json:"sent-time"`
 
 	runnable bool
 	path     []string
@@ -62,7 +64,7 @@ func NewCommand() *Command {
 func (c *Command) SetCommandLine(cl string) error {
 	args, err := shlex.Split(cl)
 	if err != nil {
-		return fmt.Errorf("failed to parse command line: %w", err)
+		return fmt.Errorf("failed to parse command line: %w", err)
 	}
 
 	if len(args) > 0 {
@@ -121,7 +123,7 @@ func (c *Command) FromExecCmd(cmd *exec.Cmd) {
 // BuildCmd builds up an exec.Cmd from Command
 func (c *Command) BuildCmd() (*exec.Cmd, error) {
 	if c.Timeout > 0 {
-		// we create a command with a timeout context if needed
+		// we create a command with a timeout context if needed
 		ctx, _ := context.WithTimeout(context.Background(), c.Timeout)
 		return exec.CommandContext(ctx, c.Name, c.Args...), nil
 	}
@@ -190,7 +192,7 @@ func (c *Command) Run() (err error) {
 			if ee, ok := err.(*exec.ExitError); ok {
 				c.Stderr = ee.Stderr
 			}
-			c.Error = fmt.Sprintf("%s", err)
+			c.ErrorFrom(err)
 		}
 
 		// if we expect JSON output
@@ -213,6 +215,17 @@ func (c *Command) Run() (err error) {
 	}
 
 	return
+}
+
+func (c *Command) ErrorFrom(err error) {
+	c.Error = err.Error()
+}
+
+func (c *Command) Err() error {
+	if c.Error == "" {
+		return nil
+	}
+	return errors.New(c.Error)
 }
 
 func (c Command) String() string {

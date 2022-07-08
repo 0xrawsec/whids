@@ -1,7 +1,6 @@
 package hids
 
 import (
-	"fmt"
 	"reflect"
 	"runtime"
 	"sync"
@@ -15,64 +14,109 @@ import (
 // hooking functions should never panic the program.
 type Hook func(*HIDS, *event.EdrEvent)
 
+type eventMap map[int64][]Hook
+
+type hookCache struct {
+	c map[string]eventMap
+}
+
+func newHookCache() *hookCache {
+	return &hookCache{
+		c: make(map[string]eventMap),
+	}
+}
+
+func (h hookCache) get(e *event.EdrEvent) (hooks []Hook, ok bool) {
+	var eventIdsMap eventMap
+
+	if eventIdsMap, ok = h.c[e.Channel()]; !ok {
+		return
+	}
+
+	hooks, ok = eventIdsMap[e.EventID()]
+	return
+}
+
+func (h hookCache) cache(hk Hook, e *event.EdrEvent) {
+	// create eventMap if necessary
+	if _, ok := h.c[e.Channel()]; !ok {
+		h.c[e.Channel()] = make(eventMap)
+	}
+
+	// create Hook slice if necessary
+	em := h.c[e.Channel()]
+	if _, ok := em[e.EventID()]; !ok {
+		em[e.EventID()] = make([]Hook, 0, 1)
+	}
+
+	// append the hook to the list of hooks
+	if hk != nil {
+		em[e.EventID()] = append(em[e.EventID()], hk)
+	}
+}
+
 // HookManager structure definition to easier handle hooks
 type HookManager struct {
 	sync.RWMutex
 	Filters []*Filter
 	Hooks   []Hook
-	memory  map[string][]int // used to memorize hooks given a couple of (channel, eventid)
+	cache   *hookCache
 }
 
 // NewHookMan creates a new HookManager structure
 func NewHookMan() *HookManager {
 	return &HookManager{Filters: make([]*Filter, 0),
-		Hooks:  make([]Hook, 0),
-		memory: make(map[string][]int)}
+		Hooks: make([]Hook, 0),
+		cache: newHookCache(),
+	}
 }
 
 // Hook register a hook for a given filter
 func (hm *HookManager) Hook(h Hook, f *Filter) {
+	hm.Lock()
+	defer hm.Unlock()
+
 	hm.Hooks = append(hm.Hooks, h)
 	hm.Filters = append(hm.Filters, f)
 }
 
-func eventIdentifier(e *event.EdrEvent) string {
-	return fmt.Sprintf("%s:%d", e.Channel(), e.EventID())
-}
-
 // RunHooksOn runs the hook on a given event
 func (hm *HookManager) RunHooksOn(h *HIDS, e *event.EdrEvent) (ret bool) {
+	var ok bool
+	var hooks []Hook
+
+	hm.Lock()
+	defer hm.Unlock()
+
 	// Don't waste resources if nothing to do
 	if len(hm.Filters) == 0 {
 		return
 	}
 
-	key := eventIdentifier(e)
 	// We have to check all the filters if we don't know yet
 	// which hooks should apply on this kind of event
-	hm.Lock()
-	if _, ok := hm.memory[key]; !ok {
+	if hooks, ok = hm.cache.get(e); !ok {
+		// we create an empty slice for e in order to return
+		// cache hooks for events with no filters
+		hm.cache.cache(nil, e)
+		// we go through all the filters
 		for i, f := range hm.Filters {
 			if f.Match(e) {
-				if _, ok := hm.memory[key]; !ok {
-					hm.memory[key] = make([]int, 0)
-				}
-				hm.memory[key] = append(hm.memory[key], i)
+				hm.cache.cache(hm.Hooks[i], e)
 			}
 		}
+		// we update the list of hooks to apply
+		hooks, _ = hm.cache.get(e)
 	}
-	hm.Unlock()
-	hm.RLock()
-	// hi: hook index
-	for _, hi := range hm.memory[key] {
-		hook := hm.Hooks[hi]
+
+	for _, hook := range hooks {
 		// debug hooks
 		//log.Infof("Running hook: %s", getFunctionName(hook))
 		hook(h, e)
 		// We set return value to true if a hook has been applied
 		ret = true
 	}
-	hm.RUnlock()
+
 	return
 }
 

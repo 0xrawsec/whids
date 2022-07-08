@@ -170,7 +170,7 @@ func (c *CanariesConfig) Configure() {
 		// run this function async as it might take a little bit of time
 		go func() {
 			if err := utils.SetEDRAuditACL(auditDirs...); err != nil {
-				log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
+				log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
 			}
 		}()
 	}
@@ -186,7 +186,7 @@ func (c *CanariesConfig) RestoreACLs() {
 		}
 	}
 	if err := utils.RemoveEDRAuditACL(auditDirs...); err != nil {
-		log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
+		log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
 	}
 }
 

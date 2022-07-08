@@ -26,7 +26,7 @@ type ReportCommand struct {
 	Description string        `json:"description" toml:"description" comment:"Description of the command to run, for reporting purposes"`
 	Name        string        `json:"name" toml:"name" comment:"Name of the command to execute (can be a binary)"`
 	Args        []string      `json:"args" toml:"args" comment:"Argument of the command line"`
-	ExpectJSON  bool          `json:"expect-json" toml:"expect-json" comment:"Expect JSON formated output on stdout"`
+	ExpectJSON  bool          `json:"expect-json" toml:"expect-json" comment:"Expect JSON formated output on stdout"`
 	Stdout      interface{}   `json:"stdout" toml:",omitempty"`
 	Stderr      []byte        `json:"stderr" toml:",omitempty"`
 	Error       string        `json:"error" toml:",omitempty"`

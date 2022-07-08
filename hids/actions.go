@@ -80,14 +80,14 @@ func (m *ActionHandler) dumpname(src string) string {
 
 func (m *ActionHandler) prepare(e *event.EdrEvent, filename string) string {
 	id := e.Hash()
-	guid := srcGUIDFromEvent(e)
+	guid := sourceGUIDFromEvent(e)
 	dumpDir := filepath.Join(m.hids.config.Dump.Dir, guid, id)
 	utils.HidsMkdirAll(dumpDir)
 	return filepath.Join(dumpDir, filename)
 }
 
 func (m *ActionHandler) shouldDump(e *event.EdrEvent) bool {
-	guid := srcGUIDFromEvent(e)
+	guid := sourceGUIDFromEvent(e)
 	return m.hids.tracker.CheckDumpCountOrInc(guid, m.hids.config.Dump.MaxDumps, m.hids.config.Dump.DumpUntracked)
 }
 
@@ -171,7 +171,7 @@ func listFilesFromCommandLine(cmdLine string, cwd string) []string {
 func (m *ActionHandler) filedumpSet(e *event.EdrEvent) *datastructs.Set {
 	s := datastructs.NewSet()
 
-	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
+	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		s.Add(pt.Image)
 		s.Add(pt.ParentImage)
 		// parse command line
@@ -233,19 +233,19 @@ func (m *ActionHandler) filedump(e *event.EdrEvent) {
 
 func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 	hash := e.Hash()
-	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
-		guid := srcGUIDFromEvent(e)
+	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+		guid := sourceGUIDFromEvent(e)
 		pid := int(pt.PID)
 		if kernel32.IsPIDRunning(pid) && pid != os.Getpid() && !m.hids.memdumped.Contains(guid) && !m.hids.dumping.Contains(guid) {
 			// To avoid dumping the same process twice, possible if two alerts
-			// comes from the same GUID in a short period of time
+			// comes from the same GUID in a short period of time
 			m.hids.dumping.Add(guid)
 			defer m.hids.dumping.Del(guid)
 
 			dumpFilename := fmt.Sprintf("%s_%d_%d.dmp", filepath.Base(pt.Image), pid, time.Now().UnixNano())
 			dumpPath := m.prepare(e, dumpFilename)
 			if err = dbghelp.FullMemoryMiniDump(pid, dumpPath); err != nil {
-				return fmt.Errorf("failed to dump process event=%s pid=%d image=%s: %s", hash, pid, pt.Image, err)
+				return fmt.Errorf("failed to dump process event=%s pid=%d image=%s: %s", hash, pid, pt.Image, err)
 			} else {
 				// dump was successfull
 				m.hids.memdumped.Add(guid)
@@ -278,7 +278,7 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 							content = fmt.Sprintf("HIDS error dumping %s: %s", targetObject, err)
 						}
 						if err = m.writeReader(dumpPath, bytes.NewBufferString(content)); err != nil {
-							log.Errorf("Failed to write registry content to file: %s", err)
+							log.Errorf("Failed to write registry content to file: %s", err)
 						}
 					}
 				}
@@ -289,7 +289,7 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
-	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
+	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			// before we kill we suspend the process
@@ -299,7 +299,7 @@ func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) kill_process(e *event.EdrEvent) error {
-	if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
+	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			if err := pt.TerminateProcess(); err != nil {
@@ -335,7 +335,7 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 
 		// handling blacklisting action
 		if det.Actions.Contains(ActionBlacklist) {
-			if pt := processTrackFromEvent(m.hids, e); !pt.IsZero() {
+			if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 				// additional check not to blacklist agent
 				if int(pt.PID) != os.Getpid() {
 					m.hids.tracker.Blacklist(pt.CommandLine)

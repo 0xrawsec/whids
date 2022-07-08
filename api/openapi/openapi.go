@@ -20,13 +20,14 @@ const (
 )
 
 type OpenAPI struct {
-	OpenAPI    string                `json:"openapi,omitempty"`
-	Info       *Info                 `json:"info,omitempty"`
-	Servers    []*Server             `json:"servers,omitempty"`
-	Paths      map[string]*PathItem  `json:"paths,omitempty"`
-	Components Components            `json:"components,omitempty"`
-	Security   []SecurityRequirement `json:"security,omitempty"`
-	// Not in OpenAPI spec
+	OpenAPI       string                `json:"openapi,omitempty"`
+	Info          *Info                 `json:"info,omitempty"`
+	Servers       []*Server             `json:"servers,omitempty"`
+	TestingServer *Server               `json:"-"` // there to generate tests
+	Paths         map[string]*PathItem  `json:"paths,omitempty"`
+	Components    Components            `json:"components,omitempty"`
+	Security      []SecurityRequirement `json:"security,omitempty"`
+	// Not in OpenAPI spec
 	Client            *http.Client              `json:"-"`
 	ApiKey            *SecurityScheme           `json:"-"`
 	ValidateOperation func(i interface{}) error `json:"-"`
@@ -82,9 +83,14 @@ func (oa *OpenAPI) AuthApiKey(header string, value string) {
 }
 
 func (oa *OpenAPI) ApiURL(path string) string {
-	server := strings.Trim(oa.FirstServer().URL, "/")
+	// take testing server in priority
+	server := oa.TestingServer
+	if server == nil {
+		server = oa.FirstServer()
+	}
+	serverURL := strings.Trim(server.URL, "/")
 	path = strings.Trim(path, "/")
-	return fmt.Sprintf("%s/%s", server, path)
+	return fmt.Sprintf("%s/%s", serverURL, path)
 }
 
 func (oa *OpenAPI) FirstServer() *Server {
@@ -401,7 +407,7 @@ func (o *Operation) ParseResponse(r *http.Response) (err error) {
 	case "":
 		break
 	default:
-		return fmt.Errorf("cannot parse Content-Type: %s", ct)
+		return fmt.Errorf("cannot parse Content-Type: %s", ct)
 	}
 
 	o.Responses[fmt.Sprintf("%d", r.StatusCode)] = Response{

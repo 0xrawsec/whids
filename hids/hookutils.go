@@ -5,7 +5,6 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
 	"github.com/0xrawsec/whids/event"
@@ -54,33 +53,6 @@ func srcPIDFromEvent(e *event.EdrEvent) int64 {
 	}
 
 	return -1
-}
-
-func srcGUIDFromEvent(e *event.EdrEvent) string {
-	var procGUIDPath *engine.XPath
-
-	// the interesting pid to dump depends on the event
-	switch e.EventID() {
-	case SysmonAccessProcess:
-		procGUIDPath = pathSysmonSourceProcessGUID
-	case SysmonCreateRemoteThread:
-		procGUIDPath = pathSysmonCRTSourceProcessGuid
-	default:
-		procGUIDPath = pathSysmonProcessGUID
-	}
-
-	if guid, ok := e.GetString(procGUIDPath); ok {
-		return guid
-	}
-
-	return nullGUID
-}
-
-func processTrackFromEvent(h *HIDS, e *event.EdrEvent) *ProcessTrack {
-	if uuid := srcGUIDFromEvent(e); uuid != nullGUID {
-		return h.tracker.GetByGuid(uuid)
-	}
-	return EmptyProcessTrack()
 }
 
 func hasAction(e *event.EdrEvent, action string) bool {

@@ -2,7 +2,7 @@ package api
 
 // Routes used by Clients
 const (
-	// GET based API routes
+	// GET based API routes
 
 	// EptAPIServerKeyPath API route used to get server key
 	EptAPIServerKeyPath = "/key"
@@ -15,23 +15,23 @@ const (
 	EptAPISysmonConfigPath       = "/sysmon/config"
 	EptAPISysmonConfigSha256Path = "/sysmon/config/sha256"
 
-	// EptAPIIoCsPath API route used to serve IOC container
+	// EptAPIIoCsPath API route used to serve IOC container
 	EptAPIIoCsPath = "/iocs"
-	// EptAPIIoCsSha256Path API route used to serve sha256 of IOC container
+	// EptAPIIoCsSha256Path API route used to serve sha256 of IOC container
 	EptAPIIoCsSha256Path = "/iocs/sha256"
-	// EptAPITools API route used to update local tools
+	// EptAPITools API route used to update local tools
 	EptAPITools = "/tools"
 
-	// POST based API routes
+	// POST based API routes
 
-	// EptAPIPostLogsPath API route used to post logs
+	// EptAPIPostLogsPath API route used to post logs
 	EptAPIPostLogsPath = "/logs"
-	// EptAPIPostDumpPath API route used to dump things
+	// EptAPIPostDumpPath API route used to dump things
 	EptAPIPostDumpPath = "/upload/dumps"
-	// EptAPIPostSystemInfo API route used to send system information
+	// EptAPIPostSystemInfo API route used to send system information
 	EptAPIPostSystemInfo = "/info/system"
 
-	// GET and POST routes
+	// GET and POST routes
 
 	// EptAPICommandPath used to GET commands and POST results
 	EptAPICommandPath = "/commands"

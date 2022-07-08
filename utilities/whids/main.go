@@ -12,10 +12,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"time"
 
 	"github.com/0xrawsec/gene/v2/engine"
-	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/hids"
 	"github.com/0xrawsec/whids/hids/sysinfo"
 	"github.com/0xrawsec/whids/utils"
@@ -49,89 +47,8 @@ const (
 var (
 	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 
-	logDir = filepath.Join(abs, "Logs")
-
-	// DefaultHIDSConfig is the default HIDS configuration
-	DefaultHIDSConfig = hids.Config{
-		RulesConfig: &hids.RulesConfig{
-			RulesDB:        filepath.Join(abs, "Database", "Rules"),
-			ContainersDB:   filepath.Join(abs, "Database", "Containers"),
-			UpdateInterval: 60 * time.Second,
-		},
-
-		FwdConfig: &api.ForwarderConfig{
-			Local: true,
-			Client: api.ClientConfig{
-				MaxUploadSize: api.DefaultMaxUploadSize,
-			},
-			Logging: api.LoggingConfig{
-				Dir:              filepath.Join(logDir, "Alerts"),
-				RotationInterval: time.Hour * 5,
-			},
-		},
-		EtwConfig: &hids.EtwConfig{
-			Providers: []string{
-				"Microsoft-Windows-Sysmon",
-				"Microsoft-Windows-Windows Defender",
-				"Microsoft-Windows-PowerShell",
-				"Microsoft-Antimalware-Scan-Interface",
-			},
-			Traces: []string{"Eventlog-Security"},
-		},
-		Sysmon: &hids.SysmonConfig{
-			Bin:              "C:\\Windows\\Sysmon64.exe",
-			ArchiveDirectory: "C:\\Sysmon\\",
-			CleanArchived:    true,
-		},
-		Actions: &hids.ActionsConfig{
-			AvailableActions: hids.AvailableActions,
-			Low:              []string{},
-			Medium:           []string{"brief", "filedump", "regdump"},
-			High:             []string{"report", "filedump", "regdump"},
-			Critical:         []string{"report", "filedump", "regdump", "memdump"},
-		},
-		Dump: &hids.DumpConfig{
-			Dir:           filepath.Join(abs, "Dumps"),
-			Compression:   true,
-			MaxDumps:      4,
-			DumpUntracked: false,
-		},
-		Report: &hids.ReportConfig{
-			EnableReporting: false,
-			OSQuery: hids.OSQueryConfig{
-				Tables: []string{"processes", "services", "scheduled_tasks", "drivers", "startup_items", "process_open_sockets"}},
-			Commands: []hids.ReportCommand{{
-				Description: "Example command",
-				Name:        "osqueryi.exe",
-				Args:        []string{"--json", "-A", "processes"},
-				ExpectJSON:  true,
-			}},
-			CommandTimeout: 60 * time.Second,
-		},
-		AuditConfig: &hids.AuditConfig{
-			AuditPolicies: []string{"File System"},
-		},
-		CanariesConfig: &hids.CanariesConfig{
-			Enable: false,
-			Canaries: []*hids.Canary{
-				{
-					Directories: []string{"$SYSTEMDRIVE", "$SYSTEMROOT"},
-					Files:       []string{"readme.pdf", "readme.docx", "readme.txt"},
-					Delete:      true,
-				},
-			},
-			Actions: []string{"kill", "memdump", "filedump", "blacklist", "report"},
-			Whitelist: []string{
-				"System",
-				"C:\\Windows\\explorer.exe",
-			},
-		},
-		CritTresh:       5,
-		Logfile:         filepath.Join(logDir, "whids.log"),
-		EnableHooks:     true,
-		EnableFiltering: true,
-		Endpoint:        true,
-		LogAll:          false}
+	// DefaultHIDSConfig is the default HIDS configuration
+	DefaultHIDSConfig = hids.BuildDefaultConfig(abs)
 )
 
 var (
@@ -250,7 +167,7 @@ func proctectDir(dir string) {
 	cmd := []string{"icacls", dir, "/reset"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
 		log.Errorf("Failed to reset installation directory ACLs: %s", err)
-		log.Errorf("icacls output: %s", string(out))
+		log.Errorf("icacls output: %s", string(out))
 		return
 	}
 
@@ -258,7 +175,7 @@ func proctectDir(dir string) {
 	cmd = []string{"icacls", dir, "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
 		log.Errorf("Failed to protect installation directory with ACLs: %s", err)
-		log.Errorf("icacls output: %s", string(out))
+		log.Errorf("icacls output: %s", string(out))
 		return
 	}
 
@@ -325,7 +242,7 @@ func main() {
 		}
 
 		if err := updateAutologger(&conf); err != nil {
-			log.Errorf("Failed to update autologger: %s", err)
+			log.Errorf("Failed to update autologger: %s", err)
 			os.Exit(exitFail)
 		}
 

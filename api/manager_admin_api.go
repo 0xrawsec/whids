@@ -60,7 +60,7 @@ func admApiParseTime(stimestamp string) (t time.Time, err error) {
 
 // AdminAPIConfig configuration for Administrative API
 type AdminAPIConfig struct {
-	Host string `toml:"host" comment:"Hostname or IP address where the API should listen to"`
+	Host string `toml:"host" comment:"Hostname or IP address where the API should listen to"`
 	Port int    `toml:"port" comment:"Port used by the API"`
 }
 
@@ -217,8 +217,8 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 			return
 		}
 
-		// we generate a new UUID if needed
-		// force UUID to lower case
+		// we generate a new UUID if needed
+		// force UUID to lower case
 		user.Uuid = strings.ToLower(user.Uuid)
 		if !noBracketGuidRe.MatchString(user.Uuid) {
 			user.Uuid = utils.UnsafeUUIDGen().String()
@@ -422,7 +422,7 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-// CommandAPI structure used by Admin API clients to POST commands
+// CommandAPI structure used by Admin API clients to POST commands
 type CommandAPI struct {
 	CommandLine string        `json:"command-line"`
 	FetchFiles  []string      `json:"fetch-files"`
@@ -1331,7 +1331,7 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 }
 
 func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
-	// used in case of POST / DELETE
+	// used in case of POST / DELETE
 
 	name := rq.URL.Query().Get(qpName)
 	filters, _ := strconv.ParseBool(rq.URL.Query().Get(qpFilters))
@@ -1387,7 +1387,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 			for _, rule := range rules {
 				eng := engine.NewEngine()
 				if _, err := rule.Compile(eng); err != nil {
-					// we abort API call
+					// we abort API call
 					wt.Write(admErr(err))
 					return
 				}
@@ -1408,7 +1408,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 				case sod.IsNoObjectFound(err):
 					// we don't do anything
 				default:
-					// we abort API call
+					// we abort API call
 					wt.Write(admErr(err))
 					return
 				}
@@ -1507,7 +1507,7 @@ func (m *Manager) runAdminAPI() {
 		rt.Use(m.adminAuthorizationMiddleware)
 		// Manages Compression
 		rt.Use(gunzipMiddleware)
-		// Set API response headers
+		// Set API response headers
 		rt.Use(m.adminRespHeaderMiddleware)
 
 		// Routes initialization

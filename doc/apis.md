@@ -1,7 +1,7 @@
 
 
 # Table of Contents
-* [EDR statistics](#EDR statistics)
+* [EDR statistics](#EDR statistics)
 * [Rule Management Endpoints](#Rule-Management-Endpoints)
 	* [List rules loaded in the EDR](#List-rules-loaded-in-the-EDR)
 	* [Deleting rule](#Deleting-rule)
@@ -31,11 +31,11 @@
 	* [Getting a single endpoint report](#Getting-a-single-endpoint-report)
 	* [Deleting an endpoint report](#Deleting-an-endpoint-report)
 
-# EDR statistics
+# EDR statistics
 
 🟢 **GET** `/stats`
 
-**Description:** Used to retrieve basic statistics about the EDR manager
+**Description:** Used to retrieve basic statistics about the EDR manager
 
 **Request:**
 ```bash
@@ -60,7 +60,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/stats"
 
 🟢 **GET** `/rules?name=REGEXP`
 2021-07-06T17:18:42.835802162Z
-**Description:** This endpoint is usde to retrive rules loaded in the EDR manager (also deployed on all the endpoints connected).
+**Description:** This endpoint is usde to retrive rules loaded in the EDR manager (also deployed on all the endpoints connected).
 
 **Request:**
 ```bash
@@ -233,7 +233,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/rules/save"
 
 🟢 **GET** `/rules/reload`
 
-**Description:** API endpoint used to reload the rule engine.
+**Description:** API endpoint used to reload the rule engine.
 
 ```bash
 curl -skH "Api-key: admin" "https://localhost:8001/rules/reload"
@@ -309,7 +309,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/03e31275-2277-d8e0-
 
 🟢 **PUT** `/endpoints`
 
-**Description:** adds a **new endpoint** to the EDR. The endpoint will also be added to
+**Description:** adds a **new endpoint** to the EDR. The endpoint will also be added to
 the configuration of the manager and committed to disk. You can now configure a new
 EDR agent on any endpoint.
 
@@ -750,7 +750,7 @@ curl -skH Api-key: admin https://localhost:8001/endpoints/03e31275-2277-d8e0-bb5
 
 🟢 **GET** `/endpoints/reports`
 
-**Description:** API endpoint to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
+**Description:** API endpoint to get EDR reports about all the endpoints connected. Reports are not persistent accross restart of the manager.
 
 **Request:**
 ```bash
@@ -832,7 +832,7 @@ curl -skH "Api-key: admin" "https://localhost:8001/endpoints/reports"
 
 🟢 **GET** `/endpoints/{ENDPOINT_UUID}/reports`
 
-**Description:** API endpoint to get an EDR report about a given endpoint.
+**Description:** API endpoint to get an EDR report about a given endpoint.
 
 **Request:**
 ```bash

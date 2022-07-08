@@ -45,13 +45,13 @@ func ValidateRespStatus(resp *http.Response, status ...int) error {
 // ClientConfig structure definition
 type ClientConfig struct {
 	Proto             string `toml:"proto" comment:"Protocol to use to connect to manager (http or https)"`
-	Host              string `toml:"host" comment:"Hostname or IP of the manager"`
+	Host              string `toml:"host" comment:"Hostname or IP of the manager"`
 	Port              int    `toml:"port" comment:"Port at which endpoint API is running on manager server"`
 	UUID              string `toml:"endpoint-uuid" comment:"Endpoint UUID configured on manager used to authenticate this endpoint"`
 	Key               string `toml:"endpoint-key" comment:"Endpoint key configured on manager used to authenticate this endpoint"`
 	ServerKey         string `toml:"server-key" comment:"Key configured on manager, used to authenticate server on this endpoint\n This settings does not protect from MITM, so configuring server\n certificate pinning is recommended."`
 	ServerFingerprint string `toml:"server-fingerprint" comment:"Configure manager certificate pinning\n Put here the manager's certificate fingerprint"`
-	Unsafe            bool   `toml:"unsafe" comment:"Allow unsafe HTTPS connection"`
+	Unsafe            bool   `toml:"unsafe" comment:"Allow unsafe HTTPS connection"`
 	MaxUploadSize     int64  `toml:"max-upload-size" comment:"Maximum allowed upload size"`
 
 	localAddr string
@@ -119,7 +119,7 @@ func (cc *ClientConfig) DialTLSContext(ctx context.Context, network, addr string
 	return c, fmt.Errorf("server fingerprint not verified")
 }
 
-// Transport creates an approriate HTTP transport from a configuration
+// Transport creates an approriate HTTP transport from a configuration
 // Cert pinning inspired by: https://medium.com/@zmanian/server-public-key-pinning-in-go-7a57bbe39438
 func (cc *ClientConfig) Transport() http.RoundTripper {
 	return &http.Transport{
@@ -354,7 +354,7 @@ func (m *ManagerClient) GetIoCs() ([]string, error) {
 	return ctn, nil
 }
 
-// GetIoCsSha256 retrieves a sha256 from the IoCs available in the manager
+// GetIoCsSha256 retrieves a sha256 from the IoCs available in the manager
 func (m *ManagerClient) GetIoCsSha256() (string, error) {
 
 	if auth, _ := m.IsServerAuthenticated(); auth {
@@ -435,7 +435,7 @@ func (m *ManagerClient) PostDump(f *FileUpload) error {
 			req, err := m.Prepare("POST", EptAPIPostDumpPath, buf)
 
 			if err != nil {
-				return fmt.Errorf("PostDump failed to prepare request: %s", err)
+				return fmt.Errorf("PostDump failed to prepare request: %s", err)
 			}
 
 			resp, err := m.HTTPClient.Do(req)
@@ -464,7 +464,7 @@ func (m *ManagerClient) PostLogs(r io.Reader) error {
 			req, err := m.PrepareGzip("POST", EptAPIPostLogsPath, r)
 
 			if err != nil {
-				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
+				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
 			}
 
 			resp, err := m.HTTPClient.Do(req)
@@ -557,7 +557,7 @@ func (m *ManagerClient) FetchCommand() (*Command, error) {
 
 			return command, nil
 		}
-		return command, fmt.Errorf("FetchCommand unexpected HTTP status %d", resp.StatusCode)
+		return command, fmt.Errorf("FetchCommand unexpected HTTP status %d", resp.StatusCode)
 
 	}
 	return command, fmt.Errorf("FetchCommand failed, server cannot be authenticated")

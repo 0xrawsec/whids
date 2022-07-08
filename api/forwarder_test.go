@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,46 +18,22 @@ import (
 	"github.com/0xrawsec/golang-utils/readers"
 	"github.com/0xrawsec/golang-utils/scanner"
 	"github.com/0xrawsec/golang-utils/sync/semaphore"
+	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/logger"
 	"github.com/0xrawsec/whids/utils"
 )
 
 var (
-	fconf = ForwarderConfig{
-		Client: cconf,
-		Logging: LoggingConfig{
-			Dir:              "./data/Queued",
-			RotationInterval: time.Second * 2,
-		},
-	}
-
-	mconf = ManagerConfig{
-		AdminAPI: AdminAPIConfig{
-			Host: "localhost",
-			Port: AdmAPIDefaultPort,
-		},
-		EndpointAPI: EndpointAPIConfig{
-			Host: "",
-			Port: EptAPIDefaultPort,
-		},
-		Logging: ManagerLogConfig{
-			Root:        "./data/logs",
-			LogBasename: "alerts",
-		},
-		Database: "./data/database",
-		DumpDir:  "./data/uploads/",
-		TLS: TLSConfig{
-			Cert: "./data/cert.pem",
-			Key:  "./data/key.pem",
-		},
-	}
 
 	eventFile = "./data/events.json"
 	events    = make([]event.EdrEvent, 0)
 )
 
 func init() {
+	// initialize random generator's seed
+	rand.Seed(time.Now().UnixNano())
+
 	data, err := ioutil.ReadFile(eventFile)
 	if err != nil {
 		panic(err)
@@ -68,6 +43,12 @@ func init() {
 		json.Unmarshal(line, &event)
 		events = append(events, event)
 	}
+}
+
+func randport() (port int) {
+	for ; port <= 10000; port = rand.Intn(65535) {
+	}
+	return
 }
 
 func emitEvents(count int, detection bool) (ce chan *event.EdrEvent) {
@@ -147,14 +128,15 @@ func countLinesInGzFile(filepath string) int {
 }
 
 func readerFromEvents(count int) io.Reader {
-	tmp := make([]string, 0, count)
+	buf := new(bytes.Buffer)
 	for event := range emitEvents(count, false) {
-		tmp = append(tmp, string(utils.Json(event)))
+		buf.WriteString(format("%s\n", string(utils.Json(event))))
 	}
-	return bytes.NewBufferString(strings.Join(tmp, "\n"))
+	return buf
 }
 
 func clean(mc *ManagerConfig, fc *ForwarderConfig) {
+	os.RemoveAll(mc.Database)
 	os.RemoveAll(mc.Logging.Root)
 	os.RemoveAll(fc.Logging.Dir)
 }
@@ -306,8 +288,8 @@ func TestForwarderParallel(t *testing.T) {
 	clean(&mconf, &fconf)
 	defer clean(&mconf, &fconf)
 
-	jobs := semaphore.New(100)
-	nclients, nevents := 1000, 1000
+	jobs := semaphore.New(10)
+	nclients, nevents := 100, 1000
 	wg := sync.WaitGroup{}
 	testfile := "TestCollectorParallel.log.gz"
 	key := utils.UnsafeKeyGen(DefaultKeySize)
@@ -421,6 +403,9 @@ func TestForwarderQueueBasic(t *testing.T) {
 }
 
 func TestForwarderCleanup(t *testing.T) {
+
+	tt := toast.FromT(t)
+
 	// cleanup
 	clean(&mconf, &fconf)
 	defer clean(&mconf, &fconf)
@@ -429,46 +414,45 @@ func TestForwarderCleanup(t *testing.T) {
 	fconf.Logging.RotationInterval = time.Hour
 	// Inititialize the forwarder
 	f, err := NewForwarder(&fconf)
-	if err != nil {
-		t.Errorf("Failed to create collector: %s", err)
-		t.FailNow()
-	}
+	tt.CheckErr(err)
+	// decreases sleep time to speed up test
+	f.sleep = time.Millisecond * 500
 	// Running the forwarder
 	f.Run()
 	defer f.Close()
 
 	// create bogus files inside queue directory
-	numberOfFiles := DiskSpaceThreshold / DefaultLogfileSize
-	additionalFiles := 10
-	for i := 0; i < numberOfFiles+additionalFiles; i++ {
+	numberOfQueuedFiles := DiskSpaceThreshold / DefaultLogfileSize
+	numberOfFilesToDelete := 10
+	for i := 0; i < numberOfQueuedFiles+numberOfFilesToDelete; i++ {
 		fp := filepath.Join(fconf.Logging.Dir, fmt.Sprintf("queue.bogus.%d", i))
 		fd, err := os.Create(fp)
-		if err != nil {
-			t.Errorf("Failed to create bogus file: %s", err)
-			t.FailNow()
-		}
+		tt.CheckErr(err)
 
 		buf := make([]byte, 4096)
 		rand.Read(buf)
 		for written := 0; written < DefaultLogfileSize; {
-			n, _ := fd.Write(buf)
+			n, err := fd.Write(buf)
+			tt.CheckErr(err)
 			written += n
 		}
 		fd.Close()
 	}
 
 	// send enough events to trigger cleanup
-	for i := 0; i < additionalFiles; i++ {
+	// every loop should trigger a cleanup
+	for i := 0; i < numberOfFilesToDelete; i++ {
 		for e := range emitEvents(int(f.EventTresh), false) {
 			f.PipeEvent(e)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
+
+	// closing the forwarder triggers last cleanup
+	f.Close()
 
 	files, _ := ioutil.ReadDir(fconf.Logging.Dir)
-	if len(files)-1 != numberOfFiles {
-		t.Errorf("Expecting %d remaining in directory but got %d", numberOfFiles, len(files)-1)
-		t.FailNow()
-	}
-
+	// we expect the number of queued files + file to log alerts
+	expected := numberOfQueuedFiles + 1
+	tt.Assert(len(files) == expected, format("Expecting %d remaining in directory but got %d", expected, len(files)))
 }

@@ -1,6 +1,7 @@
 package hids
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/0xrawsec/golang-etw/etw"
@@ -39,15 +40,15 @@ type EtwConfig struct {
 func (c *EtwConfig) ConfigureAutologger() (lastErr error) {
 
 	if err := Autologger.Create(); err != nil {
-		return err
+		return fmt.Errorf("failed to create autologger: %w", err)
 	}
 
 	for _, p := range c.UnifiedProviders() {
-		if prov, err := etw.ProviderFromString(p); err != nil {
-			lastErr = err
+		if prov, err := etw.ParseProvider(p); err != nil {
+			lastErr = fmt.Errorf("failed to parse provider: %w", err)
 		} else {
 			if err := Autologger.EnableProvider(prov); err != nil {
-				lastErr = err
+				lastErr = fmt.Errorf("failed to enable provider: %w", err)
 			}
 		}
 	}
@@ -72,7 +73,7 @@ func (c *EtwConfig) UnifiedProviders() (providers []string) {
 func (c *EtwConfig) UnifiedTraces() []string {
 	traces := make([]string, 0, len(c.Traces))
 	marked := datastructs.NewSet()
-	// adding EDR default trace
+	// adding EDR default trace
 	traces = append(traces, EdrTraceName)
 	marked.Add(EdrTraceName)
 	for _, t := range c.Traces {

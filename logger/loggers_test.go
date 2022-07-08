@@ -130,7 +130,7 @@ func TestEventLogger(t *testing.T) {
 	delta := time.Since(start)
 	t.Logf("Time to write files: %s", delta)
 	t.Logf("Total size written (uncompressed): %.1fMB", float64(bytesW)/utils.Mega)
-	t.Logf("Write throughput: %.1fMB/s", float64(bytesW)/(utils.Mega*delta.Seconds()))
+	t.Logf("Write throughput: %.1fMB/s", float64(bytesW)/(utils.Mega*delta.Seconds()))
 
 	if l.CountFiles() != 0 {
 		t.Errorf("All files should be closed, %d files still opened", l.CountFiles())

@@ -75,7 +75,7 @@ func init() {
 ///////////////////// Utils
 
 // IPFromRequest extracts the user IP address from req, if present.
-// source: https://blog.golang.org/context/userip/userip.go
+// source: https://blog.golang.org/context/userip/userip.go
 func IPFromRequest(req *http.Request) (net.IP, error) {
 	ip, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
@@ -107,8 +107,8 @@ func gunzipMiddleware(next http.Handler) http.Handler {
 
 // TLSConfig structure definition
 type TLSConfig struct {
-	Cert string `toml:"cert" comment:"Path to the certificate file to use for TLS connections"`
-	Key  string `toml:"key" comment:"Path to the key to use for TLS connection"`
+	Cert string `toml:"cert" comment:"Path to the certificate file to use for TLS connections"`
+	Key  string `toml:"key" comment:"Path to the key to use for TLS connection"`
 }
 
 // Empty returns true if current TLSConfig is empty else false
@@ -129,9 +129,9 @@ func (t *TLSConfig) Verify() error {
 
 /////////////////////// Manager
 
-// EndpointAPIConfig structure holding configuration for the API used by endpoints
+// EndpointAPIConfig structure holding configuration for the API used by endpoints
 type EndpointAPIConfig struct {
-	Host      string `toml:"host" comment:"Hostname or IP where the API should listen to"`
+	Host      string `toml:"host" comment:"Hostname or IP where the API should listen to"`
 	Port      int    `toml:"port" comment:"Port used by the API"`
 	ServerKey string `toml:"server-key" comment:"Server key used to do basic authentication of the server on clients.\n Configure certificate pinning on client offers better security."`
 }
@@ -150,7 +150,7 @@ type ManagerConfig struct {
 	Repair      bool              `toml:"repair-db" comment:"Attempt to repair broken database"`
 	DumpDir     string            `toml:"dump-dir" comment:"Directory where to dump artifacts collected on hosts"`
 	AdminAPI    AdminAPIConfig    `toml:"admin-api" comment:"Settings to configure administrative API (not supposed to be reachable by endpoints)"`
-	EndpointAPI EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
+	EndpointAPI EndpointAPIConfig `toml:"endpoint-api" comment:"Settings to configure API used by endpoints"`
 	Logging     ManagerLogConfig  `toml:"logging" comment:"Logging settings"`
 	TLS         TLSConfig         `toml:"tls" comment:"TLS settings. Leave empty, not to use TLS"`
 	path        string
@@ -299,7 +299,7 @@ func (m *Manager) createTableOrRepair(o sod.Object, s sod.Schema) (err error) {
 		return
 	}
 
-	// we repair DB if wanted
+	// we repair DB if wanted
 	if m.Config.Repair {
 		return m.db.Repair(o)
 	}

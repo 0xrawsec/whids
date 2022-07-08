@@ -20,7 +20,7 @@
  process memory). This way you are sure you collected the artifacts as soon as you could 
  (near real time).
 
- All this work has been done on my free time in the hope it would help other people, I hope you will enjoy it. Unless I get some funding to further develop this project, I will continue doing so. I will make all I can to fix issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
+ All this work has been done on my free time in the hope it would help other people, I hope you will enjoy it. Unless I get some funding to further develop this project, I will continue doing so. I will make all I can to fix issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
 
 ## Why
 
@@ -35,7 +35,7 @@
   <img src="./doc/img/big-picture.png" alt="big-picture">
 </p>
 
-**NB:** the EDR agent can be ran standalone (without being connected to an **EDR manager**)
+**NB:** the EDR agent can be ran standalone (without being connected to an **EDR manager**)
 
 ## Strengths
 
@@ -45,7 +45,7 @@
 * Built by an Incident Responder for all Incident Responders to make their job easier  
 * Low footprint (no process injection)
 * Can co-exist with **any antivirus** product (advised to run it along with **MS Defender**)
-* Designed for high throughput. It can easily enrich and analyze 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
+* Designed for high throughput. It can easily enrich and analyze 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
 * Easily integrable with other tools (Splunk, ELK, MISP ...)
 * Integrated with [ATT&CK framework](https://attack.mitre.org/)
 
@@ -54,7 +54,7 @@
 * Only works on Windows
 * Detection limited to what is available in the Windows event logs channels (already a lot in there)
 * No process instrumentation (it is also a strength as it depends on the point of view)
-* No GUI yet (will develop one if requested by the community)
+* No GUI yet (will develop one if requested by the community)
 * No support for ETW
 * Tell me if you notice others ...
 
@@ -86,7 +86,7 @@ In order to get the most of WHIDS you might want to improve your logging policy.
     3. File System auditing logs will appear in the `Security` log channel
 - If you want an **antivirus** to run on your endpoints, keep **Microsoft Defender**, first because it is a good AV but also because it logs alerts in a [dedicated log channel](https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-antivirus/troubleshoot-windows-defender-antivirus#windows-defender-av-ids) `Microsoft-Windows-Windows Defender/Operational` monitored by the EDR.
 
-## EDR Endpoint agent (Whids.exe)
+## EDR Endpoint agent (Whids.exe)
 
 This section covers the installation of the agent on the endpoint.
 
@@ -105,7 +105,7 @@ This section covers the installation of the agent on the endpoint.
 
 The EDR manager can be installed on several platforms, pre-built binaries are provided for Windows, Linux and Darwin.
 
-1. Create TLS certificate if needed for HTTPS connections
+1. Create TLS certificate if needed for HTTPS connections
 2. Create a configuration file (there is a command line argument to generate a basic config) 
 3. Run the binary
 
@@ -115,9 +115,9 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 # Further Documentation
 
-* [Endpoint Manager REST API documentation](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
+* [Endpoint Manager REST API documentation](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
 * [How to write rules](https://rawsec.lu/doc/gene/1.6/)
-* [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
+* [Getting EDR detection rules](https://github.com/0xrawsec/gene-rules)
 * [Overview of events enrichment](https://github.com/0xrawsec/whids/blob/master/doc/events-table.md)
 
 # Known Issues
@@ -185,4 +185,4 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
 [![Tines](https://github.com/0xrawsec/sponsors/blob/master/logos/tines-sponsorship-badge-purple.png)](https://www.tines.com/?utm_source=oss&utm_medium=sponsorship&utm_campaign=whids)
 
-Github:https://github.com/tines  Website:https://www.tines.com/ Twitter:[@tines_io](https://twitter.com/tines_io)
+Github:https://github.com/tines  Website:https://www.tines.com/ Twitter:[@tines_io](https://twitter.com/tines_io)

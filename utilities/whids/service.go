@@ -27,7 +27,7 @@ loop:
 			changes <- c.CurrentStatus
 		case svc.Stop:
 			changes <- svc.Status{State: svc.StopPending}
-			// Stop WHIDS there
+			// Stop WHIDS there
 			hostIDS.Stop()
 			hostIDS.Wait()
 			hostIDS.LogStats()

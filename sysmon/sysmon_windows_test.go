@@ -16,7 +16,7 @@ import (
 func init() {
 	// testing on WSL makes Windows command
 	// very long to respond
-	defaultTimeout = 60 * time.Second
+	DefaultTimeout = 60 * time.Second
 }
 
 func TestSysmonInfo(t *testing.T) {

@@ -15,7 +15,7 @@ func UnsafeUUIDGen() uuid.UUID {
 	return uuid
 }
 
-// UnsafeKeyGen is an API key generator, supposed to generate an [[:alnum:]] key
+// UnsafeKeyGen is an API key generator, supposed to generate an [[:alnum:]] key
 func UnsafeKeyGen(size int) string {
 	key := make([]byte, 0, size)
 	for len(key) < size {

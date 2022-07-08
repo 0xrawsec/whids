@@ -123,9 +123,9 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		if len(cmd.Args) > 0 {
 			spid := cmd.Args[0]
 			if pid, err := strconv.Atoi(spid); err != nil {
-				cmd.Error = fmt.Sprintf("failed to parse pid: %s", err)
+				cmd.ErrorFrom(fmt.Errorf("failed to parse pid: %w", err))
 			} else if err := terminate(pid); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			}
 		}
 
@@ -142,7 +142,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
 			if out, err := cmdHash(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			} else {
 				cmd.Json = out
 			}
@@ -161,7 +161,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		if len(cmd.Args) == 2 {
 			if out, err := cmdFind(cmd.Args[0], cmd.Args[1], true); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			} else {
 				cmd.Json = out
 			}
@@ -180,7 +180,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
 			if out, err := cmdStat(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			} else {
 				cmd.Json = out
 			}
@@ -199,7 +199,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		if len(cmd.Args) > 0 {
 			if out, err := cmdDir(cmd.Args[0]); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			} else {
 				cmd.Json = out
 			}
@@ -233,7 +233,7 @@ func (h *HIDS) handleManagerCommand(cmd *api.Command) {
 		cmd.ExpectJSON = true
 		if len(cmd.Args) == 2 {
 			if out, err := cmdFind(cmd.Args[0], cmd.Args[1], false); err != nil {
-				cmd.Error = err.Error()
+				cmd.ErrorFrom(err)
 			} else {
 				cmd.Json = out
 			}
@@ -460,7 +460,7 @@ func (h *HIDS) updateTools() (err error) {
 		if err = h.db.Search(&tools.Tool{}, "Name", "=", t.Name).And("OS", "=", los.OS).AssignUnique(&old); err != nil && !sod.IsNoObjectFound(err) {
 			return
 		} else if err == nil {
-			// we use same UUID not to duplicate entry
+			// we use same UUID not to duplicate entry
 			t.Initialize(old.UUID())
 		}
 

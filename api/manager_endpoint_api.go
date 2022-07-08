@@ -139,7 +139,7 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(EptAPIPostDumpPath, m.eptAPIUploadDump).Methods("POST")
 		rt.HandleFunc(EptAPIPostSystemInfo, m.eptAPISystemInfo).Methods("POST")
 
-		// GET based
+		// GET based
 		rt.HandleFunc(EptAPIServerKeyPath, m.eptAPIServerKey).Methods("GET")
 		rt.HandleFunc(EptAPIRulesPath, m.eptAPIRules).Methods("GET")
 		rt.HandleFunc(EptAPIRulesSha256Path, m.eptAPIRulesSha256).Methods("GET")
@@ -149,7 +149,7 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(EptAPISysmonConfigSha256Path, m.eptAPISysmonConfigSha256).Methods("GET")
 		rt.HandleFunc(EptAPITools, m.eptAPITools).Methods("GET")
 
-		// GET and POST
+		// GET and POST
 		rt.HandleFunc(EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
 
 		uri := fmt.Sprintf("%s:%d", m.Config.EndpointAPI.Host, m.Config.EndpointAPI.Port)
@@ -188,7 +188,7 @@ func (m *Manager) eptAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.gene.rules))
 }
 
-// eptAPIRulesSha256 returns the sha256 of the latest set of rules loaded into the manager
+// eptAPIRulesSha256 returns the sha256 of the latest set of rules loaded into the manager
 func (m *Manager) eptAPIRulesSha256(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
 	defer m.RUnlock()
@@ -309,7 +309,7 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 
 	if endpt != nil {
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
-			m.logAPIErrorf("failed to update endpoint UUID=%s: %s", endpt.Uuid, err)
+			m.logAPIErrorf("failed to update endpoint UUID=%s: %s", endpt.Uuid, err)
 		}
 	}
 
@@ -342,7 +342,7 @@ func (m *Manager) eptAPICommand(wt http.ResponseWriter, rq *http.Request) {
 					endpt.Command.Sent = true
 					endpt.Command.SentTime = time.Now()
 					if err := m.db.InsertOrUpdate(endpt); err != nil {
-						m.logAPIErrorf("failed to update endpoint data: %s", err)
+						m.logAPIErrorf("failed to update endpoint data: %s", err)
 					}
 					return
 				}
@@ -358,17 +358,17 @@ func (m *Manager) eptAPICommand(wt http.ResponseWriter, rq *http.Request) {
 					defer rq.Body.Close()
 					body, err := ioutil.ReadAll(rq.Body)
 					if err != nil {
-						m.logAPIErrorf("failed to read response body: %s", err)
+						m.logAPIErrorf("failed to read response body: %s", err)
 					} else {
 						rcmd := Command{}
 						err := json.Unmarshal(body, &rcmd)
 						if err != nil {
-							m.logAPIErrorf("failed to unmarshal received command: %s", err)
+							m.logAPIErrorf("failed to unmarshal received command: %s", err)
 						} else {
 							// we complete the command executed on the endpoint
 							endpt.Command.Complete(&rcmd)
 							if err := m.db.InsertOrUpdate(endpt); err != nil {
-								m.logAPIErrorf("to update endpoint data: %s", err)
+								m.logAPIErrorf("to update endpoint data: %s", err)
 							}
 						}
 					}

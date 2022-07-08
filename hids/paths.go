@@ -8,149 +8,153 @@ const (
 	eventData = "/Event/EventData/"
 )
 
+func EventDataPath(field string) *engine.XPath {
+	return engine.Path(eventData + field)
+}
+
 var (
 	// Path definitions
 	////////////////////////// Getters ///////////////////////////
 	// DNS-Client logs
-	pathDNSQueryValue   = engine.Path("/Event/EventData/QueryName")
-	pathDNSQueryType    = engine.Path("/Event/EventData/QueryType")
-	pathDNSQueryResults = engine.Path("/Event/EventData/QueryResults")
+	pathDNSQueryValue   = EventDataPath("QueryName")
+	pathDNSQueryType    = EventDataPath("QueryType")
+	pathDNSQueryResults = EventDataPath("QueryResults")
 
 	// FileSystemAudit
 	pathFSAuditProcessId  = pathSysmonProcessId
-	pathFSAuditObjectName = engine.Path("/Event/EventData/ObjectName")
+	pathFSAuditObjectName = EventDataPath("ObjectName")
 
 	// Sysmon related paths
 	// Common to several events
-	pathSysmonUtcTime        = engine.Path("/Event/EventData/UtcTime")
-	pathSysmonImage          = engine.Path("/Event/EventData/Image")
-	pathSysmonHashes         = engine.Path("/Event/EventData/Hashes")
-	pathSysmonTargetFilename = engine.Path("/Event/EventData/TargetFilename")
-	pathSysmonProcessGUID    = engine.Path("/Event/EventData/ProcessGuid")
-	pathSysmonProcessId      = engine.Path("/Event/EventData/ProcessId")
+	pathSysmonUtcTime        = EventDataPath("UtcTime")
+	pathSysmonImage          = EventDataPath("Image")
+	pathSysmonHashes         = EventDataPath("Hashes")
+	pathSysmonTargetFilename = EventDataPath("TargetFilename")
+	pathSysmonProcessGUID    = EventDataPath("ProcessGuid")
+	pathSysmonProcessId      = EventDataPath("ProcessId")
 
-	// EventID 1: ProcessCreate
-	pathSysmonCommandLine       = engine.Path("/Event/EventData/CommandLine")
-	pathSysmonParentCommandLine = engine.Path("/Event/EventData/ParentCommandLine")
-	pathSysmonParentImage       = engine.Path("/Event/EventData/ParentImage")
-	pathSysmonParentProcessGUID = engine.Path("/Event/EventData/ParentProcessGuid")
-	pathSysmonParentProcessId   = engine.Path("/Event/EventData/ParentProcessId")
-	pathSysmonUser              = engine.Path("/Event/EventData/User")
-	pathSysmonIntegrityLevel    = engine.Path("/Event/EventData/IntegrityLevel")
-	pathSysmonCurrentDirectory  = engine.Path("/Event/EventData/CurrentDirectory")
+	// EventID 1: ProcessCreate
+	pathSysmonCommandLine       = EventDataPath("CommandLine")
+	pathSysmonParentCommandLine = EventDataPath("ParentCommandLine")
+	pathSysmonParentImage       = EventDataPath("ParentImage")
+	pathSysmonParentProcessGUID = EventDataPath("ParentProcessGuid")
+	pathSysmonParentProcessId   = EventDataPath("ParentProcessId")
+	pathSysmonUser              = EventDataPath("User")
+	pathSysmonIntegrityLevel    = EventDataPath("IntegrityLevel")
+	pathSysmonCurrentDirectory  = EventDataPath("CurrentDirectory")
 
 	// EventID 3: NetworkConnect
-	pathSysmonDestIP       = engine.Path("/Event/EventData/DestinationIp")
-	pathSysmonDestPort     = engine.Path("/Event/EventData/DestinationPort")
-	pathSysmonDestHostname = engine.Path("/Event/EventData/DestinationHostname")
+	pathSysmonDestIP       = EventDataPath("DestinationIp")
+	pathSysmonDestPort     = EventDataPath("DestinationPort")
+	pathSysmonDestHostname = EventDataPath("DestinationHostname")
 
-	// EventID 6/7
+	// EventID 6/7
 	pathSysmonFileVersion      = engine.Path(eventData + "FileVersion")
 	pathSysmonDescription      = engine.Path(eventData + "Description")
 	pathSysmonProduct          = engine.Path(eventData + "Product")
 	pathSysmonCompany          = engine.Path(eventData + "Company")
 	pathSysmonOriginalFileName = engine.Path(eventData + "OriginalFileName")
-	pathSysmonSignature        = engine.Path("/Event/EventData/Signature")
-	pathSysmonSigned           = engine.Path("/Event/EventData/Signed")
-	pathSysmonSignatureStatus  = engine.Path("/Event/EventData/SignatureStatus")
+	pathSysmonSignature        = EventDataPath("Signature")
+	pathSysmonSigned           = EventDataPath("Signed")
+	pathSysmonSignatureStatus  = EventDataPath("SignatureStatus")
 
-	// EventID 7
-	pathSysmonImageLoaded = engine.Path("/Event/EventData/ImageLoaded")
+	// EventID 7
+	pathSysmonImageLoaded = EventDataPath("ImageLoaded")
 
 	// EventID 8: CreateRemoteThread
-	pathSysmonCRTSourceProcessGuid = engine.Path("/Event/EventData/SourceProcessGuid")
-	pathSysmonCRTTargetProcessGuid = engine.Path("/Event/EventData/TargetProcessGuid")
+	pathSysmonCRTSourceProcessGuid = EventDataPath("SourceProcessGuid")
+	pathSysmonCRTTargetProcessGuid = EventDataPath("TargetProcessGuid")
 
-	// EventID 8/10
-	pathSysmonSourceProcessId = engine.Path("/Event/EventData/SourceProcessId")
-	pathSysmonTargetProcessId = engine.Path("/Event/EventData/TargetProcessId")
+	// EventID 8/10
+	pathSysmonSourceProcessId = EventDataPath("SourceProcessId")
+	pathSysmonTargetProcessId = EventDataPath("TargetProcessId")
 
 	// EventID 10: ProcessAccess
-	pathSysmonSourceProcessGUID = engine.Path("/Event/EventData/SourceProcessGUID")
-	pathSysmonTargetProcessGUID = engine.Path("/Event/EventData/TargetProcessGUID")
-	pathSysmonSourceImage       = engine.Path("/Event/EventData/SourceImage")
-	pathSysmonTargetImage       = engine.Path("/Event/EventData/TargetImage")
+	pathSysmonSourceProcessGUID = EventDataPath("SourceProcessGUID")
+	pathSysmonTargetProcessGUID = EventDataPath("TargetProcessGUID")
+	pathSysmonSourceImage       = EventDataPath("SourceImage")
+	pathSysmonTargetImage       = EventDataPath("TargetImage")
 
-	// EventID 12,13,14: Registry
-	pathSysmonEventType    = engine.Path("/Event/EventData/EventType")
-	pathSysmonTargetObject = engine.Path("/Event/EventData/TargetObject")
-	pathSysmonDetails      = engine.Path("/Event/EventData/Details")
+	// EventID 12,13,14: Registry
+	pathSysmonEventType    = EventDataPath("EventType")
+	pathSysmonTargetObject = EventDataPath("TargetObject")
+	pathSysmonDetails      = EventDataPath("Details")
 
-	// EventID 20
-	pathSysmonDestination = engine.Path("/Event/EventData/Destination")
+	// EventID 20
+	pathSysmonDestination = EventDataPath("Destination")
 
-	// EventID 22: DNSQuery
-	pathQueryName    = engine.Path("/Event/EventData/QueryName")
-	pathQueryResults = engine.Path("/Event/EventData/QueryResults")
+	// EventID 22: DNSQuery
+	pathQueryName    = EventDataPath("QueryName")
+	pathQueryResults = EventDataPath("QueryResults")
 
-	// EventID 23:
-	pathSysmonArchived = engine.Path("/Event/EventData/Archived")
+	// EventID 23:
+	pathSysmonArchived = EventDataPath("Archived")
 
 	// Gene criticality path
 	pathGeneCriticality = engine.Path("/Event/GeneInfo/Criticality")
 
 	///////////////////////// Setters //////////////////////////////////////
-	pathProcessGeneScore    = engine.Path("/Event/EventData/ProcessThreatScore")
-	pathSrcProcessGeneScore = engine.Path("/Event/EventData/SourceProcessThreatScore")
-	pathTgtProcessGeneScore = engine.Path("/Event/EventData/TargetProcessThreatScore")
+	pathProcessGeneScore    = EventDataPath("ProcessThreatScore")
+	pathSrcProcessGeneScore = EventDataPath("SourceProcessThreatScore")
+	pathTgtProcessGeneScore = EventDataPath("TargetProcessThreatScore")
 
-	pathAncestors            = engine.Path("/Event/EventData/Ancestors")
-	pathParentUser           = engine.Path("/Event/EventData/ParentUser")
-	pathParentIntegrityLevel = engine.Path("/Event/EventData/ParentIntegrityLevel")
+	pathAncestors            = EventDataPath("Ancestors")
+	pathParentUser           = EventDataPath("ParentUser")
+	pathParentIntegrityLevel = EventDataPath("ParentIntegrityLevel")
 
 	// Use to store image sizes information by hook
-	pathImSize       = engine.Path("/Event/EventData/ImageSize")
-	pathImLoadedSize = engine.Path("/Event/EventData/ImageLoadedSize")
+	pathImSize       = EventDataPath("ImageSize")
+	pathImLoadedSize = EventDataPath("ImageLoadedSize")
 
 	// Use to store process information by hook
-	pathParentIntegrity  = engine.Path("/Event/EventData/ParentProcessIntegrity")
-	pathProcessIntegrity = engine.Path("/Event/EventData/ProcessIntegrity")
-	pathIntegrityTimeout = engine.Path("/Event/EventData/ProcessIntegrityTimeout")
+	pathParentIntegrity  = EventDataPath("ParentProcessIntegrity")
+	pathProcessIntegrity = EventDataPath("ProcessIntegrity")
+	pathIntegrityTimeout = EventDataPath("ProcessIntegrityTimeout")
 
 	// Use to store pathServices information by hook
-	pathServices       = engine.Path("/Event/EventData/Services")
-	pathParentServices = engine.Path("/Event/EventData/ParentServices")
-	pathSourceServices = engine.Path("/Event/EventData/SourceServices")
-	pathTargetServices = engine.Path("/Event/EventData/TargetServices")
+	pathServices       = EventDataPath("Services")
+	pathParentServices = EventDataPath("ParentServices")
+	pathSourceServices = EventDataPath("SourceServices")
+	pathTargetServices = EventDataPath("TargetServices")
 
 	// Use to store process by hook
-	pathSourceIsParent = engine.Path("/Event/EventData/SourceIsParent")
+	pathSourceIsParent = EventDataPath("SourceIsParent")
 
 	// Use to store value size by hooking on SetValue events
-	pathValueSize = engine.Path("/Event/EventData/ValueSize")
+	pathValueSize = EventDataPath("ValueSize")
 
 	// Use to store parent image and command line in image load events
-	pathImageLoadParentImage       = engine.Path("/Event/EventData/ParentImage")
-	pathImageLoadParentCommandLine = engine.Path("/Event/EventData/ParentCommandLine")
+	pathImageLoadParentImage       = EventDataPath("ParentImage")
+	pathImageLoadParentCommandLine = EventDataPath("ParentCommandLine")
 
 	// Used to store user and integrity information in sysmon CreateRemoteThread and ProcessAccess events
-	pathSourceUser              = engine.Path("/Event/EventData/SourceUser")
-	pathSourceIntegrityLevel    = engine.Path("/Event/EventData/SourceIntegrityLevel")
-	pathTargetUser              = engine.Path("/Event/EventData/TargetUser")
-	pathTargetIntegrityLevel    = engine.Path("/Event/EventData/TargetIntegrityLevel")
-	pathTargetParentProcessGuid = engine.Path("/Event/EventData/TargetParentProcessGuid")
+	pathSourceUser              = EventDataPath("SourceUser")
+	pathSourceIntegrityLevel    = EventDataPath("SourceIntegrityLevel")
+	pathTargetUser              = EventDataPath("TargetUser")
+	pathTargetIntegrityLevel    = EventDataPath("TargetIntegrityLevel")
+	pathTargetParentProcessGuid = EventDataPath("TargetParentProcessGuid")
 
 	// Used to store Image Hashes information into any Sysmon Event
-	pathImageHashes  = engine.Path("/Event/EventData/ImageHashes")
-	pathSourceHashes = engine.Path("/Event/EventData/SourceHashes")
-	pathTargetHashes = engine.Path("/Event/EventData/TargetHashes")
+	pathImageHashes  = EventDataPath("ImageHashes")
+	pathSourceHashes = EventDataPath("SourceHashes")
+	pathTargetHashes = EventDataPath("TargetHashes")
 
 	// Used to store image signature related information
-	pathImageSignature       = engine.Path("/Event/EventData/ImageSignature")
-	pathImageSigned          = engine.Path("/Event/EventData/ImageSigned")
-	pathImageSignatureStatus = engine.Path("/Event/EventData/ImageSignatureStatus")
+	pathImageSignature       = EventDataPath("ImageSignature")
+	pathImageSigned          = EventDataPath("ImageSigned")
+	pathImageSignatureStatus = EventDataPath("ImageSignatureStatus")
 
 	// Use to enrich Clipboard events
-	pathSysmonClipboardData = engine.Path("/Event/EventData/ClipboardData")
+	pathSysmonClipboardData = EventDataPath("ClipboardData")
 
-	pathFileCount      = engine.Path("/Event/EventData/Count")
-	pathFileCountByExt = engine.Path("/Event/EventData/CountByExt")
-	pathFileExtension  = engine.Path("/Event/EventData/Extension")
-	pathFileFrequency  = engine.Path("/Event/EventData/FrequencyEps")
+	pathFileCount      = EventDataPath("Count")
+	pathFileCountByExt = EventDataPath("CountByExt")
+	pathFileExtension  = EventDataPath("Extension")
+	pathFileFrequency  = EventDataPath("FrequencyEps")
 
 	// ProcessProtectionLevel
-	pathProtectionLevel       = engine.Path("/Event/EventData/ProtectionLevel")
-	pathSourceProtectionLevel = engine.Path("/Event/EventData/SourceProtectionLevel")
-	pathTargetProtectionLevel = engine.Path("/Event/EventData/TargetProtectionLevel")
-	pathParentProtectionLevel = engine.Path("/Event/EventData/ParentProtectionLevel")
+	pathProtectionLevel       = EventDataPath("ProtectionLevel")
+	pathSourceProtectionLevel = EventDataPath("SourceProtectionLevel")
+	pathTargetProtectionLevel = EventDataPath("TargetProtectionLevel")
+	pathParentProtectionLevel = EventDataPath("ParentProtectionLevel")
 )

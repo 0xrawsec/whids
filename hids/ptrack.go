@@ -126,7 +126,7 @@ func sysmonHashesToMap(hashes string) map[string]string {
 }
 
 const (
-	ZeroProtectionLevel = uint32(math.MaxUint32)
+	ZeroProtectionLevel = uint32(math.MaxUint32) // 0xffffffff is PROTECTION_SAME but it is a flag used by WinAPI and is not a valid protection level
 )
 
 type ProcessTrack struct {
@@ -170,13 +170,13 @@ type ProcessTrack struct {
 }
 
 var (
-	EmptyTrack = ProcessTrack{empty: true}
+	emptyTrack = ProcessTrack{empty: true}
 )
 
-// NewProcessTrack creates a new processTrack structure enforcing
-// that minimal information is encoded (image, guid, pid)
-func EmptyProcessTrack() *ProcessTrack {
-	return &EmptyTrack
+// emptyProcessTrack returns a reference to emptyTrack, no modification
+// must be done to the structure returned by this function call
+func emptyProcessTrack() *ProcessTrack {
+	return &emptyTrack
 }
 
 // NewProcessTrack creates a new processTrack structure enforcing
@@ -306,6 +306,51 @@ func KernelFileFromEvent(e *event.EdrEvent) (f *KernelFile) {
 	f.FileName = e.GetStringOr(pathKernelFileFileName, "?")
 	f.FileName = utils.ResolveCDrive(f.FileName)
 	f.FileObject = e.GetUintOr(pathKernelFileFileObject, 0)
+
+	return
+}
+
+func sourceGUIDFromEvent(e *event.EdrEvent) (src string) {
+	var ok bool
+
+	src = nullGUID
+	pGuid := pathSysmonProcessGUID
+
+	// the interesting pid to dump depends on the event
+	switch e.EventID() {
+	case SysmonAccessProcess:
+		pGuid = pathSysmonSourceProcessGUID
+	case SysmonCreateRemoteThread:
+		pGuid = pathSysmonCRTSourceProcessGuid
+	}
+
+	if src, ok = e.GetString(pGuid); !ok {
+		return
+	}
+
+	return
+}
+
+func targetGUIDFromEvent(e *event.EdrEvent) (target string) {
+	var ok bool
+	var pGuid *engine.XPath
+
+	target = nullGUID
+
+	// the interesting pid to dump depends on the event
+	switch e.EventID() {
+	case SysmonAccessProcess:
+		pGuid = pathSysmonTargetProcessGUID
+	case SysmonCreateRemoteThread:
+		pGuid = pathSysmonCRTTargetProcessGuid
+	default:
+		// no target for other events
+		return
+	}
+
+	if target, ok = e.GetString(pGuid); !ok {
+		return
+	}
 
 	return
 }
@@ -440,13 +485,44 @@ func (pt *ActivityTracker) IsBlacklisted(cmdLine string) bool {
 	return pt.blacklisted.Contains(cmdLine)
 }
 
+func (pt *ActivityTracker) SourceTrackFromEvent(e *event.EdrEvent) (t *ProcessTrack) {
+	var guid string
+
+	t = emptyProcessTrack()
+
+	if guid = sourceGUIDFromEvent(e); guid == nullGUID {
+		return
+	}
+
+	return pt.GetByGuid(guid)
+}
+
+func (pt *ActivityTracker) TargetTrackFromEvent(e *event.EdrEvent) (t *ProcessTrack) {
+	var guid string
+
+	t = emptyProcessTrack()
+
+	if guid = targetGUIDFromEvent(e); guid == nullGUID {
+		return
+	}
+
+	return pt.GetByGuid(guid)
+}
+
 func (pt *ActivityTracker) GetParentByGuid(guid string) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
 	if c, ok := pt.guids[guid]; ok {
 		return pt.GetByGuid(c.ParentProcessGUID)
 	}
-	return EmptyProcessTrack()
+	return emptyProcessTrack()
+}
+
+func (pt *ActivityTracker) getByGuid(guid string) *ProcessTrack {
+	if t := pt.guids[guid]; t != nil {
+		return t
+	}
+	return emptyProcessTrack()
 }
 
 // GetByPID get a process track by process GUID. If none is found an
@@ -454,10 +530,8 @@ func (pt *ActivityTracker) GetParentByGuid(guid string) *ProcessTrack {
 func (pt *ActivityTracker) GetByGuid(guid string) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
-	if t := pt.guids[guid]; t != nil {
-		return t
-	}
-	return EmptyProcessTrack()
+
+	return pt.getByGuid(guid)
 }
 
 // GetByPID get a process track by PID. If none is found an empty ProcessTrack
@@ -474,7 +548,7 @@ func (pt *ActivityTracker) GetByPID(pid int64) *ProcessTrack {
 		return t
 	}
 
-	return EmptyProcessTrack()
+	return emptyProcessTrack()
 }
 
 func (pt *ActivityTracker) ContainsGuid(guid string) bool {
@@ -539,11 +613,14 @@ func (pt *ActivityTracker) IsTerminated(guid string) bool {
 }
 
 func (pt *ActivityTracker) Terminate(guid string) error {
-	if t := pt.GetByGuid(guid); !t.IsZero() {
+	pt.Lock()
+	defer pt.Unlock()
+
+	if t := pt.getByGuid(guid); !t.IsZero() {
 		t.Terminated = true
 		t.TimeTerminated = time.Now()
 		// PID entry must be cleared as soon as possible
-		// to avoid issues like deleting a re-used PID in delete method
+		// to avoid issues like deleting a re-used PID in delete method
 		delete(pt.rpids, t.PID)
 		// we put it in the map of terminated processes
 		pt.tpids[t.PID] = t

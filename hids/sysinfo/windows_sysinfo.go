@@ -37,7 +37,7 @@ func NewSystemInfo() (info *SystemInfo) {
 
 	info.System.Manufacturer = utils.RegValueToString(pathSystemInfo, "SystemManufacturer")
 	info.System.Name = utils.RegValueToString(pathSystemInfo, "SystemProductName")
-	// cheap VM detection
+	// cheap VM detection
 	name := strings.ToLower(info.System.Name)
 	lowManuf := strings.ToLower(info.System.Manufacturer)
 	info.System.Virtual = strings.Contains(name, "virtual") || strings.Contains(lowManuf, "vmware")

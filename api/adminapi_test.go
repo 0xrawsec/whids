@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0xrawsec/golang-evtx/evtx"
+	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/gorilla/websocket"
@@ -117,7 +117,7 @@ func post(url string, data []byte) (r AdminAPIResponse) {
 
 func failOnAdminAPIError(t *testing.T, r AdminAPIResponse) {
 	if r.Error != "" {
-		t.Errorf("Unexpected API error: %s", r.Error)
+		t.Errorf("Unexpected API error: %s", r.Error)
 		t.FailNow()
 	}
 }
@@ -213,7 +213,7 @@ func TestAdminAPIPostCommand(t *testing.T) {
 	failOnAdminAPIError(t, r)
 	time.Sleep(2 * time.Second)
 	if cmd, err := c.FetchCommand(); err != nil {
-		t.Errorf("Failed to Fetch command: %s", err)
+		t.Errorf("Failed to Fetch command: %s", err)
 		t.FailNow()
 	} else {
 		if err = cmd.Run(); err != nil {
@@ -255,7 +255,7 @@ func TestAdminAPIGetCommandField(t *testing.T) {
 	failOnAdminAPIError(t, r)
 
 	if cmd, err := c.FetchCommand(); err != nil {
-		t.Errorf("Failed to Fetch command: %s", err)
+		t.Errorf("Failed to Fetch command: %s", err)
 		t.FailNow()
 	} else {
 		if err = cmd.Run(); err != nil {
@@ -361,6 +361,7 @@ func TestAdminAPIGetEndpointReport(t *testing.T) {
 }
 
 func TestAdminAPIGetEndpointLogs(t *testing.T) {
+	tt := toast.FromT(t)
 
 	// cleanup previous data
 	clean(&mconf, &fconf)
@@ -382,6 +383,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	failOnAdminAPIError(t, r)
 
 	npivot := 0
+	buf := new(bytes.Buffer)
 	for e := range emitEvents(n, false) {
 		switch rand.Int() % 3 {
 		case 0:
@@ -391,13 +393,13 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 		default:
 			npivot++
 		}
-		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBuffer(utils.Json(e)))
-		if err != nil {
-			t.Logf("Failed to prepare request: %s", err)
-			t.FailNow()
-		}
-		mc.HTTPClient.Do(r)
+		buf.WriteString(format("%s\n", utils.Json(e)))
 	}
+
+	req, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, buf)
+	tt.CheckErr(err)
+	_, err = mc.HTTPClient.Do(req)
+	tt.CheckErr(err)
 
 	time.Sleep(1 * time.Second)
 
@@ -406,42 +408,38 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 	v.Set(qpPivot, time.Now().Format(time.RFC3339))
 	v.Set(qpDelta, "1m")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
-	failOnAdminAPIError(t, r)
+	tt.CheckErr(r.Err())
+
 	data := make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != npivot {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), npivot)
-		t.FailNow()
-	}
+	tt.Assert(len(data) == npivot, format("Wrong number of events %d instead of %d", len(data), npivot))
 
 	// test pivoting with delta
 	v = url.Values{}
 	v.Set(qpPivot, time.Now().Format(time.RFC3339))
 	v.Set(qpDelta, "3h")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
-	failOnAdminAPIError(t, r)
+	tt.CheckErr(r.Err())
+
 	data = make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != n {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
+	tt.Assert(len(data) == n, format("Wrong number of events %d instead of %d", len(data), len(events)))
 
 	// test with start and stop
 	v = url.Values{}
 	v.Set(qpSince, time.Now().Add(-3*time.Hour).Format(time.RFC3339))
 	v.Set(qpUntil, time.Now().Add(3*time.Hour).Format(time.RFC3339))
 	r = get(AdmAPIEndpointsPath + "/" + euuid + "/logs?" + v.Encode())
-	failOnAdminAPIError(t, r)
+	tt.CheckErr(r.Err())
+
 	data = make([]event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != n {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
+	tt.Assert(len(data) == n, format("Wrong number of events %d instead of %d", len(data), len(events)))
 }
 
 func TestAdminAPIGetEndpointAlerts(t *testing.T) {
+
+	tt := toast.FromT(t)
 
 	// cleanup previous data
 	clean(&mconf, &fconf)
@@ -459,7 +457,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 
 	// creating a new endpoint
 	r := put(AdmAPIEndpointsPath)
-	failOnAdminAPIError(t, r)
+	tt.CheckErr(r.Err())
 
 	npivot := 0
 	n, ndet := 1000, 100
@@ -475,11 +473,9 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 			}
 		}
 		r, err := mc.PrepareGzip("POST", EptAPIPostLogsPath, bytes.NewBuffer(utils.Json(e)))
-		if err != nil {
-			t.Logf("Failed to prepare request: %s", err)
-			t.FailNow()
-		}
-		mc.HTTPClient.Do(r)
+		tt.CheckErr(err)
+		_, err = mc.HTTPClient.Do(r)
+		tt.CheckErr(err)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -488,42 +484,41 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 	v := url.Values{}
 	v.Set(qpPivot, time.Now().Format(time.RFC3339))
 	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
-	failOnAdminAPIError(t, r)
-	data := make([]evtx.GoEvtxMap, 0)
+	// checking response error
+	tt.CheckErr(r.Err())
+
+	data := make([]*event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != npivot {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), npivot)
-		t.FailNow()
-	}
+	tt.Assert(len(data) == npivot, format("Wrong number of events %d instead of %d", len(data), npivot))
 
 	// test pivoting with delta
 	v = url.Values{}
 	v.Set(qpPivot, time.Now().Format(time.RFC3339))
 	v.Set(qpDelta, "3h")
 	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
-	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	// checking response error
+	tt.CheckErr(r.Err())
+
+	data = make([]*event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != ndet {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
+	tt.Assert(len(data) == ndet, format("Wrong number of events %d instead of %d", len(data), len(events)))
 
 	// test with start and stop
 	v = url.Values{}
 	v.Set(qpSince, time.Now().Add(-3*time.Hour).Format(time.RFC3339))
 	v.Set(qpUntil, time.Now().Add(3*time.Hour).Format(time.RFC3339))
 	r = get(AdmAPIEndpointsPath + "/" + euuid + AdmAPIDetectionSuffix + "?" + v.Encode())
-	failOnAdminAPIError(t, r)
-	data = make([]evtx.GoEvtxMap, 0)
+	// checking response error
+	tt.CheckErr(r.Err())
+
+	data = make([]*event.EdrEvent, 0)
 	r.UnmarshalData(&data)
-	if len(data) != ndet {
-		t.Errorf("Wrong number of events %d instead of %d", len(data), len(events))
-		t.FailNow()
-	}
+	tt.Assert(len(data) == ndet, format("Wrong number of events %d instead of %d", len(data), len(events)))
 }
 
 func TestEventStream(t *testing.T) {
+	tt := toast.FromT(t)
+
 	// cleanup previous data
 	clean(&mconf, &fconf)
 
@@ -537,7 +532,6 @@ func TestEventStream(t *testing.T) {
 	total := float64(0)
 	sumEps := float64(0)
 	nclients := float64(4)
-	slowClients := float64(0)
 	wg := sync.WaitGroup{}
 
 	for i := float64(0); i < nclients; i++ {
@@ -565,60 +559,35 @@ func TestEventStream(t *testing.T) {
 			defer wg.Done()
 			recvd := float64(0)
 			start := time.Now()
-			slow := false
-
-			if rand.Int()%2 == 0 {
-				slow = true
-				slowClients++
-			}
 
 			for {
 				_, _, err := c.ReadMessage()
-				if err != nil {
-					break
-				}
+				tt.CheckErr(err)
+
 				recvd++
 				if recvd == expctd {
 					break
 				}
-				// simulates a slow client
-				if slow {
-					time.Sleep(35 * time.Microsecond)
-				}
 			}
+
 			eps := recvd / float64(time.Since(start).Seconds())
 			total += recvd
 			// we take into account only normal clients
-			if !slow {
-				sumEps += eps
-				t.Logf("Normal client received %.1f EPS", eps)
-			} else {
-				t.Logf("Slow client received %.1f EPS", eps)
-			}
+			sumEps += eps
+			t.Logf("Normal client received %.1f EPS", eps)
 		}()
 	}
 
-	mc.PostLogs(readerFromEvents(int(expctd)))
-	tick := time.NewTicker(60 * time.Second)
-loop:
-	for {
-		select {
-		case <-tick.C:
-			break loop
-		default:
-		}
-
-		if total == expctd*nclients {
-			wg.Wait()
-			break
-		}
+	// we have to split in chunks otherwise post may fail in WSL
+	schunk := 5000
+	for i := 0; i < int(expctd)/schunk; i++ {
+		tt.CheckErr(mc.PostLogs(readerFromEvents(schunk)))
 	}
 
-	if total != expctd*nclients {
-		t.Errorf("Received less events than expected received=%.0f VS expected=%.0f", total, expctd*nclients)
-		t.FailNow()
-	}
+	wg.Wait()
 
-	t.Logf("Average %.1f EPS/client", sumEps/(nclients-slowClients))
+	tt.Assert(total == expctd*nclients, format("Received less events than expected received=%.0f VS expected=%.0f", total, expctd*nclients))
+
+	t.Logf("Average %.1f EPS/client", sumEps/nclients)
 
 }

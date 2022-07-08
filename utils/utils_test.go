@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"testing"
+
+	"github.com/0xrawsec/toast"
 )
 
 var (
@@ -15,8 +18,20 @@ func TestRegQuery(t *testing.T) {
 }
 
 var (
+	format         = fmt.Sprintf
 	aclDirectories = []string{"C:\\Windows\\System32"}
 )
+
+func TestIsValidUUID(t *testing.T) {
+	tt := toast.FromT(t)
+
+	for i := 0; i < 1000; i++ {
+		uuid := UnsafeUUIDGen().String()
+		tt.Assert(IsValidUUID(uuid))
+		tt.Assert(!IsValidUUID(format("%s42", uuid)))
+		tt.Assert(!IsValidUUID(format("42%s", uuid)))
+	}
+}
 
 func TestSetAuditACL(t *testing.T) {
 	if err := SetEDRAuditACL(aclDirectories...); err != nil {
