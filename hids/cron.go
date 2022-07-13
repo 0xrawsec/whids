@@ -509,60 +509,71 @@ func (h *HIDS) scheduleTasks() {
 	// routines scheduled only if connected to a manager
 	if h.config.IsForwardingEnabled() {
 		// command runner routine, we run it only once as it creates a go routine to handle commands
-		h.scheduler.Schedule(crony.NewAsyncTask("Command handler goroutine").Func(h.taskCommandRunner).Schedule(time.Now()),
+		h.scheduler.Schedule(
+			crony.NewAsyncTask("Command handler goroutine").
+				Func(h.taskCommandRunner).
+				Schedule(time.Now()),
 			crony.PrioHigh)
 
 		// updating engine
-		h.scheduler.Schedule(crony.NewTask("Rule/IOC Update").Func(func() {
-			task := "[rule/ioc update]"
-			log.Info(task, "update starting")
-			if err := h.update(false); err != nil {
-				log.Error(task, err)
-			}
-		}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+		h.scheduler.Schedule(crony.NewTask("Rule/IOC Update").
+			Func(func() {
+				task := "[rule/ioc update]"
+				log.Info(task, "update starting")
+				if err := h.update(false); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
 			crony.PrioHigh)
 
 		// uploading dumps
-		h.scheduler.Schedule(crony.NewTask("Upload Dump").Func(h.taskUploadDumps).Ticker(time.Minute), crony.PrioMedium)
+		h.scheduler.Schedule(crony.NewTask("Upload Dump").
+			Func(h.taskUploadDumps).Ticker(time.Minute),
+			crony.PrioMedium)
 
 		// updating system information
-		h.scheduler.Schedule(crony.NewTask("System Info Update").Func(func() {
-			task := "[system info update]"
-			log.Info(task, "update starting")
-			if err := h.updateSystemInfo(); err != nil {
-				log.Error(task, err)
-			}
-		}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+		h.scheduler.Schedule(crony.NewTask("System Info Update").
+			Func(func() {
+				task := "[system info update]"
+				log.Info(task, "update starting")
+				if err := h.updateSystemInfo(); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(h.config.RulesConfig.UpdateInterval).
+			Schedule(inLittleWhile),
 			crony.PrioLow)
 
 		// updating sysmon
-		h.scheduler.Schedule(crony.NewTask("Sysmon update").Func(func() {
-			task := "[sysmon update]"
-			log.Info(task, "update starting")
-			if err := h.updateSysmon(); err != nil {
-				log.Error(task, err)
-			}
-		}).Ticker(time.Hour).Schedule(inLittleWhile),
+		h.scheduler.Schedule(crony.NewTask("Sysmon update").
+			Func(func() {
+				task := "[sysmon update]"
+				log.Info(task, "update starting")
+				if err := h.updateSysmon(); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(time.Hour).Schedule(inLittleWhile),
 			crony.PrioMedium)
 
 		// updating sysmon configuration
-		h.scheduler.Schedule(crony.NewTask("Sysmon configuration update").Func(func() {
-			task := "[sysmon config update]"
-			log.Info(task, "update starting")
-			if err := h.updateSysmonConfig(); err != nil {
-				log.Error(task, err)
-			}
-		}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+		h.scheduler.Schedule(crony.NewTask("Sysmon configuration update").
+			Func(func() {
+				task := "[sysmon config update]"
+				log.Info(task, "update starting")
+				if err := h.updateSysmonConfig(); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioMedium)
 
 		// updating tools
-		h.scheduler.Schedule(crony.NewTask("Utilities update").Func(func() {
-			task := "[utilities update]"
-			log.Info(task, "update starting")
-			if err := h.updateTools(); err != nil {
-				log.Error(task, err)
-			}
-		}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+		h.scheduler.Schedule(crony.NewTask("Utilities update").
+			Func(func() {
+				task := "[utilities update]"
+				log.Info(task, "update starting")
+				if err := h.updateTools(); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioHigh)
 	}
 
