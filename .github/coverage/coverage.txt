@@ -1,12 +1,12 @@
-ok  	github.com/0xrawsec/whids/api	165.336s	coverage: 66.9% of statements
-ok  	github.com/0xrawsec/whids/event	42.371s	coverage: 75.3% of statements
-ok  	github.com/0xrawsec/whids/hids	35.330s	coverage: 45.2% of statements
-ok  	github.com/0xrawsec/whids/hids/sysinfo	0.462s	coverage: 95.2% of statements
-ok  	github.com/0xrawsec/whids/ioc	29.981s	coverage: 73.3% of statements
-ok  	github.com/0xrawsec/whids/logger	37.357s	coverage: 76.7% of statements
-ok  	github.com/0xrawsec/whids/sysmon	9.585s	coverage: 83.1% of statements
-ok  	github.com/0xrawsec/whids/utils	11.826s	coverage: 18.1% of statements
-ok  	github.com/0xrawsec/whids/utils/command	0.723s	coverage: 100.0% of statements
+ok  	github.com/0xrawsec/whids/api	167.841s	coverage: 66.8% of statements
+ok  	github.com/0xrawsec/whids/event	43.388s	coverage: 75.3% of statements
+ok  	github.com/0xrawsec/whids/hids	39.421s	coverage: 52.5% of statements
+ok  	github.com/0xrawsec/whids/hids/sysinfo	0.457s	coverage: 95.2% of statements
+ok  	github.com/0xrawsec/whids/ioc	26.004s	coverage: 73.3% of statements
+ok  	github.com/0xrawsec/whids/logger	43.282s	coverage: 76.7% of statements
+ok  	github.com/0xrawsec/whids/sysmon	6.222s	coverage: 83.1% of statements
+ok  	github.com/0xrawsec/whids/utils	11.752s	coverage: 18.1% of statements
+ok  	github.com/0xrawsec/whids/utils/command	0.541s	coverage: 100.0% of statements
 github.com/0xrawsec/whids/api/api_client.go:36:			ValidateRespStatus		75.0%
 github.com/0xrawsec/whids/api/api_client.go:61:			ManagerIP			60.0%
 github.com/0xrawsec/whids/api/api_client.go:73:			DialContext			0.0%
@@ -137,11 +137,11 @@ github.com/0xrawsec/whids/api/manager_admin_api.go:1186:	admAPIEndpointSysmonBin
 github.com/0xrawsec/whids/api/manager_admin_api.go:1190:	admAPIEndpointOSQueryiBinary	100.0%
 github.com/0xrawsec/whids/api/manager_admin_api.go:1199:	admAPIStats			75.0%
 github.com/0xrawsec/whids/api/manager_admin_api.go:1211:	admAPIIocs			62.1%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1333:	admAPIRules			61.2%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1433:	wsHandleControlMessage		100.0%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1443:	admAPIStreamEvents		71.4%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1466:	admAPIStreamDetections		0.0%
-github.com/0xrawsec/whids/api/manager_admin_api.go:1491:	runAdminAPI			87.5%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1333:	admAPIRules			58.8%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1439:	wsHandleControlMessage		100.0%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1449:	admAPIStreamEvents		71.4%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1472:	admAPIStreamDetections		0.0%
+github.com/0xrawsec/whids/api/manager_admin_api.go:1497:	runAdminAPI			87.5%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:31:	eptAPIMutEndpointFromRequest	75.0%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:41:	endpointAuthorizationMiddleware	65.2%
 github.com/0xrawsec/whids/api/manager_endpoint_api.go:84:	isVerboseURL			100.0%
@@ -201,26 +201,26 @@ github.com/0xrawsec/whids/event/event.go:221:			Computer			100.0%
 github.com/0xrawsec/whids/event/event.go:225:			EventID				100.0%
 github.com/0xrawsec/whids/event/event.go:229:			Timestamp			100.0%
 github.com/0xrawsec/whids/event/event.go:233:			Copy				100.0%
-github.com/0xrawsec/whids/hids/actions.go:68:			NewActionHandler		100.0%
-github.com/0xrawsec/whids/hids/actions.go:76:			dumpname			0.0%
-github.com/0xrawsec/whids/hids/actions.go:81:			prepare				0.0%
-github.com/0xrawsec/whids/hids/actions.go:89:			shouldDump			0.0%
-github.com/0xrawsec/whids/hids/actions.go:94:			writeReader			0.0%
-github.com/0xrawsec/whids/hids/actions.go:99:			dumpAsJson			0.0%
-github.com/0xrawsec/whids/hids/actions.go:112:			dumpBinFile			0.0%
-github.com/0xrawsec/whids/hids/actions.go:116:			dumpFile			0.0%
-github.com/0xrawsec/whids/hids/actions.go:148:			listFilesFromCommandLine	0.0%
-github.com/0xrawsec/whids/hids/actions.go:171:			filedumpSet			0.0%
-github.com/0xrawsec/whids/hids/actions.go:224:			filedump			0.0%
-github.com/0xrawsec/whids/hids/actions.go:234:			memdump				0.0%
-github.com/0xrawsec/whids/hids/actions.go:263:			regdump				0.0%
-github.com/0xrawsec/whids/hids/actions.go:291:			suspend_process			0.0%
-github.com/0xrawsec/whids/hids/actions.go:301:			kill_process			0.0%
-github.com/0xrawsec/whids/hids/actions.go:314:			Queue				50.0%
-github.com/0xrawsec/whids/hids/actions.go:324:			HandleActions			0.0%
-github.com/0xrawsec/whids/hids/actions.go:391:			compress			0.0%
-github.com/0xrawsec/whids/hids/actions.go:397:			compressionRoutine		50.0%
-github.com/0xrawsec/whids/hids/actions.go:413:			Run				45.5%
+github.com/0xrawsec/whids/hids/actions.go:72:			NewActionHandler		100.0%
+github.com/0xrawsec/whids/hids/actions.go:81:			dumpname			100.0%
+github.com/0xrawsec/whids/hids/actions.go:86:			prepare				100.0%
+github.com/0xrawsec/whids/hids/actions.go:94:			shouldDump			100.0%
+github.com/0xrawsec/whids/hids/actions.go:99:			writeReader			100.0%
+github.com/0xrawsec/whids/hids/actions.go:104:			dumpAsJson			66.7%
+github.com/0xrawsec/whids/hids/actions.go:117:			dumpBinFile			100.0%
+github.com/0xrawsec/whids/hids/actions.go:121:			dumpFile			77.8%
+github.com/0xrawsec/whids/hids/actions.go:156:			listFilesFromCommandLine	100.0%
+github.com/0xrawsec/whids/hids/actions.go:179:			filedumpSet			55.6%
+github.com/0xrawsec/whids/hids/actions.go:232:			filedump			80.0%
+github.com/0xrawsec/whids/hids/actions.go:242:			memdump				0.0%
+github.com/0xrawsec/whids/hids/actions.go:271:			regdump				93.3%
+github.com/0xrawsec/whids/hids/actions.go:302:			suspend_process			0.0%
+github.com/0xrawsec/whids/hids/actions.go:312:			kill_process			0.0%
+github.com/0xrawsec/whids/hids/actions.go:325:			Queue				100.0%
+github.com/0xrawsec/whids/hids/actions.go:335:			HandleActions			67.7%
+github.com/0xrawsec/whids/hids/actions.go:408:			queueCompression		100.0%
+github.com/0xrawsec/whids/hids/actions.go:414:			compressionLoop			90.0%
+github.com/0xrawsec/whids/hids/actions.go:433:			handleActionsLoop		100.0%
 github.com/0xrawsec/whids/hids/canary.go:30:			expandDir			100.0%
 github.com/0xrawsec/whids/hids/canary.go:35:			create				69.0%
 github.com/0xrawsec/whids/hids/canary.go:87:			clean				70.6%
@@ -256,7 +256,7 @@ github.com/0xrawsec/whids/hids/cron.go:307:			taskCommandRunner		0.0%
 github.com/0xrawsec/whids/hids/cron.go:342:			scheduleCleanArchivedTask	42.1%
 github.com/0xrawsec/whids/hids/cron.go:382:			taskUploadDumps			0.0%
 github.com/0xrawsec/whids/hids/cron.go:436:			updateTools			0.0%
-github.com/0xrawsec/whids/hids/cron.go:506:			scheduleTasks			19.4%
+github.com/0xrawsec/whids/hids/cron.go:506:			scheduleTasks			27.5%
 github.com/0xrawsec/whids/hids/defaults.go:10:			BuildDefaultConfig		100.0%
 github.com/0xrawsec/whids/hids/etw.go:40:			ConfigureAutologger		62.5%
 github.com/0xrawsec/whids/hids/etw.go:59:			UnifiedProviders		75.0%
@@ -280,20 +280,20 @@ github.com/0xrawsec/whids/hids/hids.go:516:			updateSystemInfo		0.0%
 github.com/0xrawsec/whids/hids/hids.go:544:			updateSysmon			0.0%
 github.com/0xrawsec/whids/hids/hids.go:590:			updateSysmonConfig		0.0%
 github.com/0xrawsec/whids/hids/hids.go:650:			cleanup				33.3%
-github.com/0xrawsec/whids/hids/hids.go:666:			IsHIDSEvent			87.5%
+github.com/0xrawsec/whids/hids/hids.go:666:			IsHIDSEvent			93.8%
 github.com/0xrawsec/whids/hids/hids.go:700:			Report				0.0%
-github.com/0xrawsec/whids/hids/hids.go:727:			Run				59.6%
-github.com/0xrawsec/whids/hids/hids.go:849:			LogStats			0.0%
-github.com/0xrawsec/whids/hids/hids.go:858:			Stop				68.8%
-github.com/0xrawsec/whids/hids/hids.go:894:			Wait				0.0%
-github.com/0xrawsec/whids/hids/hids.go:899:			WaitWithTimeout			0.0%
+github.com/0xrawsec/whids/hids/hids.go:727:			Run				58.8%
+github.com/0xrawsec/whids/hids/hids.go:850:			LogStats			0.0%
+github.com/0xrawsec/whids/hids/hids.go:859:			Stop				68.8%
+github.com/0xrawsec/whids/hids/hids.go:895:			Wait				0.0%
+github.com/0xrawsec/whids/hids/hids.go:900:			WaitWithTimeout			0.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:39:			hookSetImageSize		94.1%
 github.com/0xrawsec/whids/hids/hookdefs.go:71:			hookImageLoad			95.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:108:			trackSysmonProcessCreate	76.1%
 github.com/0xrawsec/whids/hids/hookdefs.go:229:			hookTrack			50.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:242:			hookStats			76.4%
 github.com/0xrawsec/whids/hids/hookdefs.go:353:			hookUpdateGeneScore		0.0%
-github.com/0xrawsec/whids/hids/hookdefs.go:370:			hookTerminator			53.8%
+github.com/0xrawsec/whids/hids/hookdefs.go:370:			hookTerminator			76.9%
 github.com/0xrawsec/whids/hids/hookdefs.go:398:			hookProcTerm			87.5%
 github.com/0xrawsec/whids/hids/hookdefs.go:414:			hookSelfGUID			75.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:448:			hookFileSystemAudit		0.0%
@@ -311,7 +311,7 @@ github.com/0xrawsec/whids/hids/hooks.go:84:			RunHooksOn			93.8%
 github.com/0xrawsec/whids/hids/hooks.go:123:			getFunctionName			0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:13:			toString			100.0%
 github.com/0xrawsec/whids/hids/hookutils.go:17:			toHex				66.7%
-github.com/0xrawsec/whids/hids/hookutils.go:25:			terminate			0.0%
+github.com/0xrawsec/whids/hids/hookutils.go:25:			terminate			100.0%
 github.com/0xrawsec/whids/hids/hookutils.go:41:			isSysmonProcessTerminate	100.0%
 github.com/0xrawsec/whids/hids/hookutils.go:45:			srcPIDFromEvent			0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:58:			hasAction			0.0%
@@ -339,12 +339,12 @@ github.com/0xrawsec/whids/hids/ptrack.go:301:			KernelFileFromEvent		0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:313:			sourceGUIDFromEvent		88.9%
 github.com/0xrawsec/whids/hids/ptrack.go:334:			targetGUIDFromEvent		70.0%
 github.com/0xrawsec/whids/hids/ptrack.go:376:			NewActivityTracker		100.0%
-github.com/0xrawsec/whids/hids/ptrack.go:393:			delete				83.3%
+github.com/0xrawsec/whids/hids/ptrack.go:393:			delete				100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:406:			freeRtn				80.0%
-github.com/0xrawsec/whids/hids/ptrack.go:444:			CheckDumpCountOrInc		0.0%
+github.com/0xrawsec/whids/hids/ptrack.go:444:			CheckDumpCountOrInc		100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:458:			Add				100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:469:			PS				0.0%
-github.com/0xrawsec/whids/hids/ptrack.go:480:			Blacklist			0.0%
+github.com/0xrawsec/whids/hids/ptrack.go:480:			Blacklist			100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:484:			IsBlacklisted			100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:488:			SourceTrackFromEvent		80.0%
 github.com/0xrawsec/whids/hids/ptrack.go:500:			TargetTrackFromEvent		80.0%
@@ -526,4 +526,4 @@ github.com/0xrawsec/whids/utils/windows.go:53:			ResolveCDrive			0.0%
 github.com/0xrawsec/whids/utils/windows.go:76:			RegValue			0.0%
 github.com/0xrawsec/whids/utils/windows.go:91:			RegJoin				0.0%
 github.com/0xrawsec/whids/utils/windows.go:98:			RegValueToString		0.0%
-total:								(statements)			57.4%
+total:								(statements)			60.2%

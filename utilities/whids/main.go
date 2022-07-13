@@ -211,6 +211,7 @@ func main() {
 		Version: version,
 		Commit:  commitID,
 	}
+
 	sysinfo.RegisterEdrInfo(i)
 
 	isIntSess, err := svc.IsAnInteractiveSession()

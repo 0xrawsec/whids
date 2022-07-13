@@ -33,6 +33,9 @@ const (
 	ActionRegdump   = "regdump"
 	ActionReport    = "report"
 	ActionBrief     = "brief"
+
+	reportFilename = "report.json"
+	eventFilename  = "event.json"
 )
 
 var (
@@ -58,19 +61,21 @@ var (
 )
 
 type ActionHandler struct {
-	ctx              context.Context
-	hids             *HIDS
-	queue            *datastructs.Fifo
-	compressionQueue *datastructs.Fifo
-	semJobs          semaphore.Semaphore
+	ctx                    context.Context
+	hids                   *HIDS
+	queue                  *datastructs.Fifo
+	compressionQueue       *datastructs.Fifo
+	compressionLoopRunning bool
+	semJobs                semaphore.Semaphore
 }
 
 func NewActionHandler(h *HIDS) *ActionHandler {
-	return &ActionHandler{h.ctx,
-		h,
-		&datastructs.Fifo{},
-		&datastructs.Fifo{},
-		semaphore.New(2)}
+	return &ActionHandler{
+		ctx:              h.ctx,
+		hids:             h,
+		queue:            &datastructs.Fifo{},
+		compressionQueue: &datastructs.Fifo{},
+		semJobs:          semaphore.New(2)}
 }
 
 func (m *ActionHandler) dumpname(src string) string {
@@ -130,6 +135,7 @@ func (m *ActionHandler) dumpFile(src, dst string) (err error) {
 
 	// dump sha256 of file anyway
 	utils.HidsWriteData(fmt.Sprintf("%s.sha256", dst), []byte(sha256))
+	// we dump file
 	if !m.hids.filedumped.Contains(sha256) {
 		var f *os.File
 		log.Debugf("Dumping file: %s->%s", src, dst)
@@ -141,6 +147,8 @@ func (m *ActionHandler) dumpFile(src, dst string) (err error) {
 		}
 		// we mark file dumped
 		m.hids.filedumped.Add(sha256)
+		// queueing compression
+		m.queueCompression(dst)
 	}
 	return
 }
@@ -249,7 +257,7 @@ func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 			} else {
 				// dump was successfull
 				m.hids.memdumped.Add(guid)
-				m.compress(dumpPath)
+				m.queueCompression(dumpPath)
 			}
 		} else {
 			return fmt.Errorf("cannot dump process event=%s pid=%d, process is already terminated", hash, pid)
@@ -277,9 +285,12 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 							log.Errorf("Failed to run reg query: %s", err)
 							content = fmt.Sprintf("HIDS error dumping %s: %s", targetObject, err)
 						}
+
 						if err = m.writeReader(dumpPath, bytes.NewBufferString(content)); err != nil {
 							log.Errorf("Failed to write registry content to file: %s", err)
 						}
+						// we compress files
+						m.queueCompression(dumpPath)
 					}
 				}
 			}
@@ -365,8 +376,11 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 
 		// handling report dumping
 		if (report || brief) && m.hids.config.Report.EnableReporting {
-			if err := m.dumpAsJson(m.prepare(e, "report.json"), m.hids.Report(brief)); err != nil {
+			reportPath := m.prepare(e, reportFilename)
+			if err := m.dumpAsJson(reportPath, m.hids.Report(brief)); err != nil {
 				log.Errorf("Failed to dump report for event %s: %s", hash, err)
+			} else {
+				m.queueCompression(reportPath)
 			}
 		}
 
@@ -381,51 +395,53 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		}
 
 		// dumping the event
-		if err := m.dumpAsJson(m.prepare(e, "event.json"), e); err != nil {
+		eventDumpPath := m.prepare(e, eventFilename)
+		if err := m.dumpAsJson(eventDumpPath, e); err != nil {
 			log.Errorf("Failed to dump event %s: %s", hash, err)
+		} else {
+			m.queueCompression(eventDumpPath)
 		}
 
 	}
 }
 
-func (m *ActionHandler) compress(path string) {
-	if m.hids.config.Dump.Compression {
+func (m *ActionHandler) queueCompression(path string) {
+	if m.hids.config.Dump.Compression && m.compressionLoopRunning {
 		m.compressionQueue.Push(path)
 	}
 }
 
-func (m *ActionHandler) compressionRoutine() {
-	go func() {
-		for m.ctx.Err() == nil {
-			for m.compressionQueue.Len() > 0 {
-				if elt := m.compressionQueue.Pop(); elt != nil {
-					path := elt.Value.(string)
-					if err := utils.GzipFileBestSpeed(path); err != nil {
-						log.Errorf(`Failed to compress %s: %s`, path, err)
-					}
+func (m *ActionHandler) compressionLoop() {
+	if !m.hids.config.Dump.Compression {
+		return
+	}
+
+	m.compressionLoopRunning = true
+	for m.ctx.Err() == nil {
+		for m.compressionQueue.Len() > 0 {
+			if elt := m.compressionQueue.Pop(); elt != nil {
+				path := elt.Value.(string)
+				if err := utils.GzipFileBestSpeed(path); err != nil {
+					log.Errorf(`Failed to compress %s: %s`, path, err)
 				}
 			}
-			time.Sleep(time.Second)
 		}
-	}()
+		time.Sleep(time.Second)
+	}
 }
 
-func (m *ActionHandler) Run() {
-	go func() {
-		for m.ctx.Err() == nil {
-			for m.queue.Len() > 0 {
-				if elt := m.queue.Pop(); elt != nil {
-					evt := elt.Value.(*event.EdrEvent)
-					m.semJobs.Acquire()
-					go func() {
-						defer m.semJobs.Release()
-						m.HandleActions(evt)
-					}()
-				}
+func (m *ActionHandler) handleActionsLoop() {
+	for m.ctx.Err() == nil {
+		for m.queue.Len() > 0 {
+			if elt := m.queue.Pop(); elt != nil {
+				evt := elt.Value.(*event.EdrEvent)
+				m.semJobs.Acquire()
+				go func() {
+					defer m.semJobs.Release()
+					m.HandleActions(evt)
+				}()
 			}
-			time.Sleep(time.Millisecond * 50)
 		}
-	}()
-	// run compression routine
-	m.compressionRoutine()
+		time.Sleep(time.Millisecond * 50)
+	}
 }

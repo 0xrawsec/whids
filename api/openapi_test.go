@@ -26,6 +26,10 @@ const (
 
 	fakeSystemInfo = `
 		{
+		"edr": {
+			"commit": "deadbeeeeeeeeeeeeeeeeef",
+			"version": "major.minor.patch"
+		},
 		"system": {
 			"manufacturer": "innotek GmbH",
 			"name": "VirtualBox",

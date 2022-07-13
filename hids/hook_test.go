@@ -5,10 +5,13 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/0xrawsec/gene/v2/engine"
+	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/sysmon"
@@ -127,18 +130,37 @@ func TestHooks(t *testing.T) {
 	installSysmon()
 
 	tt := toast.FromT(t)
+	var gotSysmonEvent bool
 
 	tmp, err := utils.HidsMkTmpDir()
 	tt.CheckErr(err)
 	defer os.RemoveAll(tmp)
 
 	c := BuildDefaultConfig(tmp)
+	c.Actions = &ActionsConfig{
+		AvailableActions: AvailableActions,
+		Low:              []string{},
+		Medium:           []string{},
+		High:             []string{},
+		Critical:         []string{},
+	}
+
 	h, err := NewHIDS(c)
+	// show EDR logs in console
+	log.SetOutput(os.Stdout)
 
 	// add a final hook to catch all events after enrichment
 	h.preHooks.Hook(func(h *HIDS, e *event.EdrEvent) {
-		//_, ok := e.GetBool(EventDataPath("P"))
-		//tt.Assert(ok)
+		if e.Channel() == sysmonChannel {
+			gotSysmonEvent = true
+		}
+		// create fake detection to cover action
+		d := engine.NewDetection(true, true)
+		// enable all actions
+		//d.Actions = datastructs.NewInitSet(datastructs.ToInterfaceSlice(AvailableActions)...)
+		d.Actions = datastructs.NewInitSet(ActionFiledump, ActionRegdump, ActionBlacklist, ActionBrief, ActionReport)
+		d.Criticality = 6
+		e.SetDetection(d)
 	}, fltAnyEvent)
 
 	tt.TimeIt(
@@ -148,8 +170,10 @@ func TestHooks(t *testing.T) {
 
 	tt.CheckErr(err)
 	h.Run()
-	time.Sleep(10 * time.Second)
+	time.Sleep(20 * time.Second)
 	h.Stop()
+
+	tt.Assert(gotSysmonEvent, "failed to monitor Sysmon events")
 
 	t.Log(utils.PrettyJson(h.tracker.Modules()))
 }

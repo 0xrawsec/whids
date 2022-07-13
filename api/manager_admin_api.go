@@ -1414,16 +1414,22 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 				}
 			}
 
+			// we make insertion
 			if _, err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(rules)...); err != nil {
 				err := fmt.Errorf("partial insert/update due to error: %s", err)
 				wt.Write(admErr(err))
-			} else if err := m.initializeGeneFromDB(); err != nil {
-				// we need to re-init gene engine in case of update
+				return
+			}
+
+			// we need to re-init gene engine in case of update
+			if err := m.initializeGeneFromDB(); err != nil {
 				err := fmt.Errorf("failed to re-initialize engine due to error: %s", err)
 				wt.Write(admErr(err))
-			} else {
-				wt.Write(admJSONResp(rules))
+				return
 			}
+
+			// SUCCESS
+			wt.Write(admJSONResp(rules))
 		}
 
 	}

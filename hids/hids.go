@@ -730,10 +730,11 @@ func (h *HIDS) Run() {
 	h.forwarder.Run()
 
 	// Running action manager
-	h.actionHandler.Run()
+	//h.actionHandler.handleActionsLoop()
 
 	// Start scheduler
 	h.scheduleTasks()
+
 	for _, t := range h.scheduler.Tasks() {
 		log.Infof("Scheduler running: %s", t.Name)
 	}

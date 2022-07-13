@@ -7,6 +7,7 @@ import (
 )
 
 func TestSystemInfo(t *testing.T) {
+	t.Parallel()
 	var h string
 	var err error
 	info := NewSystemInfo()

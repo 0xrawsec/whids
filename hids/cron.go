@@ -592,5 +592,13 @@ func (h *HIDS) scheduleTasks() {
 		}
 	}).Schedule(time.Now()), crony.PrioHigh)
 
+	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler").Func(func() {
+		h.actionHandler.handleActionsLoop()
+	}).Schedule(time.Now()), crony.PrioHigh)
+
+	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").Func(func() {
+		h.actionHandler.compressionLoop()
+	}).Schedule(time.Now()), crony.PrioHigh)
+
 	h.scheduler.Start()
 }
