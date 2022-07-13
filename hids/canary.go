@@ -12,7 +12,6 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -37,6 +36,7 @@ func (c *Canary) create() (err error) {
 	c.createdDir = datastructs.NewSyncedSet()
 
 	for _, dir := range c.expandDir() {
+		// we create directory only if it is not existing
 		if !fsutil.Exists(dir) {
 			if err := os.MkdirAll(dir, 0777); err != nil {
 				return err
@@ -51,6 +51,7 @@ func (c *Canary) create() (err error) {
 	}
 
 	for _, fp := range c.paths() {
+		// we create files only if it is not existing
 		if !fsutil.Exists(fp) {
 			var fd *os.File
 
@@ -83,26 +84,41 @@ func (c *Canary) create() (err error) {
 }
 
 // clean the canary files
-func (c *Canary) clean() {
+func (c *Canary) clean() (last error) {
 	if c.Delete {
 		// we remove canary files
 		for _, fp := range c.paths() {
-			os.Remove(fp)
+			if err := os.Remove(fp); err != nil {
+				last = err
+			}
 		}
 
 		// we remove only empty directories
 		for _, dir := range c.expandDir() {
-			os.Remove(dir)
+			empty, err := utils.IsDirEmpty(dir)
+
+			if err != nil || !empty {
+				last = err
+				continue
+			}
+
+			if err := os.Remove(dir); err != nil {
+				last = err
+			}
 		}
 
 		// we remove directory which have been created
 		if c.createdDir != nil {
 			for _, i := range c.createdDir.Slice() {
 				dir := i.(string)
-				os.RemoveAll(dir)
+				if err := os.RemoveAll(dir); err != nil {
+					last = err
+				}
 			}
 		}
 	}
+
+	return
 }
 
 // return a list containing the full paths of the canary files
@@ -153,7 +169,7 @@ func (c *CanariesConfig) whitelistRegexp() string {
 }
 
 // Configure creates canaries and set ACLs if needed
-func (c *CanariesConfig) Configure() {
+func (c *CanariesConfig) Configure() error {
 	auditDirs := make([]string, 0)
 	if c.Enable {
 		for _, cf := range c.Canaries {
@@ -163,21 +179,21 @@ func (c *CanariesConfig) Configure() {
 			}
 
 			if err := cf.create(); err != nil {
-				log.Errorf("Failed at creating canary: %s", err)
+				return fmt.Errorf("failed at creating canary: %w", err)
 			}
 		}
 
 		// run this function async as it might take a little bit of time
-		go func() {
-			if err := utils.SetEDRAuditACL(auditDirs...); err != nil {
-				log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
-			}
-		}()
+		if err := utils.SetEDRAuditACL(auditDirs...); err != nil {
+			return fmt.Errorf("error while setting canaries' Audit ACLs: %w", err)
+		}
 	}
+
+	return nil
 }
 
 // RestoreACLs restore EDR configured ACLs
-func (c *CanariesConfig) RestoreACLs() {
+func (c *CanariesConfig) RestoreACLs() error {
 	auditDirs := make([]string, 0)
 	for _, cf := range c.Canaries {
 		// add the list of directories to audit
@@ -185,9 +201,12 @@ func (c *CanariesConfig) RestoreACLs() {
 			auditDirs = append(auditDirs, cf.expandDir()...)
 		}
 	}
+
 	if err := utils.RemoveEDRAuditACL(auditDirs...); err != nil {
-		log.Errorf("Error while setting canaries' Audit ACLs: %s", err)
+		return fmt.Errorf("error while setting canaries' Audit ACLs: %w", err)
 	}
+
+	return nil
 }
 
 // GenRuleFSAudit generate a rule matching FS Audit events for the configured canaries
@@ -241,10 +260,13 @@ func (c *CanariesConfig) GenRuleKernelFile() (r engine.Rule) {
 }
 
 // Clean cleans up the canaries
-func (c *CanariesConfig) Clean() {
+func (c *CanariesConfig) Clean() (last error) {
 	if c.Enable {
 		for _, cf := range c.Canaries {
-			cf.clean()
+			if err := cf.clean(); err != nil {
+				last = err
+			}
 		}
 	}
+	return
 }

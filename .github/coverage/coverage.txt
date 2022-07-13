@@ -1,12 +1,12 @@
-ok  	github.com/0xrawsec/whids/api	178.168s	coverage: 66.9% of statements
-ok  	github.com/0xrawsec/whids/event	41.324s	coverage: 75.3% of statements
-ok  	github.com/0xrawsec/whids/hids	21.868s	coverage: 41.0% of statements
-ok  	github.com/0xrawsec/whids/hids/sysinfo	0.805s	coverage: 90.5% of statements
-ok  	github.com/0xrawsec/whids/ioc	21.470s	coverage: 73.3% of statements
-ok  	github.com/0xrawsec/whids/logger	36.179s	coverage: 76.7% of statements
-ok  	github.com/0xrawsec/whids/sysmon	10.783s	coverage: 83.1% of statements
-ok  	github.com/0xrawsec/whids/utils	10.382s	coverage: 12.3% of statements
-ok  	github.com/0xrawsec/whids/utils/command	0.673s	coverage: 100.0% of statements
+ok  	github.com/0xrawsec/whids/api	214.917s	coverage: 66.9% of statements
+ok  	github.com/0xrawsec/whids/event	71.316s	coverage: 75.3% of statements
+ok  	github.com/0xrawsec/whids/hids	69.734s	coverage: 43.1% of statements
+ok  	github.com/0xrawsec/whids/hids/sysinfo	0.934s	coverage: 95.2% of statements
+ok  	github.com/0xrawsec/whids/ioc	83.530s	coverage: 73.3% of statements
+ok  	github.com/0xrawsec/whids/logger	80.861s	coverage: 76.7% of statements
+ok  	github.com/0xrawsec/whids/sysmon	26.398s	coverage: 83.1% of statements
+ok  	github.com/0xrawsec/whids/utils	18.241s	coverage: 18.1% of statements
+ok  	github.com/0xrawsec/whids/utils/command	1.232s	coverage: 100.0% of statements
 github.com/0xrawsec/whids/api/api_client.go:36:			ValidateRespStatus		75.0%
 github.com/0xrawsec/whids/api/api_client.go:61:			ManagerIP			60.0%
 github.com/0xrawsec/whids/api/api_client.go:73:			DialContext			0.0%
@@ -221,25 +221,25 @@ github.com/0xrawsec/whids/hids/actions.go:324:			HandleActions			0.0%
 github.com/0xrawsec/whids/hids/actions.go:391:			compress			0.0%
 github.com/0xrawsec/whids/hids/actions.go:397:			compressionRoutine		50.0%
 github.com/0xrawsec/whids/hids/actions.go:413:			Run				45.5%
-github.com/0xrawsec/whids/hids/canary.go:31:			expandDir			0.0%
-github.com/0xrawsec/whids/hids/canary.go:36:			create				0.0%
-github.com/0xrawsec/whids/hids/canary.go:86:			clean				0.0%
-github.com/0xrawsec/whids/hids/canary.go:109:			paths				0.0%
-github.com/0xrawsec/whids/hids/canary.go:127:			canaryRegexp			0.0%
-github.com/0xrawsec/whids/hids/canary.go:147:			whitelistRegexp			0.0%
-github.com/0xrawsec/whids/hids/canary.go:156:			Configure			20.0%
-github.com/0xrawsec/whids/hids/canary.go:180:			RestoreACLs			0.0%
-github.com/0xrawsec/whids/hids/canary.go:194:			GenRuleFSAudit			0.0%
-github.com/0xrawsec/whids/hids/canary.go:212:			GenRuleSysmon			0.0%
-github.com/0xrawsec/whids/hids/canary.go:228:			GenRuleKernelFile		0.0%
-github.com/0xrawsec/whids/hids/canary.go:244:			Clean				0.0%
+github.com/0xrawsec/whids/hids/canary.go:30:			expandDir			100.0%
+github.com/0xrawsec/whids/hids/canary.go:35:			create				69.0%
+github.com/0xrawsec/whids/hids/canary.go:87:			clean				70.6%
+github.com/0xrawsec/whids/hids/canary.go:125:			paths				100.0%
+github.com/0xrawsec/whids/hids/canary.go:143:			canaryRegexp			80.0%
+github.com/0xrawsec/whids/hids/canary.go:163:			whitelistRegexp			75.0%
+github.com/0xrawsec/whids/hids/canary.go:172:			Configure			70.0%
+github.com/0xrawsec/whids/hids/canary.go:196:			RestoreACLs			71.4%
+github.com/0xrawsec/whids/hids/canary.go:213:			GenRuleFSAudit			100.0%
+github.com/0xrawsec/whids/hids/canary.go:231:			GenRuleSysmon			100.0%
+github.com/0xrawsec/whids/hids/canary.go:247:			GenRuleKernelFile		100.0%
+github.com/0xrawsec/whids/hids/canary.go:263:			Clean				80.0%
 github.com/0xrawsec/whids/hids/commands.go:33:			Path				100.0%
 github.com/0xrawsec/whids/hids/commands.go:37:			Hash				90.9%
-github.com/0xrawsec/whids/hids/commands.go:71:			FromFSFileInfo			85.7%
-github.com/0xrawsec/whids/hids/commands.go:91:			FromWalkerWalkItem		0.0%
+github.com/0xrawsec/whids/hids/commands.go:71:			FromFSFileInfo			100.0%
+github.com/0xrawsec/whids/hids/commands.go:91:			FromWalkerWalkItem		90.0%
 github.com/0xrawsec/whids/hids/commands.go:109:			cmdHash				70.0%
 github.com/0xrawsec/whids/hids/commands.go:127:			cmdDir				87.5%
-github.com/0xrawsec/whids/hids/commands.go:143:			cmdWalk				0.0%
+github.com/0xrawsec/whids/hids/commands.go:143:			cmdWalk				100.0%
 github.com/0xrawsec/whids/hids/commands.go:155:			cmdFind				92.9%
 github.com/0xrawsec/whids/hids/commands.go:183:			cmdStat				83.3%
 github.com/0xrawsec/whids/hids/config.go:55:			RulesPaths			0.0%
@@ -256,7 +256,7 @@ github.com/0xrawsec/whids/hids/cron.go:307:			taskCommandRunner		0.0%
 github.com/0xrawsec/whids/hids/cron.go:342:			scheduleCleanArchivedTask	42.1%
 github.com/0xrawsec/whids/hids/cron.go:382:			taskUploadDumps			0.0%
 github.com/0xrawsec/whids/hids/cron.go:436:			updateTools			0.0%
-github.com/0xrawsec/whids/hids/cron.go:506:			scheduleTasks			12.5%
+github.com/0xrawsec/whids/hids/cron.go:506:			scheduleTasks			19.4%
 github.com/0xrawsec/whids/hids/defaults.go:10:			BuildDefaultConfig		100.0%
 github.com/0xrawsec/whids/hids/etw.go:40:			ConfigureAutologger		62.5%
 github.com/0xrawsec/whids/hids/etw.go:59:			UnifiedProviders		75.0%
@@ -264,42 +264,42 @@ github.com/0xrawsec/whids/hids/etw.go:73:			UnifiedTraces			100.0%
 github.com/0xrawsec/whids/hids/filters.go:73:			NewFilter			100.0%
 github.com/0xrawsec/whids/hids/filters.go:81:			Match				100.0%
 github.com/0xrawsec/whids/hids/hids.go:104:			newActionnableEngine		100.0%
-github.com/0xrawsec/whids/hids/hids.go:123:			NewHIDS				81.0%
-github.com/0xrawsec/whids/hids/hids.go:196:			initEnvVariables		100.0%
-github.com/0xrawsec/whids/hids/hids.go:200:			initDB				66.7%
-github.com/0xrawsec/whids/hids/hids.go:209:			initEventProvider		71.4%
-github.com/0xrawsec/whids/hids/hids.go:229:			initHooks			100.0%
-github.com/0xrawsec/whids/hids/hids.go:256:			update				37.5%
-github.com/0xrawsec/whids/hids/hids.go:350:			needsRulesUpdate		0.0%
-github.com/0xrawsec/whids/hids/hids.go:376:			needsIoCsUpdate			0.0%
-github.com/0xrawsec/whids/hids/hids.go:399:			fetchRulesFromManager		0.0%
-github.com/0xrawsec/whids/hids/hids.go:427:			containerPaths			0.0%
-github.com/0xrawsec/whids/hids/hids.go:433:			fetchIoCsFromManager		0.0%
-github.com/0xrawsec/whids/hids/hids.go:486:			loadContainers			14.3%
-github.com/0xrawsec/whids/hids/hids.go:518:			updateSystemInfo		0.0%
-github.com/0xrawsec/whids/hids/hids.go:546:			updateSysmon			0.0%
-github.com/0xrawsec/whids/hids/hids.go:592:			updateSysmonConfig		0.0%
-github.com/0xrawsec/whids/hids/hids.go:652:			cleanup				33.3%
-github.com/0xrawsec/whids/hids/hids.go:668:			IsHIDSEvent			93.8%
-github.com/0xrawsec/whids/hids/hids.go:702:			Report				0.0%
-github.com/0xrawsec/whids/hids/hids.go:729:			Run				59.6%
-github.com/0xrawsec/whids/hids/hids.go:851:			LogStats			0.0%
-github.com/0xrawsec/whids/hids/hids.go:860:			Stop				68.8%
-github.com/0xrawsec/whids/hids/hids.go:896:			Wait				0.0%
-github.com/0xrawsec/whids/hids/hids.go:901:			WaitWithTimeout			0.0%
+github.com/0xrawsec/whids/hids/hids.go:123:			NewHIDS				80.0%
+github.com/0xrawsec/whids/hids/hids.go:194:			initEnvVariables		100.0%
+github.com/0xrawsec/whids/hids/hids.go:198:			initDB				66.7%
+github.com/0xrawsec/whids/hids/hids.go:207:			initEventProvider		71.4%
+github.com/0xrawsec/whids/hids/hids.go:227:			initHooks			100.0%
+github.com/0xrawsec/whids/hids/hids.go:254:			update				37.5%
+github.com/0xrawsec/whids/hids/hids.go:348:			needsRulesUpdate		0.0%
+github.com/0xrawsec/whids/hids/hids.go:374:			needsIoCsUpdate			0.0%
+github.com/0xrawsec/whids/hids/hids.go:397:			fetchRulesFromManager		0.0%
+github.com/0xrawsec/whids/hids/hids.go:425:			containerPaths			0.0%
+github.com/0xrawsec/whids/hids/hids.go:431:			fetchIoCsFromManager		0.0%
+github.com/0xrawsec/whids/hids/hids.go:484:			loadContainers			14.3%
+github.com/0xrawsec/whids/hids/hids.go:516:			updateSystemInfo		0.0%
+github.com/0xrawsec/whids/hids/hids.go:544:			updateSysmon			0.0%
+github.com/0xrawsec/whids/hids/hids.go:590:			updateSysmonConfig		0.0%
+github.com/0xrawsec/whids/hids/hids.go:650:			cleanup				33.3%
+github.com/0xrawsec/whids/hids/hids.go:666:			IsHIDSEvent			62.5%
+github.com/0xrawsec/whids/hids/hids.go:700:			Report				0.0%
+github.com/0xrawsec/whids/hids/hids.go:727:			Run				55.8%
+github.com/0xrawsec/whids/hids/hids.go:849:			LogStats			0.0%
+github.com/0xrawsec/whids/hids/hids.go:858:			Stop				68.8%
+github.com/0xrawsec/whids/hids/hids.go:894:			Wait				0.0%
+github.com/0xrawsec/whids/hids/hids.go:899:			WaitWithTimeout			0.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:39:			hookSetImageSize		94.1%
 github.com/0xrawsec/whids/hids/hookdefs.go:71:			hookImageLoad			95.0%
-github.com/0xrawsec/whids/hids/hookdefs.go:108:			trackSysmonProcessCreate	76.1%
+github.com/0xrawsec/whids/hids/hookdefs.go:108:			trackSysmonProcessCreate	61.2%
 github.com/0xrawsec/whids/hids/hookdefs.go:229:			hookTrack			50.0%
-github.com/0xrawsec/whids/hids/hookdefs.go:242:			hookStats			98.2%
+github.com/0xrawsec/whids/hids/hookdefs.go:242:			hookStats			38.2%
 github.com/0xrawsec/whids/hids/hookdefs.go:353:			hookUpdateGeneScore		0.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:370:			hookTerminator			53.8%
 github.com/0xrawsec/whids/hids/hookdefs.go:398:			hookProcTerm			87.5%
-github.com/0xrawsec/whids/hids/hookdefs.go:414:			hookSelfGUID			75.0%
-github.com/0xrawsec/whids/hids/hookdefs.go:448:			hookFileSystemAudit		0.0%
+github.com/0xrawsec/whids/hids/hookdefs.go:414:			hookSelfGUID			43.8%
+github.com/0xrawsec/whids/hids/hookdefs.go:448:			hookFileSystemAudit		55.6%
 github.com/0xrawsec/whids/hids/hookdefs.go:478:			hookProcessIntegrityProcTamp	0.0%
-github.com/0xrawsec/whids/hids/hookdefs.go:554:			hookEnrichServices		77.8%
-github.com/0xrawsec/whids/hids/hookdefs.go:632:			hookEnrichAnySysmon		100.0%
+github.com/0xrawsec/whids/hids/hookdefs.go:554:			hookEnrichServices		75.0%
+github.com/0xrawsec/whids/hids/hookdefs.go:632:			hookEnrichAnySysmon		86.7%
 github.com/0xrawsec/whids/hids/hookdefs.go:754:			hookClipboardEvents		0.0%
 github.com/0xrawsec/whids/hids/hookdefs.go:781:			hookKernelFiles			0.0%
 github.com/0xrawsec/whids/hids/hooks.go:23:			newHookCache			100.0%
@@ -312,7 +312,7 @@ github.com/0xrawsec/whids/hids/hooks.go:123:			getFunctionName			0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:13:			toString			100.0%
 github.com/0xrawsec/whids/hids/hookutils.go:17:			toHex				66.7%
 github.com/0xrawsec/whids/hids/hookutils.go:25:			terminate			0.0%
-github.com/0xrawsec/whids/hids/hookutils.go:41:			isSysmonProcessTerminate	100.0%
+github.com/0xrawsec/whids/hids/hookutils.go:41:			isSysmonProcessTerminate	0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:45:			srcPIDFromEvent			0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:58:			hasAction			0.0%
 github.com/0xrawsec/whids/hids/hookutils.go:65:			getCriticality			0.0%
@@ -320,9 +320,9 @@ github.com/0xrawsec/whids/hids/iocs.go:17:			ruleHashIoC			100.0%
 github.com/0xrawsec/whids/hids/iocs.go:32:			ruleDomainIoC			100.0%
 github.com/0xrawsec/whids/hids/paths.go:11:			EventDataPath			100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:41:			NewProcStats			100.0%
-github.com/0xrawsec/whids/hids/ptrack.go:52:			UpdateNetResolve		100.0%
-github.com/0xrawsec/whids/hids/ptrack.go:61:			UpdateCon			100.0%
-github.com/0xrawsec/whids/hids/ptrack.go:71:			ConStat				100.0%
+github.com/0xrawsec/whids/hids/ptrack.go:52:			UpdateNetResolve		0.0%
+github.com/0xrawsec/whids/hids/ptrack.go:61:			UpdateCon			0.0%
+github.com/0xrawsec/whids/hids/ptrack.go:71:			ConStat				0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:83:			NewGeneScore			100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:87:			Update				0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:96:			sysmonHashesToMap		100.0%
@@ -342,7 +342,7 @@ github.com/0xrawsec/whids/hids/ptrack.go:376:			NewActivityTracker		100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:393:			delete				83.3%
 github.com/0xrawsec/whids/hids/ptrack.go:406:			freeRtn				80.0%
 github.com/0xrawsec/whids/hids/ptrack.go:444:			CheckDumpCountOrInc		0.0%
-github.com/0xrawsec/whids/hids/ptrack.go:458:			Add				100.0%
+github.com/0xrawsec/whids/hids/ptrack.go:458:			Add				83.3%
 github.com/0xrawsec/whids/hids/ptrack.go:469:			PS				0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:480:			Blacklist			0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:484:			IsBlacklisted			100.0%
@@ -351,7 +351,7 @@ github.com/0xrawsec/whids/hids/ptrack.go:500:			TargetTrackFromEvent		80.0%
 github.com/0xrawsec/whids/hids/ptrack.go:512:			GetParentByGuid			0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:521:			getByGuid			100.0%
 github.com/0xrawsec/whids/hids/ptrack.go:530:			GetByGuid			100.0%
-github.com/0xrawsec/whids/hids/ptrack.go:539:			GetByPID			0.0%
+github.com/0xrawsec/whids/hids/ptrack.go:539:			GetByPID			71.4%
 github.com/0xrawsec/whids/hids/ptrack.go:554:			ContainsGuid			0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:561:			ContainsPID			0.0%
 github.com/0xrawsec/whids/hids/ptrack.go:568:			Modules				100.0%
@@ -375,10 +375,10 @@ github.com/0xrawsec/whids/hids/stats.go:69:			Detections			0.0%
 github.com/0xrawsec/whids/hids/stats.go:73:			EPS				0.0%
 github.com/0xrawsec/whids/hids/stats.go:81:			CriticalEPS			0.0%
 github.com/0xrawsec/whids/hids/stats.go:85:			DynEPS				75.0%
-github.com/0xrawsec/whids/hids/stats.go:93:			HasPerfIssue			38.5%
+github.com/0xrawsec/whids/hids/stats.go:93:			HasPerfIssue			61.5%
 github.com/0xrawsec/whids/hids/stats.go:113:			HasCriticalPerfIssue		0.0%
 github.com/0xrawsec/whids/hids/sysinfo/sysinfo.go:15:		RegisterEdrInfo			0.0%
-github.com/0xrawsec/whids/hids/sysinfo/windows_sysinfo.go:31:	NewSystemInfo			95.0%
+github.com/0xrawsec/whids/hids/sysinfo/windows_sysinfo.go:31:	NewSystemInfo			100.0%
 github.com/0xrawsec/whids/ioc/ioc.go:24:			FromObjects			0.0%
 github.com/0xrawsec/whids/ioc/ioc.go:53:			HasValidType			66.7%
 github.com/0xrawsec/whids/ioc/ioc.go:67:			Transform			75.0%
@@ -484,47 +484,46 @@ github.com/0xrawsec/whids/utils/audit.go:190:			RemoveEDRAuditACL		77.8%
 github.com/0xrawsec/whids/utils/command/command.go:15:		Command				100.0%
 github.com/0xrawsec/whids/utils/command/command.go:22:		CommandTimeout			100.0%
 github.com/0xrawsec/whids/utils/command/command.go:29:		Terminate			100.0%
-github.com/0xrawsec/whids/utils/files.go:24:			CountFiles			0.0%
-github.com/0xrawsec/whids/utils/files.go:32:			GzipFileBestSpeed		0.0%
-github.com/0xrawsec/whids/utils/files.go:72:			HidsMkdirAll			0.0%
-github.com/0xrawsec/whids/utils/files.go:76:			HidsMkTmpDir			0.0%
-github.com/0xrawsec/whids/utils/files.go:92:			HidsCreateFile			0.0%
-github.com/0xrawsec/whids/utils/files.go:98:			HidsWriteData			0.0%
-github.com/0xrawsec/whids/utils/files.go:104:			HidsWriteReader			0.0%
-github.com/0xrawsec/whids/utils/files.go:134:			IsPipePath			0.0%
-github.com/0xrawsec/whids/utils/files.go:139:			ReadFileString			0.0%
-github.com/0xrawsec/whids/utils/files.go:145:			StdDir				100.0%
-github.com/0xrawsec/whids/utils/files.go:151:			StdDirs				0.0%
-github.com/0xrawsec/whids/utils/files.go:161:			Unzip				0.0%
-github.com/0xrawsec/whids/utils/files.go:198:			RelativePath			0.0%
+github.com/0xrawsec/whids/utils/files.go:25:			CountFiles			0.0%
+github.com/0xrawsec/whids/utils/files.go:33:			GzipFileBestSpeed		0.0%
+github.com/0xrawsec/whids/utils/files.go:73:			HidsMkdirAll			0.0%
+github.com/0xrawsec/whids/utils/files.go:77:			HidsMkTmpDir			71.4%
+github.com/0xrawsec/whids/utils/files.go:93:			HidsCreateFile			0.0%
+github.com/0xrawsec/whids/utils/files.go:99:			HidsWriteData			0.0%
+github.com/0xrawsec/whids/utils/files.go:105:			HidsWriteReader			0.0%
+github.com/0xrawsec/whids/utils/files.go:135:			IsPipePath			0.0%
+github.com/0xrawsec/whids/utils/files.go:140:			ReadFileString			0.0%
+github.com/0xrawsec/whids/utils/files.go:146:			StdDir				100.0%
+github.com/0xrawsec/whids/utils/files.go:152:			StdDirs				0.0%
+github.com/0xrawsec/whids/utils/files.go:162:			Unzip				0.0%
+github.com/0xrawsec/whids/utils/files.go:199:			RelativePath			0.0%
+github.com/0xrawsec/whids/utils/files.go:203:			IsDirEmpty			75.0%
 github.com/0xrawsec/whids/utils/net.go:6:			NextIP				0.0%
 github.com/0xrawsec/whids/utils/net.go:19:			PrevIP				0.0%
-github.com/0xrawsec/whids/utils/rand.go:10:			UnsafeUUIDGen			0.0%
+github.com/0xrawsec/whids/utils/rand.go:10:			UnsafeUUIDGen			100.0%
 github.com/0xrawsec/whids/utils/rand.go:19:			UnsafeKeyGen			0.0%
-github.com/0xrawsec/whids/utils/utils.go:29:			IsValidUUID			0.0%
-github.com/0xrawsec/whids/utils/utils.go:34:			EnableDNSLogs			0.0%
-github.com/0xrawsec/whids/utils/utils.go:40:			FlushDNSCache			0.0%
-github.com/0xrawsec/whids/utils/utils.go:46:			PrettyJson			0.0%
-github.com/0xrawsec/whids/utils/utils.go:54:			Json				0.0%
-github.com/0xrawsec/whids/utils/utils.go:63:			JsonString			0.0%
-github.com/0xrawsec/whids/utils/utils.go:73:			ExpandEnvs			0.0%
-github.com/0xrawsec/whids/utils/utils.go:82:			Sha256StringArray		0.0%
-github.com/0xrawsec/whids/utils/utils.go:92:			HashEventBytes			0.0%
-github.com/0xrawsec/whids/utils/utils.go:96:			HashStruct			0.0%
-github.com/0xrawsec/whids/utils/utils.go:106:			GetCurFuncName			0.0%
-github.com/0xrawsec/whids/utils/utils.go:134:			NewWindowsLogger		0.0%
-github.com/0xrawsec/whids/utils/utils.go:147:			Log				0.0%
-github.com/0xrawsec/whids/utils/utils.go:158:			Close				0.0%
-github.com/0xrawsec/whids/utils/utils.go:167:			Round				0.0%
-github.com/0xrawsec/whids/utils/utils.go:173:			RegQuery			0.0%
-github.com/0xrawsec/whids/utils/utils.go:185:			Utf16ToUtf8			0.0%
-github.com/0xrawsec/whids/utils/utils.go:217:			Len				0.0%
-github.com/0xrawsec/whids/utils/utils.go:221:			Swap				0.0%
-github.com/0xrawsec/whids/utils/utils.go:227:			Less				0.0%
+github.com/0xrawsec/whids/utils/utils.go:29:			IsValidUUID			100.0%
+github.com/0xrawsec/whids/utils/utils.go:34:			PrettyJson			0.0%
+github.com/0xrawsec/whids/utils/utils.go:42:			Json				0.0%
+github.com/0xrawsec/whids/utils/utils.go:51:			JsonString			0.0%
+github.com/0xrawsec/whids/utils/utils.go:57:			ExpandEnvs			0.0%
+github.com/0xrawsec/whids/utils/utils.go:66:			Sha256StringArray		0.0%
+github.com/0xrawsec/whids/utils/utils.go:76:			HashEventBytes			0.0%
+github.com/0xrawsec/whids/utils/utils.go:81:			HashInterface			0.0%
+github.com/0xrawsec/whids/utils/utils.go:91:			GetCurFuncName			0.0%
+github.com/0xrawsec/whids/utils/utils.go:119:			NewWindowsLogger		0.0%
+github.com/0xrawsec/whids/utils/utils.go:132:			Log				0.0%
+github.com/0xrawsec/whids/utils/utils.go:143:			Close				0.0%
+github.com/0xrawsec/whids/utils/utils.go:152:			Round				0.0%
+github.com/0xrawsec/whids/utils/utils.go:158:			RegQuery			0.0%
+github.com/0xrawsec/whids/utils/utils.go:170:			Utf16ToUtf8			0.0%
+github.com/0xrawsec/whids/utils/utils.go:202:			Len				0.0%
+github.com/0xrawsec/whids/utils/utils.go:206:			Swap				0.0%
+github.com/0xrawsec/whids/utils/utils.go:212:			Less				0.0%
 github.com/0xrawsec/whids/utils/windows.go:22:			ArgvFromCommandLine		0.0%
 github.com/0xrawsec/whids/utils/windows.go:41:			HideFile			0.0%
 github.com/0xrawsec/whids/utils/windows.go:53:			ResolveCDrive			0.0%
 github.com/0xrawsec/whids/utils/windows.go:76:			RegValue			0.0%
 github.com/0xrawsec/whids/utils/windows.go:91:			RegJoin				0.0%
 github.com/0xrawsec/whids/utils/windows.go:98:			RegValueToString		0.0%
-total:								(statements)			55.5%
+total:								(statements)			56.6%

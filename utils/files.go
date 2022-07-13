@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -197,4 +198,21 @@ func Unzip(zipfile, dest string) (err error) {
 
 func RelativePath(path string) string {
 	return filepath.Join(filepath.Dir(os.Args[0]), path)
+}
+
+func IsDirEmpty(dir string) (empty bool, err error) {
+	var fd *os.File
+	var entries []fs.DirEntry
+
+	if fd, err = os.Open(dir); err != nil {
+		return
+	}
+
+	defer fd.Close()
+
+	if entries, err = fd.ReadDir(1); err != nil && err != io.EOF {
+		return
+	}
+
+	return len(entries) == 0, nil
 }

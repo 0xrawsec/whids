@@ -178,8 +178,6 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h.initEnvVariables()
 	h.initEventProvider()
 	h.initHooks(c.EnableHooks)
-	// initializing canaries
-	h.config.CanariesConfig.Configure()
 	// fixing local audit policies if necessary
 	h.config.AuditConfig.Configure()
 

@@ -506,6 +506,7 @@ func (h *HIDS) updateTools() (err error) {
 func (h *HIDS) scheduleTasks() {
 	inLittleWhile := time.Now().Add(time.Second * 5)
 
+	// routines scheduled only if connected to a manager
 	if h.config.IsForwardingEnabled() {
 		// command runner routine, we run it only once as it creates a go routine to handle commands
 		h.scheduler.Schedule(crony.NewAsyncTask("Command handler goroutine").Func(h.taskCommandRunner).Schedule(time.Now()),
@@ -565,9 +566,20 @@ func (h *HIDS) scheduleTasks() {
 			crony.PrioHigh)
 	}
 
+	// routines scheduled in any case
+
+	// routine managing Sysmon archived files cleanup
 	if err := h.scheduleCleanArchivedTask(); err != nil {
 		log.Error("failed to schedule sysmon archived file cleaning: ", err)
 	}
+
+	// routine creating canary files
+	h.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").Func(func() {
+		task := "[canary configuration]"
+		if err := h.config.CanariesConfig.Configure(); err != nil {
+			log.Error(task, err)
+		}
+	}).Schedule(time.Now()), crony.PrioHigh)
 
 	h.scheduler.Start()
 }

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/0xrawsec/toast"
@@ -58,4 +59,19 @@ func TestEnableFSAuditing(t *testing.T) {
 	if err := EnableAuditPolicy("{0CCE921D-69AE-11D9-BED3-505054503030}"); err != nil {
 		t.Errorf("Failed at enabling FS Auditing: %s", err)
 	}
+}
+
+func TestIsDirEmpty(t *testing.T) {
+	tt := toast.FromT(t)
+
+	ok, err := IsDirEmpty(`C:\windows\`)
+	tt.CheckErr(err)
+	tt.Assert(!ok)
+
+	tmp, err := HidsMkTmpDir()
+	tt.CheckErr(err)
+	defer os.Remove(tmp)
+	ok, err = IsDirEmpty(tmp)
+	tt.CheckErr(err)
+	tt.Assert(ok)
 }
