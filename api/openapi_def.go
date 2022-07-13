@@ -74,10 +74,10 @@ var OpenAPIDefinition = `
                       "group": "",
                       "hostname": "OpenHappy",
                       "ip": "127.0.0.1",
-                      "key": "YNfOIYEwEMnGoBvN4zY51gYW4Le8ceQghEau3NbeR1dFiszSfOCnlpO8v4qpIEmY",
-                      "last-connection": "2022-07-13T07:46:15.075488574Z",
-                      "last-detection": "2022-07-13T09:46:14.048662869+02:00",
-                      "last-event": "2022-07-13T09:46:14.048662869+02:00",
+                      "key": "ys4dCPmeFHK9eHrEFGTCJgTpEimVzYRLOOmt6BgNL95OKX9ryqXuajf4D0oULrdI",
+                      "last-connection": "2022-07-13T11:22:16.401794691Z",
+                      "last-detection": "2022-07-13T13:22:15.375028694+02:00",
+                      "last-event": "2022-07-13T13:22:15.375028694+02:00",
                       "score": 0,
                       "status": "",
                       "system-info": {
@@ -154,13 +154,13 @@ var OpenAPIDefinition = `
                     "group": "",
                     "hostname": "",
                     "ip": "",
-                    "key": "XIawMPhVCzKDHgwf5Ow87sI8gzG3JroC9VroDL38xS8Ods5bSKgfcIhnPq5EXubq",
+                    "key": "sRTd48LpsDOUOtGlECR8hPkgvnjHDScs3D3ifzNBXQMBVf8kQRspGL8EM82iKWCX",
                     "last-connection": "0001-01-01T00:00:00Z",
                     "last-detection": "0001-01-01T00:00:00Z",
                     "last-event": "0001-01-01T00:00:00Z",
                     "score": 0,
                     "status": "",
-                    "uuid": "a11272dd-b6d3-348e-9031-0a982a5c79d3"
+                    "uuid": "4b40123e-19f1-589a-8feb-aeb9b6718e24"
                   },
                   "error": "",
                   "message": "OK"
@@ -200,21 +200,21 @@ var OpenAPIDefinition = `
                     "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d": [
                       {
                         "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                        "creation": "2022-07-13T07:46:19.341078277Z",
+                        "creation": "2022-07-13T11:22:20.73717036Z",
                         "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                         "files": [
                           {
                             "name": "bar.txt",
                             "size": 4,
-                            "timestamp": "2022-07-13T07:46:19.344411642Z"
+                            "timestamp": "2022-07-13T11:22:20.73717036Z"
                           },
                           {
                             "name": "foo.txt",
                             "size": 4,
-                            "timestamp": "2022-07-13T07:46:19.341078277Z"
+                            "timestamp": "2022-07-13T11:22:20.73717036Z"
                           }
                         ],
-                        "modification": "2022-07-13T07:46:19.344411642Z",
+                        "modification": "2022-07-13T11:22:20.73717036Z",
                         "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                       }
                     ]
@@ -248,30 +248,30 @@ var OpenAPIDefinition = `
                       "avg-signature-criticality": 0,
                       "bounded-score": 0,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 8,
-                        "NewAutorun": 14,
+                        "DefenderConfigChanged": 2,
+                        "NewAutorun": 19,
                         "SuspiciousService": 3,
-                        "UnknownServices": 12,
-                        "UntrustedDriverLoaded": 13
+                        "UnknownServices": 9,
+                        "UntrustedDriverLoaded": 17
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2022-07-13T09:46:17.190784275+02:00",
+                      "median-time": "2022-07-13T13:22:18.551028736+02:00",
                       "score": 0,
                       "signature-count": 50,
                       "signature-criticality-metric": 0,
                       "signature-diversity": 100,
                       "signatures": [
-                        "UnknownServices",
                         "UntrustedDriverLoaded",
                         "DefenderConfigChanged",
+                        "NewAutorun",
                         "SuspiciousService",
-                        "NewAutorun"
+                        "UnknownServices"
                       ],
-                      "start-time": "2022-07-13T09:46:17.189537058+02:00",
+                      "start-time": "2022-07-13T13:22:18.549278759+02:00",
                       "std-dev-alert-criticality": 0,
                       "std-dev-signature-criticality": -92233720368547760,
-                      "stop-time": "2022-07-13T09:46:17.192031493+02:00",
+                      "stop-time": "2022-07-13T13:22:18.552778714+02:00",
                       "sum-alert-criticality": 0,
                       "sum-rule-criticality": 0,
                       "tactics": null,
@@ -332,7 +332,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "osqueryi",
                     "os": "windows",
-                    "uuid": "187595e3-edff-352f-5b5c-e46a6ab79049"
+                    "uuid": "337481ca-ed78-c518-0899-c2d0e1083257"
                   },
                   "error": "",
                   "message": "OK"
@@ -399,7 +399,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "osqueryi",
                     "os": "windows",
-                    "uuid": "187595e3-edff-352f-5b5c-e46a6ab79049"
+                    "uuid": "337481ca-ed78-c518-0899-c2d0e1083257"
                   },
                   "error": "",
                   "message": "OK"
@@ -453,7 +453,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "osqueryi",
                     "os": "windows",
-                    "uuid": "187595e3-edff-352f-5b5c-e46a6ab79049"
+                    "uuid": "337481ca-ed78-c518-0899-c2d0e1083257"
                   },
                   "error": "",
                   "message": "OK"
@@ -509,7 +509,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "sysmon",
                     "os": "windows",
-                    "uuid": "9324f4e1-5499-fc4d-268c-b9b452cc2be3"
+                    "uuid": "c333f750-b5f1-425b-2780-0ce15d171ccc"
                   },
                   "error": "",
                   "message": "OK"
@@ -576,7 +576,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "sysmon",
                     "os": "windows",
-                    "uuid": "9324f4e1-5499-fc4d-268c-b9b452cc2be3"
+                    "uuid": "c333f750-b5f1-425b-2780-0ce15d171ccc"
                   },
                   "error": "",
                   "message": "OK"
@@ -630,7 +630,7 @@ var OpenAPIDefinition = `
                     },
                     "name": "sysmon",
                     "os": "windows",
-                    "uuid": "9324f4e1-5499-fc4d-268c-b9b452cc2be3"
+                    "uuid": "c333f750-b5f1-425b-2780-0ce15d171ccc"
                   },
                   "error": "",
                   "message": "OK"
@@ -1904,7 +1904,7 @@ var OpenAPIDefinition = `
                       "json": null,
                       "name": "",
                       "sent": true,
-                      "sent-time": "2022-07-13T09:46:15.075008854+02:00",
+                      "sent-time": "2022-07-13T13:22:16.401328955+02:00",
                       "stderr": "",
                       "stdout": "",
                       "timeout": 0,
@@ -1914,9 +1914,9 @@ var OpenAPIDefinition = `
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-07-13T07:46:15.075488574Z",
-                    "last-detection": "2022-07-13T09:46:14.048662869+02:00",
-                    "last-event": "2022-07-13T09:46:14.048662869+02:00",
+                    "last-connection": "2022-07-13T11:22:16.401794691Z",
+                    "last-detection": "2022-07-13T13:22:15.375028694+02:00",
+                    "last-event": "2022-07-13T13:22:15.375028694+02:00",
                     "score": 0,
                     "status": "",
                     "system-info": {
@@ -2323,7 +2323,7 @@ var OpenAPIDefinition = `
                       "json": null,
                       "name": "",
                       "sent": true,
-                      "sent-time": "2022-07-13T09:46:15.075008854+02:00",
+                      "sent-time": "2022-07-13T13:22:16.401328955+02:00",
                       "stderr": "",
                       "stdout": "",
                       "timeout": 0,
@@ -2333,9 +2333,9 @@ var OpenAPIDefinition = `
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-07-13T07:46:15.075488574Z",
-                    "last-detection": "2022-07-13T09:46:14.048662869+02:00",
-                    "last-event": "2022-07-13T09:46:14.048662869+02:00",
+                    "last-connection": "2022-07-13T11:22:16.401794691Z",
+                    "last-detection": "2022-07-13T13:22:15.375028694+02:00",
+                    "last-event": "2022-07-13T13:22:15.375028694+02:00",
                     "score": 0,
                     "status": "New Status",
                     "system-info": {
@@ -2430,7 +2430,7 @@ var OpenAPIDefinition = `
                       "json": null,
                       "name": "",
                       "sent": true,
-                      "sent-time": "2022-07-13T09:46:15.075008854+02:00",
+                      "sent-time": "2022-07-13T13:22:16.401328955+02:00",
                       "stderr": "",
                       "stdout": "",
                       "timeout": 0,
@@ -2440,9 +2440,9 @@ var OpenAPIDefinition = `
                     "group": "New Group",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "last-connection": "2022-07-13T07:46:15.075488574Z",
-                    "last-detection": "2022-07-13T09:46:14.048662869+02:00",
-                    "last-event": "2022-07-13T09:46:14.048662869+02:00",
+                    "last-connection": "2022-07-13T11:22:16.401794691Z",
+                    "last-detection": "2022-07-13T13:22:15.375028694+02:00",
+                    "last-event": "2022-07-13T13:22:15.375028694+02:00",
                     "score": 0,
                     "status": "New Status",
                     "system-info": {
@@ -2541,21 +2541,21 @@ var OpenAPIDefinition = `
                   "data": [
                     {
                       "base-url": "/endpoints/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/artifacts/5a92baeb-9384-47d3-92b4-a0db6f9b8c6d/3d8441643c204ba9b9dcb5c414b25a3129f66f6c/",
-                      "creation": "2022-07-13T07:46:19.341078277Z",
+                      "creation": "2022-07-13T11:22:20.73717036Z",
                       "event-hash": "3d8441643c204ba9b9dcb5c414b25a3129f66f6c",
                       "files": [
                         {
                           "name": "bar.txt",
                           "size": 4,
-                          "timestamp": "2022-07-13T07:46:19.344411642Z"
+                          "timestamp": "2022-07-13T11:22:20.73717036Z"
                         },
                         {
                           "name": "foo.txt",
                           "size": 4,
-                          "timestamp": "2022-07-13T07:46:19.341078277Z"
+                          "timestamp": "2022-07-13T11:22:20.73717036Z"
                         }
                       ],
-                      "modification": "2022-07-13T07:46:19.344411642Z",
+                      "modification": "2022-07-13T11:22:20.73717036Z",
                       "process-guid": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d"
                     }
                   ],
@@ -2700,11 +2700,11 @@ var OpenAPIDefinition = `
                     "json": null,
                     "name": "/usr/bin/printf",
                     "sent": true,
-                    "sent-time": "2022-07-13T09:46:17.1464446+02:00",
+                    "sent-time": "2022-07-13T13:22:18.466187384+02:00",
                     "stderr": "",
                     "stdout": "SGVsbG8gV29ybGQ=",
                     "timeout": 0,
-                    "uuid": "d28917f0-8dcb-1d40-29cd-c196b300c4cb"
+                    "uuid": "c5ea8091-e0aa-2055-5793-3e6b93bbc50e"
                   },
                   "error": "",
                   "message": "OK"
@@ -2792,16 +2792,16 @@ var OpenAPIDefinition = `
                       "stderr": null,
                       "stdout": null,
                       "timeout": 0,
-                      "uuid": "d28917f0-8dcb-1d40-29cd-c196b300c4cb"
+                      "uuid": "c5ea8091-e0aa-2055-5793-3e6b93bbc50e"
                     },
                     "criticality": 0,
                     "group": "",
                     "hostname": "OpenHappy",
                     "ip": "127.0.0.1",
-                    "key": "3r5Ivi6UEU7UKijzwKz95GGrNXmSYFswOjubif5Ox6YwBXL7Sx9ueBfE85VuPb9s",
-                    "last-connection": "2022-07-13T07:46:16.144766433Z",
-                    "last-detection": "2022-07-13T09:46:15.125875027+02:00",
-                    "last-event": "2022-07-13T09:46:15.125875027+02:00",
+                    "key": "rVb4SQkCsxPH8zG0KdqD39kMTzRu792rNvmMd2t11Vzc4rogUe1feYmQy55dLES6",
+                    "last-connection": "2022-07-13T11:22:17.462863232Z",
+                    "last-detection": "2022-07-13T13:22:16.435850815+02:00",
+                    "last-event": "2022-07-13T13:22:16.435850815+02:00",
                     "score": 0,
                     "status": "",
                     "system-info": {
@@ -3463,30 +3463,30 @@ var OpenAPIDefinition = `
                     "avg-signature-criticality": 0,
                     "bounded-score": 0,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 8,
-                      "NewAutorun": 14,
+                      "DefenderConfigChanged": 2,
+                      "NewAutorun": 19,
                       "SuspiciousService": 3,
-                      "UnknownServices": 12,
-                      "UntrustedDriverLoaded": 13
+                      "UnknownServices": 9,
+                      "UntrustedDriverLoaded": 17
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2022-07-13T09:46:17.190784275+02:00",
+                    "median-time": "2022-07-13T13:22:18.551028736+02:00",
                     "score": 0,
                     "signature-count": 50,
                     "signature-criticality-metric": 0,
                     "signature-diversity": 100,
                     "signatures": [
-                      "UnknownServices",
                       "UntrustedDriverLoaded",
                       "DefenderConfigChanged",
+                      "NewAutorun",
                       "SuspiciousService",
-                      "NewAutorun"
+                      "UnknownServices"
                     ],
-                    "start-time": "2022-07-13T09:46:17.189537058+02:00",
+                    "start-time": "2022-07-13T13:22:18.549278759+02:00",
                     "std-dev-alert-criticality": 0,
                     "std-dev-signature-criticality": -92233720368547760,
-                    "stop-time": "2022-07-13T09:46:17.192031493+02:00",
+                    "stop-time": "2022-07-13T13:22:18.552778714+02:00",
                     "sum-alert-criticality": 0,
                     "sum-rule-criticality": 0,
                     "tactics": null,
@@ -3530,30 +3530,30 @@ var OpenAPIDefinition = `
                     "avg-signature-criticality": 0,
                     "bounded-score": 0,
                     "count-by-signature": {
-                      "DefenderConfigChanged": 8,
-                      "NewAutorun": 14,
+                      "DefenderConfigChanged": 2,
+                      "NewAutorun": 19,
                       "SuspiciousService": 3,
-                      "UnknownServices": 12,
-                      "UntrustedDriverLoaded": 13
+                      "UnknownServices": 9,
+                      "UntrustedDriverLoaded": 17
                     },
                     "count-uniq-signatures": 5,
                     "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                    "median-time": "2022-07-13T09:46:17.190784275+02:00",
+                    "median-time": "2022-07-13T13:22:18.551028736+02:00",
                     "score": 0,
                     "signature-count": 50,
                     "signature-criticality-metric": 0,
                     "signature-diversity": 100,
                     "signatures": [
-                      "SuspiciousService",
-                      "NewAutorun",
-                      "UnknownServices",
                       "UntrustedDriverLoaded",
-                      "DefenderConfigChanged"
+                      "DefenderConfigChanged",
+                      "NewAutorun",
+                      "SuspiciousService",
+                      "UnknownServices"
                     ],
-                    "start-time": "2022-07-13T09:46:17.189537058+02:00",
+                    "start-time": "2022-07-13T13:22:18.549278759+02:00",
                     "std-dev-alert-criticality": 0,
                     "std-dev-signature-criticality": -92233720368547760,
-                    "stop-time": "2022-07-13T09:46:17.192031493+02:00",
+                    "stop-time": "2022-07-13T13:22:18.552778714+02:00",
                     "sum-alert-criticality": 0,
                     "sum-rule-criticality": 0,
                     "tactics": null,
@@ -3639,35 +3639,35 @@ var OpenAPIDefinition = `
                     {
                       "alert-count": 50,
                       "alert-criticality-metric": 0,
-                      "archived-time": "2022-07-13T09:46:18.240135745+02:00",
+                      "archived-time": "2022-07-13T13:22:19.617525991+02:00",
                       "avg-alert-criticality": 0,
                       "avg-signature-criticality": 0,
                       "bounded-score": 0,
                       "count-by-signature": {
-                        "DefenderConfigChanged": 8,
-                        "NewAutorun": 14,
+                        "DefenderConfigChanged": 2,
+                        "NewAutorun": 19,
                         "SuspiciousService": 3,
-                        "UnknownServices": 12,
-                        "UntrustedDriverLoaded": 13
+                        "UnknownServices": 9,
+                        "UntrustedDriverLoaded": 17
                       },
                       "count-uniq-signatures": 5,
                       "identifier": "5a92baeb-9384-47d3-92b4-a0db6f9b8c6d",
-                      "median-time": "2022-07-13T09:46:17.190784275+02:00",
+                      "median-time": "2022-07-13T13:22:18.551028736+02:00",
                       "score": 0,
                       "signature-count": 50,
                       "signature-criticality-metric": 0,
                       "signature-diversity": 100,
                       "signatures": [
-                        "SuspiciousService",
-                        "NewAutorun",
-                        "UnknownServices",
                         "UntrustedDriverLoaded",
-                        "DefenderConfigChanged"
+                        "DefenderConfigChanged",
+                        "NewAutorun",
+                        "SuspiciousService",
+                        "UnknownServices"
                       ],
-                      "start-time": "2022-07-13T09:46:17.189537058+02:00",
+                      "start-time": "2022-07-13T13:22:18.549278759+02:00",
                       "std-dev-alert-criticality": 0,
                       "std-dev-signature-criticality": -92233720368547760,
-                      "stop-time": "2022-07-13T09:46:17.192031493+02:00",
+                      "stop-time": "2022-07-13T13:22:18.552778714+02:00",
                       "sum-alert-criticality": 0,
                       "sum-rule-criticality": 0,
                       "tactics": null,
@@ -3749,10 +3749,10 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": [
                     {
-                      "guuid": "e054e96e-ee10-443d-600f-ac4b6545c38c",
+                      "guuid": "d2731b11-009c-7c09-591f-e216162b339e",
                       "source": "XyzTIProvider",
                       "type": "domain",
-                      "uuid": "93169146-c32b-23bf-0a5d-14fe140da298",
+                      "uuid": "c08f0342-4bab-bd0d-f6ae-0f10ace046d0",
                       "value": "some.random.domain"
                     }
                   ],
@@ -3800,8 +3800,8 @@ var OpenAPIDefinition = `
               },
               "example": [
                 {
-                  "uuid": "93169146-c32b-23bf-0a5d-14fe140da298",
-                  "guuid": "e054e96e-ee10-443d-600f-ac4b6545c38c",
+                  "uuid": "c08f0342-4bab-bd0d-f6ae-0f10ace046d0",
+                  "guuid": "d2731b11-009c-7c09-591f-e216162b339e",
                   "source": "XyzTIProvider",
                   "value": "some.random.domain",
                   "type": "domain"
@@ -3819,10 +3819,10 @@ var OpenAPIDefinition = `
                 "example": {
                   "data": [
                     {
-                      "guuid": "e054e96e-ee10-443d-600f-ac4b6545c38c",
+                      "guuid": "d2731b11-009c-7c09-591f-e216162b339e",
                       "source": "XyzTIProvider",
                       "type": "domain",
-                      "uuid": "93169146-c32b-23bf-0a5d-14fe140da298",
+                      "uuid": "c08f0342-4bab-bd0d-f6ae-0f10ace046d0",
                       "value": "some.random.domain"
                     }
                   ],
@@ -4319,8 +4319,8 @@ var OpenAPIDefinition = `
                     "description": "",
                     "group": "",
                     "identifier": "TestAdminUser",
-                    "key": "2NdPO1Fs6GXlQpqnReVfKSIPq8UN3PWMyMS3NbEQsQy27bXSj6wmc2PXF2EBV3rH",
-                    "uuid": "767f20ba-f38b-515a-f47f-1204b8a11157"
+                    "key": "kMlvYi5Bl7EWr4r4YxfqNwKsOnl6WEuhWLWDaaKaygryDvmnydqVaDV46G0KXXnW",
+                    "uuid": "551582b3-35c9-4720-8922-22ca896d901e"
                   },
                   "error": "",
                   "message": "OK"
@@ -4363,7 +4363,7 @@ var OpenAPIDefinition = `
                 }
               },
               "example": {
-                "uuid": "e296c8a8-1ae5-484f-44e7-950d76d73ea0",
+                "uuid": "593f1d72-1cad-906c-cbb2-4150572e2388",
                 "identifier": "SecondTestAdmin",
                 "key": "ChangeMe",
                 "group": "CSIRT",
@@ -4384,7 +4384,7 @@ var OpenAPIDefinition = `
                     "group": "CSIRT",
                     "identifier": "SecondTestAdmin",
                     "key": "ChangeMe",
-                    "uuid": "e296c8a8-1ae5-484f-44e7-950d76d73ea0"
+                    "uuid": "593f1d72-1cad-906c-cbb2-4150572e2388"
                   },
                   "error": "",
                   "message": "OK"
@@ -4472,7 +4472,7 @@ var OpenAPIDefinition = `
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "e296c8a8-1ae5-484f-44e7-950d76d73ea0"
+                    "uuid": "593f1d72-1cad-906c-cbb2-4150572e2388"
                   },
                   "error": "",
                   "message": "OK"
@@ -4510,7 +4510,7 @@ var OpenAPIDefinition = `
                     "group": "SOC",
                     "identifier": "SecondTestAdmin",
                     "key": "NewWeakKey",
-                    "uuid": "e296c8a8-1ae5-484f-44e7-950d76d73ea0"
+                    "uuid": "593f1d72-1cad-906c-cbb2-4150572e2388"
                   },
                   "error": "",
                   "message": "OK"

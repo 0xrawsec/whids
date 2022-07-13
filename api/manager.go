@@ -468,7 +468,7 @@ func (m *Manager) ImportRules(directory string) (err error) {
 		rules = append(rules, rule)
 	}
 
-	if err = m.db.InsertOrUpdateMany(sod.ToObjectSlice(rules)...); err != nil {
+	if _, err = m.db.InsertOrUpdateMany(sod.ToObjectSlice(rules)...); err != nil {
 		return err
 	}
 

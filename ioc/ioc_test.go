@@ -80,7 +80,8 @@ func createIocDB(t *testing.T, size int) (db *sod.DB) {
 		iocs = append(iocs, ioc)
 	}
 
-	tt.CheckErr(db.InsertOrUpdateMany(iocs...))
+	_, err = db.InsertOrUpdateMany(iocs...)
+	tt.CheckErr(err)
 
 	return db
 }

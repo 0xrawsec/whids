@@ -1263,7 +1263,7 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 			}
 
 			// Do bulk insertion
-			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(insert)...); err != nil {
+			if _, err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(insert)...); err != nil {
 				wt.Write(admErr(err))
 				return
 			}
@@ -1414,7 +1414,7 @@ func (m *Manager) admAPIRules(wt http.ResponseWriter, rq *http.Request) {
 				}
 			}
 
-			if err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(rules)...); err != nil {
+			if _, err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(rules)...); err != nil {
 				err := fmt.Errorf("partial insert/update due to error: %s", err)
 				wt.Write(admErr(err))
 			} else if err := m.initializeGeneFromDB(); err != nil {

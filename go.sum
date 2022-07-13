@@ -20,6 +20,8 @@ github.com/0xrawsec/golang-win32 v1.0.14 h1:Lj45Cd7qnhCbtnrNCBI3twefRVh759q/rDXr
 github.com/0xrawsec/golang-win32 v1.0.14/go.mod h1:LDGq8VzCwLZccK1qg7oKBc8n5DmPLi79w+wjew1UApg=
 github.com/0xrawsec/sod v1.9.10 h1:XoSdy7AEEMCjN+3weHBvstotjaDg1hhtgxtbdC+4jO4=
 github.com/0xrawsec/sod v1.9.10/go.mod h1:N1cEdcsJxJZ6F7dPK0vpEQ+NdBO8uKS3CFPJyOmEK5E=
+github.com/0xrawsec/sod v1.10.0 h1:Gnw2FypCasXr0w5qE6Tx5jknhI6rcuja0tGrYg2S2oA=
+github.com/0xrawsec/sod v1.10.0/go.mod h1:N1cEdcsJxJZ6F7dPK0vpEQ+NdBO8uKS3CFPJyOmEK5E=
 github.com/0xrawsec/toast v1.2.3 h1:nTs5NyAdmSoDfxlYjMVMYb9wj3C/MFpnoIoQBPUsHXg=
 github.com/0xrawsec/toast v1.2.3/go.mod h1:sRvfNYxqVoH1sZnE18s9Knm/lkbarTGNvaNVBf2/h1k=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
