@@ -178,6 +178,8 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	h.initEnvVariables()
 	h.initEventProvider()
 	h.initHooks(c.EnableHooks)
+	// schedule tasks
+	h.scheduleTasks()
 	// fixing local audit policies if necessary
 	h.config.AuditConfig.Configure()
 
@@ -725,12 +727,9 @@ func (h *HIDS) Report(light bool) (r Report) {
 
 // Run starts the WHIDS engine and waits channel listening is stopped
 func (h *HIDS) Run() {
-	// Running all the threads
-	// Runs the forwarder
-	h.forwarder.Run()
 
-	// Start scheduler
-	h.scheduleTasks()
+	// start task scheduler
+	h.scheduler.Start()
 
 	for _, t := range h.scheduler.Tasks() {
 		log.Infof("Scheduler running: %s", t.Name)

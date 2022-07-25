@@ -579,6 +579,13 @@ func (h *HIDS) scheduleTasks() {
 
 	// routines scheduled in any case
 
+	// Forwarder scheduling
+	h.scheduler.Schedule(crony.NewTask("Log forwarder").Func(func() {
+		// this call starts a new go routine so we don't need to create
+		// a new AsyncTask as it is not a blocking call
+		h.forwarder.Run()
+	}).Schedule(time.Now()), crony.PrioHigh)
+
 	// routine managing Sysmon archived files cleanup
 	if err := h.scheduleCleanArchivedTask(); err != nil {
 		log.Error("failed to schedule sysmon archived file cleaning: ", err)
@@ -600,7 +607,4 @@ func (h *HIDS) scheduleTasks() {
 	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").Func(func() {
 		h.actionHandler.compressionLoop()
 	}).Schedule(time.Now()), crony.PrioHigh)
-
-	// start scheduler
-	h.scheduler.Start()
 }
