@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,7 +45,6 @@ type Command struct {
 	SentTime   time.Time     `json:"sent-time"`
 
 	runnable bool
-	path     []string
 }
 
 // NewCommand creates a new Command to run on an endpoint
@@ -118,16 +116,6 @@ func (c *Command) FromExecCmd(cmd *exec.Cmd) {
 	} else {
 		c.Name = cmd.Path
 	}
-}
-
-// BuildCmd builds up an exec.Cmd from Command
-func (c *Command) BuildCmd() (*exec.Cmd, error) {
-	if c.Timeout > 0 {
-		// we create a command with a timeout context if needed
-		ctx, _ := context.WithTimeout(context.Background(), c.Timeout)
-		return exec.CommandContext(ctx, c.Name, c.Args...), nil
-	}
-	return exec.Command(c.Name, c.Args...), nil
 }
 
 func (c *Command) Unrunnable() {
