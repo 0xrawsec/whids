@@ -52,10 +52,10 @@
 ## Weaknesses
 
 * Only works on Windows
-* Detection limited to what is available in the Windows event logs channels (already a lot in there)
+* Detection limited to what is available in Windows ~~event logs channels~~ ETW providers/sessions (already a lot in there)
 * No process instrumentation (it is also a strength as it depends on the point of view)
 * No GUI yet (will develop one if requested by the community)
-* No support for ETW
+* ~~No support for ETW~~ (available in beta)
 * Tell me if you notice others ...
 
 # Installation
