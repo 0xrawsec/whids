@@ -17,7 +17,6 @@ import (
 
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/readers"
-	"github.com/0xrawsec/golang-utils/scanner"
 	"github.com/0xrawsec/golang-utils/sync/semaphore"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/event"
@@ -105,28 +104,6 @@ func countEvents(s *logger.EventSearcher) (n int) {
 
 }
 
-func countLinesInGzFile(filepath string) int {
-	var line int
-	fd, err := os.Open(filepath)
-	log.Infof("Counting in %s", filepath)
-	if err != nil {
-		panic(fmt.Sprintf("Error counting lines, cannot open file: %s", err))
-	}
-	defer fd.Close()
-
-	s := scanner.New(fd)
-	s.Error = func(err error) {
-		log.Errorf("Error in countLinesInGzFile: %s", err)
-	}
-	s.InitWhitespace("\n")
-	for tok := range s.Tokenize() {
-		if tok == "\n" {
-			line++
-		}
-	}
-	return line
-}
-
 func readerFromEvents(count int) io.Reader {
 	buf := new(bytes.Buffer)
 	for event := range emitEvents(count, false) {
@@ -139,10 +116,6 @@ func clean(mc *ManagerConfig, fc *ForwarderConfig) {
 	os.RemoveAll(mc.Database)
 	os.RemoveAll(mc.Logging.Root)
 	os.RemoveAll(fc.Logging.Dir)
-}
-
-func logfileFromConfig(c ManagerConfig) string {
-	return filepath.Join(c.Logging.Root, c.Logging.LogBasename)
 }
 
 func TestForwarderBasic(t *testing.T) {
@@ -328,7 +301,6 @@ func TestForwarderParallel(t *testing.T) {
 			c, err := NewForwarder(ctx, &fconf)
 			if err != nil {
 				t.Errorf("Failed to create collector: %s", err)
-				t.FailNow()
 			}
 			c.Run()
 			defer c.Close()

@@ -125,11 +125,6 @@ func admJSONResp(data interface{}) []byte {
 	return NewAdminAPIResponse(data).ToJSON()
 }
 
-func admMsgStr(s string) []byte {
-	r := AdminAPIResponse{Message: s}
-	return r.ToJSON()
-}
-
 /////////////////// Manager functions
 
 var (
