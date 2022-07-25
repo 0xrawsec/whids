@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,7 +26,6 @@ import (
 )
 
 var (
-
 	eventFile = "./data/events.json"
 	events    = make([]event.EdrEvent, 0)
 )
@@ -162,7 +162,10 @@ func TestForwarderBasic(t *testing.T) {
 	r.Run()
 
 	fconf.Client.Key = key
-	f, err := NewForwarder(&fconf)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f, err := NewForwarder(ctx, &fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
 		t.FailNow()
@@ -210,7 +213,11 @@ func TestCollectorAuthFailure(t *testing.T) {
 
 	fconf.Client.Key = key
 	fconf.Client.ServerKey = utils.UnsafeKeyGen(DefaultKeySize)
-	f, err := NewForwarder(&fconf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f, err := NewForwarder(ctx, &fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
 		t.FailNow()
@@ -255,7 +262,11 @@ func TestCollectorAuthSuccess(t *testing.T) {
 
 	fconf.Client.Key = key
 	fconf.Client.ServerKey = serverKey
-	f, err := NewForwarder(&fconf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f, err := NewForwarder(ctx, &fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
 		t.FailNow()
@@ -310,7 +321,11 @@ func TestForwarderParallel(t *testing.T) {
 			defer jobs.Release()
 			defer wg.Done()
 			fconf.Client.Key = key
-			c, err := NewForwarder(&fconf)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			c, err := NewForwarder(ctx, &fconf)
 			if err != nil {
 				t.Errorf("Failed to create collector: %s", err)
 				t.FailNow()
@@ -355,7 +370,11 @@ func TestForwarderQueueBasic(t *testing.T) {
 
 	// Inititialize the forwarder
 	fconf.Client.Key = key
-	f, err := NewForwarder(&fconf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f, err := NewForwarder(ctx, &fconf)
 	if err != nil {
 		t.Errorf("Failed to create collector: %s", err)
 		t.FailNow()
@@ -412,8 +431,12 @@ func TestForwarderCleanup(t *testing.T) {
 
 	// Change rotation interval not to create unexpected number of files
 	fconf.Logging.RotationInterval = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Inititialize the forwarder
-	f, err := NewForwarder(&fconf)
+	f, err := NewForwarder(ctx, &fconf)
 	tt.CheckErr(err)
 	// decreases sleep time to speed up test
 	f.sleep = time.Millisecond * 500

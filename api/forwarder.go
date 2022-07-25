@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,12 +44,12 @@ type ForwarderConfig struct {
 // Forwarder structure definition
 type Forwarder struct {
 	sync.Mutex
+	sync.WaitGroup
+	ctx       context.Context
+	cancel    context.CancelFunc
 	fwdConfig *ForwarderConfig
-	stop      chan bool
-	done      chan bool
 	logfile   logfile.LogFile
 	sleep     time.Duration
-	closed    bool
 
 	Client      *ManagerClient
 	TimeTresh   time.Duration
@@ -60,15 +61,17 @@ type Forwarder struct {
 
 // NewForwarder creates a new Forwarder structure
 // Todo: needs update with client
-func NewForwarder(c *ForwarderConfig) (*Forwarder, error) {
+func NewForwarder(ctx context.Context, c *ForwarderConfig) (*Forwarder, error) {
 	var err error
+
+	cctx, cancel := context.WithCancel(ctx)
 
 	// Initialize the Forwarder
 	// TODO: better organize forwarder configuration
 	co := Forwarder{
+		ctx:       cctx,
+		cancel:    cancel,
 		fwdConfig: c,
-		stop:      make(chan bool),
-		done:      make(chan bool),
 		sleep:     time.Second,
 		TimeTresh: time.Second * 10,
 		// Writing events too quickly has a perf impact
@@ -330,17 +333,13 @@ func (f *Forwarder) Collect() {
 
 // Run starts the Forwarder worker function
 func (f *Forwarder) Run() {
+	f.Add(1)
 	// Process Piped Events
 	go func() {
-		// defer signal that we are done
-		defer func() { f.done <- true }()
+		defer f.Done()
+
 		timer := time.Now()
-		for {
-			select {
-			case <-f.stop:
-				return
-			default:
-			}
+		for f.ctx.Err() == nil {
 			// We have queued events so we try to send them before sending pending events
 			// We check if server is up not to close the current logfile if not needed
 			if f.HasQueuedEvents() {
@@ -364,23 +363,29 @@ func (f *Forwarder) Run() {
 
 // Close closes the forwarder properly
 func (f *Forwarder) Close() {
-	if f.closed {
+
+	// forwarder is already closed -> nothing to do
+	if f.ctx.Err() != nil {
 		return
+	}
+
+	// we cancel forwarder's context
+	f.cancel()
+	// we wait for forwarding routine to terminate
+	f.Wait()
+
+	// we collect last events if needed
+	if f.EventsPiped > 0 {
+		f.Collect()
+	}
+
+	// we close logfile
+	if f.logfile != nil {
+		f.logfile.Close()
 	}
 
 	// Close idle connections if not local
 	if !f.Local {
 		defer f.Client.Close()
 	}
-	f.stop <- true
-	// Waiting forwarder stopped routine is done
-	<-f.done
-	if f.EventsPiped > 0 {
-		f.Collect()
-	}
-	if f.logfile != nil {
-		f.logfile.Close()
-	}
-
-	f.closed = true
 }

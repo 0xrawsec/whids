@@ -215,8 +215,11 @@ func prep() (m *Manager, c *ManagerClient) {
 	}
 	fconf.Client.Key = key
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// sending logs to manager
-	f, err := NewForwarder(&fconf)
+	f, err := NewForwarder(ctx, &fconf)
 	if err != nil {
 		panic(err)
 	}

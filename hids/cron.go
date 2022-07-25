@@ -592,6 +592,7 @@ func (h *HIDS) scheduleTasks() {
 		}
 	}).Schedule(time.Now()), crony.PrioHigh)
 
+	// Action handler scheduling
 	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler").Func(func() {
 		h.actionHandler.handleActionsLoop()
 	}).Schedule(time.Now()), crony.PrioHigh)
@@ -600,5 +601,6 @@ func (h *HIDS) scheduleTasks() {
 		h.actionHandler.compressionLoop()
 	}).Schedule(time.Now()), crony.PrioHigh)
 
+	// start scheduler
 	h.scheduler.Start()
 }

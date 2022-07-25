@@ -167,7 +167,7 @@ func NewHIDS(c *Config) (h *HIDS, err error) {
 	}
 
 	// loading forwarder config
-	if h.forwarder, err = api.NewForwarder(c.FwdConfig); err != nil {
+	if h.forwarder, err = api.NewForwarder(h.ctx, h.config.FwdConfig); err != nil {
 		return
 	}
 
@@ -728,9 +728,6 @@ func (h *HIDS) Run() {
 	// Running all the threads
 	// Runs the forwarder
 	h.forwarder.Run()
-
-	// Running action manager
-	//h.actionHandler.handleActionsLoop()
 
 	// Start scheduler
 	h.scheduleTasks()
