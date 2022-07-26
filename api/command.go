@@ -23,8 +23,8 @@ type EndpointFile struct {
 	Error string `json:"error"`
 }
 
-// Command structure representing a command sent to an endpoint
-type Command struct {
+// EndpointCommand structure representing a command sent to an endpoint
+type EndpointCommand struct {
 	UUID string   `json:"uuid"`
 	Name string   `json:"name"`
 	Args []string `json:"args"`
@@ -47,10 +47,10 @@ type Command struct {
 	runnable bool
 }
 
-// NewCommand creates a new Command to run on an endpoint
-func NewCommand() *Command {
+// NewEndpointCommand creates a new Command to run on an endpoint
+func NewEndpointCommand() *EndpointCommand {
 	id := utils.UnsafeUUIDGen()
-	cmd := &Command{
+	cmd := &EndpointCommand{
 		UUID:     id.String(),
 		Drop:     make([]*EndpointFile, 0),
 		Fetch:    make(map[string]*EndpointFile),
@@ -59,7 +59,7 @@ func NewCommand() *Command {
 }
 
 // SetCommandLine sets the command line to execute on the endpoint
-func (c *Command) SetCommandLine(cl string) error {
+func (c *EndpointCommand) SetCommandLine(cl string) error {
 	args, err := shlex.Split(cl)
 	if err != nil {
 		return fmt.Errorf("failed to parse command line: %w", err)
@@ -76,7 +76,7 @@ func (c *Command) SetCommandLine(cl string) error {
 
 // AddDropFile adds a file to drop on the endpoint. Argument filepath
 // is the path of the file on the local filesystem
-func (c *Command) AddDropFile(filename, filepath string) error {
+func (c *EndpointCommand) AddDropFile(filename, filepath string) error {
 	var err error
 
 	ef := EndpointFile{
@@ -93,16 +93,16 @@ func (c *Command) AddDropFile(filename, filepath string) error {
 
 // AddDropFileFromPath adds a file to drop on the endpoint. It
 // is a wrapper around AddDropFile
-func (c *Command) AddDropFileFromPath(path string) error {
+func (c *EndpointCommand) AddDropFileFromPath(path string) error {
 	return c.AddDropFile(filepath.Base(path), path)
 }
 
 // AddFetchFile adds a file to fetch from the endpoint.
-func (c *Command) AddFetchFile(filepath string) {
+func (c *EndpointCommand) AddFetchFile(filepath string) {
 	c.Fetch[filepath] = &EndpointFile{UUID: utils.UnsafeUUIDGen().String()}
 }
 
-func (c *Command) FromExecCmd(cmd *exec.Cmd) {
+func (c *EndpointCommand) FromExecCmd(cmd *exec.Cmd) {
 	if cmd.Args != nil {
 		if len(cmd.Args) > 0 {
 			c.Name = cmd.Args[0]
@@ -118,13 +118,13 @@ func (c *Command) FromExecCmd(cmd *exec.Cmd) {
 	}
 }
 
-func (c *Command) Unrunnable() {
+func (c *EndpointCommand) Unrunnable() {
 	c.runnable = false
 }
 
 // Run runs the command according to the specified settings
 // it aims at being used on the endpoint
-func (c *Command) Run() (err error) {
+func (c *EndpointCommand) Run() (err error) {
 	// current working directory for command
 	var cwd string
 	var cmd *command.Cmd
@@ -205,24 +205,24 @@ func (c *Command) Run() (err error) {
 	return
 }
 
-func (c *Command) ErrorFrom(err error) {
+func (c *EndpointCommand) ErrorFrom(err error) {
 	c.Error = err.Error()
 }
 
-func (c *Command) Err() error {
+func (c *EndpointCommand) Err() error {
 	if c.Error == "" {
 		return nil
 	}
 	return errors.New(c.Error)
 }
 
-func (c Command) String() string {
+func (c EndpointCommand) String() string {
 	return fmt.Sprintf("%s %s", c.Name, c.Args)
 }
 
 // Strip reduces the command to the strict necessary fields
 // to make the return trip from the endpoint to the manager
-func (c *Command) Strip() {
+func (c *EndpointCommand) Strip() {
 	//c.Name = ""
 	//c.Args = nil
 	for _, ef := range c.Drop {
@@ -231,7 +231,7 @@ func (c *Command) Strip() {
 }
 
 // Complete updates a command from another
-func (c *Command) Complete(other *Command) error {
+func (c *EndpointCommand) Complete(other *EndpointCommand) error {
 	if c.UUID == other.UUID {
 		c.Name = other.Name
 		c.Args = other.Args
@@ -245,5 +245,5 @@ func (c *Command) Complete(other *Command) error {
 		c.Completed = true
 		return nil
 	}
-	return fmt.Errorf("Command does not have the same ID")
+	return fmt.Errorf("command does not have the same ID")
 }

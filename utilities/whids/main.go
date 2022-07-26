@@ -14,8 +14,9 @@ import (
 	"path/filepath"
 
 	"github.com/0xrawsec/gene/v2/engine"
-	"github.com/0xrawsec/whids/hids"
-	"github.com/0xrawsec/whids/hids/sysinfo"
+	"github.com/0xrawsec/whids/agent"
+	"github.com/0xrawsec/whids/agent/config"
+	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 	"golang.org/x/sys/windows/svc"
@@ -48,7 +49,7 @@ var (
 	abs, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 
 	// DefaultHIDSConfig is the default HIDS configuration
-	DefaultHIDSConfig = hids.BuildDefaultConfig(abs)
+	DefaultHIDSConfig = agent.BuildDefaultConfig(abs)
 )
 
 var (
@@ -64,11 +65,11 @@ var (
 	flagRestore    bool
 	flagAutologger bool
 
-	hostIDS *hids.HIDS
+	hostIDS *agent.Agent
 
 	importRules string
 
-	config = filepath.Join(abs, "config.toml")
+	configFile = filepath.Join(abs, "config.toml")
 
 	osSignals = make(chan os.Signal)
 )
@@ -81,7 +82,7 @@ func configure() error {
 	var writer *os.File
 	var err error
 
-	if writer, err = utils.HidsCreateFile(config); err != nil {
+	if writer, err = utils.HidsCreateFile(configFile); err != nil {
 		return err
 	}
 	defer writer.Close()
@@ -94,14 +95,14 @@ func configure() error {
 	return nil
 }
 
-func updateAutologger(c *hids.Config) error {
+func updateAutologger(c *config.Agent) error {
 	if err := c.EtwConfig.ConfigureAutologger(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func restoreCanaries(c *hids.Config) {
+func restoreCanaries(c *config.Agent) {
 	// Removing ACLs found in config
 	log.Infof("Restoring global File System Audit ACLs")
 	c.AuditConfig.Restore()
@@ -110,7 +111,7 @@ func restoreCanaries(c *hids.Config) {
 	c.CanariesConfig.RestoreACLs()
 }
 
-func cleanCanaries(c *hids.Config) {
+func cleanCanaries(c *config.Agent) {
 	restoreCanaries(c)
 
 	log.Infof("Deleting canary files")
@@ -118,21 +119,21 @@ func cleanCanaries(c *hids.Config) {
 }
 
 func deleteAutologger() error {
-	return hids.Autologger.Delete()
+	return config.Autologger.Delete()
 }
 
 func runHids(service bool) {
 	var err error
-	var hidsConf hids.Config
+	var hidsConf config.Agent
 
 	log.Infof("Running HIDS as Windows service: %t", service)
 
-	hidsConf, err = hids.LoadsHIDSConfig(config)
+	hidsConf, err = config.LoadsHIDSConfig(configFile)
 	if err != nil {
 		log.Abort(exitFail, fmt.Errorf("failed to load configuration: %s", err))
 	}
 
-	hostIDS, err = hids.NewHIDS(&hidsConf)
+	hostIDS, err = agent.NewAgent(&hidsConf)
 	if err != nil {
 		log.Abort(exitFail, fmt.Errorf("failed to create HIDS: %s", err))
 	}
@@ -194,7 +195,7 @@ func main() {
 	flag.BoolVar(&flagProfile, "prof", flagProfile, "Profile program")
 	flag.BoolVar(&flagDebug, "d", flagDebug, "Enable debugging messages")
 	flag.BoolVar(&flagRestore, "restore", flagRestore, "Restore Audit Policies and File System Audit ACLs according to configuration file")
-	flag.StringVar(&config, "c", config, "Configuration file")
+	flag.StringVar(&configFile, "c", configFile, "Configuration file")
 	flag.StringVar(&importRules, "import", importRules, "Import rules")
 
 	flag.Usage = func() {
@@ -231,7 +232,7 @@ func main() {
 			}
 		}
 
-		conf, err := hids.LoadsHIDSConfig(config)
+		conf, err := config.LoadsHIDSConfig(configFile)
 		if err != nil {
 			log.Errorf("Failed to load configuration: %s", err)
 			os.Exit(exitFail)
@@ -252,11 +253,11 @@ func main() {
 
 	if flagUninstall {
 		// we should not abort uninstallation if error
-		var conf hids.Config
+		var conf config.Agent
 
 		rc := exitSuccess
 
-		if conf, err = hids.LoadsHIDSConfig(config); err == nil {
+		if conf, err = config.LoadsHIDSConfig(configFile); err == nil {
 			cleanCanaries(&conf)
 		} else {
 			log.Errorf("Failed to load configuration: %s", err)
@@ -299,7 +300,7 @@ func main() {
 		log.InitLogger(log.LDebug)
 	}
 
-	hidsConf, err := hids.LoadsHIDSConfig(config)
+	hidsConf, err := config.LoadsHIDSConfig(configFile)
 	if err != nil {
 		log.Abort(exitFail, fmt.Sprintf("Failed to load configuration: %s", err))
 	}

@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	eptAPIVerbosePaths = []string{
+	EptAPIVerbosePaths = []string{
 		EptAPIServerKeyPath,
 		EptAPICommandPath,
 		EptAPIRulesSha256Path,

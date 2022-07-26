@@ -1,12 +1,12 @@
 # EDR commands documentation
 
-This page documents the EDR specific commands endpoints can run.In addition to all the commands documented\
+This page documents the EDR specific commands endpoints can run. In addition to all the commands documented\
 below, **any** other binary present on the endpoint can be executed, whether by absolute path or without if\
-the binary is present in the **PATH** environment variable. To understand how to send commands to endpoints and\
+the binary is present in **PATH** environment variable. To understand how to send commands to endpoints and\
 how to receive results, please take a look at the [**OpenAPI** documentation](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json).
 
 **IMPORTANT:** paths in command examples may contain escape sequences (Windows paths for instances).\
-When such path is used inside JSON escape characters needs to be escaped once again (to be JSON valid).\
+When such path is used inside JSON, escape characters needs to be escaped twice (to be JSON valid).\
 For instance if one wants to execute `tasklist` command from an absolute path the command would have to\
 be encoded as such `C:\\\\Windows\\\\System32\\\\tasklist.exe`
 

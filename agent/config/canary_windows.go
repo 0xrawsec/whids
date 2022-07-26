@@ -1,0 +1,256 @@
+//go:build windows
+// +build windows
+
+package config
+
+import (
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/0xrawsec/gene/v2/engine"
+	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/golang-utils/fsutil"
+	"github.com/0xrawsec/whids/utils"
+)
+
+// expands environment variables found in directories
+func (c *Canary) expandDir() (dirs []string) {
+	return utils.ExpandEnvs(c.Directories...)
+}
+
+// create the canary files and directories
+func (c *Canary) create() (err error) {
+	c.createdDir = datastructs.NewSyncedSet()
+
+	for _, dir := range c.expandDir() {
+		// we create directory only if it is not existing
+		if !fsutil.Exists(dir) {
+			if err := os.MkdirAll(dir, 0777); err != nil {
+				return err
+			}
+			if c.HideDirectories {
+				if err := utils.HideFile(dir); err != nil {
+					return err
+				}
+			}
+			c.createdDir.Add(dir)
+		}
+	}
+
+	for _, fp := range c.paths() {
+		// we create files only if it is not existing
+		if !fsutil.Exists(fp) {
+			var fd *os.File
+
+			if fd, err = os.Create(fp); err != nil {
+				return err
+			}
+			defer fd.Close()
+			rand.Seed(time.Now().Unix())
+			buf := [1024]byte{}
+			size := rand.Int() % 50 * utils.Mega
+			written, n := 0, 0
+			for written < size && err == nil {
+				if _, err = rand.Read(buf[:]); err != nil {
+					continue
+				}
+				n, err = fd.Write(buf[:])
+				written += n
+			}
+			fd.Close()
+
+			if c.HideFiles {
+				if err := utils.HideFile(fp); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// clean the canary files
+func (c *Canary) clean() (last error) {
+	if c.Delete {
+		// we remove canary files
+		for _, fp := range c.paths() {
+			if err := os.Remove(fp); err != nil {
+				last = err
+			}
+		}
+
+		// we remove only empty directories
+		for _, dir := range c.expandDir() {
+			empty, err := utils.IsDirEmpty(dir)
+
+			if err != nil || !empty {
+				last = err
+				continue
+			}
+
+			if err := os.Remove(dir); err != nil {
+				last = err
+			}
+		}
+
+		// we remove directory which have been created
+		if c.createdDir != nil {
+			for _, i := range c.createdDir.Slice() {
+				dir := i.(string)
+				if err := os.RemoveAll(dir); err != nil {
+					last = err
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// return a list containing the full paths of the canary files
+func (c *Canary) paths() (files []string) {
+	files = make([]string, 0, len(c.Files)*len(c.Directories))
+	for _, dir := range c.expandDir() {
+		for _, fn := range c.Files {
+			files = append(files, filepath.Join(dir, fn))
+		}
+	}
+	return
+}
+
+func (c *Canaries) canaryRegexp() string {
+	repaths := make([]string, 0)
+	for _, c := range c.Canaries {
+
+		// adding list of created dir
+		for _, i := range c.createdDir.Slice() {
+			dir := fmt.Sprintf("%s%c", i.(string), os.PathSeparator)
+			repaths = append(repaths, regexp.QuoteMeta(dir))
+		}
+
+		for _, fp := range c.paths() {
+			dir := filepath.Dir(fp)
+			if !c.createdDir.Contains(dir) {
+				repaths = append(repaths, regexp.QuoteMeta(fp))
+			}
+		}
+	}
+	return fmt.Sprintf("(?i:(%s))", strings.Join(repaths, "|"))
+}
+
+func (c *Canaries) whitelistRegexp() string {
+	wl := make([]string, 0, len(c.Whitelist))
+	for _, im := range c.Whitelist {
+		wl = append(wl, regexp.QuoteMeta(im))
+	}
+	return fmt.Sprintf("(?i:(%s))", strings.Join(wl, "|"))
+}
+
+// Configure creates canaries and set ACLs if needed
+func (c *Canaries) Configure() error {
+	auditDirs := make([]string, 0)
+	if c.Enable {
+		for _, cf := range c.Canaries {
+			// add the list of directories to audit
+			if cf.SetAuditACL {
+				auditDirs = append(auditDirs, cf.expandDir()...)
+			}
+
+			if err := cf.create(); err != nil {
+				return fmt.Errorf("failed at creating canary: %w", err)
+			}
+		}
+
+		// run this function async as it might take a little bit of time
+		if err := utils.SetEDRAuditACL(auditDirs...); err != nil {
+			return fmt.Errorf("error while setting canaries' Audit ACLs: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RestoreACLs restore EDR configured ACLs
+func (c *Canaries) RestoreACLs() error {
+	auditDirs := make([]string, 0)
+	for _, cf := range c.Canaries {
+		// add the list of directories to audit
+		if cf.SetAuditACL {
+			auditDirs = append(auditDirs, cf.expandDir()...)
+		}
+	}
+
+	if err := utils.RemoveEDRAuditACL(auditDirs...); err != nil {
+		return fmt.Errorf("error while setting canaries' Audit ACLs: %w", err)
+	}
+
+	return nil
+}
+
+// GenRuleFSAudit generate a rule matching FS Audit events for the configured canaries
+func (c *Canaries) GenRuleFSAudit() (r engine.Rule) {
+	r = engine.NewRule()
+	r.Name = "Builtin:CanaryAccessed"
+	r.Meta.Events = map[string][]int64{"Security": {4663}}
+	r.Meta.Criticality = 10
+	r.Matches = []string{
+		"$read: AccessMask &= '0x1'",
+		"$write: AccessMask &= '0x2'",
+		"$append: AccessMask &= '0x4'",
+		fmt.Sprintf("$wl_images: ProcessName ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: ObjectName ~= '%s'", c.canaryRegexp()),
+	}
+	r.Condition = "!$wl_images and ($read or $write or $append) and $canary"
+	r.Actions = append(r.Actions, c.Actions...)
+	return
+}
+
+// GenRuleSysmon generate a rule matching sysmon events for the configured canaries
+func (c *Canaries) GenRuleSysmon() (r engine.Rule) {
+	r = engine.NewRule()
+	r.Name = "Builtin:CanaryModified"
+	// FileCreate, FileDeleted and FileDeletedDetected
+	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {11, 23, 26}}
+	r.Meta.Criticality = 10
+	r.Matches = []string{
+		fmt.Sprintf("$wl_images: Image ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: TargetFilename ~= '%s'", c.canaryRegexp()),
+	}
+	r.Condition = "!$wl_images and $canary"
+	r.Actions = append(r.Actions, c.Actions...)
+	return
+}
+
+// GenRuleSysmon generate a rule matching sysmon events for the configured canaries
+func (c *Canaries) GenRuleKernelFile() (r engine.Rule) {
+	r = engine.NewRule()
+	r.Name = "Builtin:CanaryReadWrite"
+	// FileCreate, FileDeleted and FileDeletedDetected
+	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Kernel-File/Analytic": {15, 16}}
+	r.Meta.Criticality = 10
+	r.Matches = []string{
+		fmt.Sprintf("$wl_images: Image ~= '%s'", c.whitelistRegexp()),
+		fmt.Sprintf("$canary: FileName ~= '%s'", c.canaryRegexp()),
+	}
+	r.Condition = "!$wl_images and $canary"
+	r.Actions = append(r.Actions, c.Actions...)
+	return
+}
+
+// Clean cleans up the canaries
+func (c *Canaries) Clean() (last error) {
+	if c.Enable {
+		for _, cf := range c.Canaries {
+			if err := cf.clean(); err != nil {
+				last = err
+			}
+		}
+	}
+	return
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api"
+	"github.com/0xrawsec/whids/api/server"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
 )
@@ -33,24 +34,23 @@ const (
 )
 
 var (
-	managerConf api.ManagerConfig
-	manager     *api.Manager
-	osSignals   = make(chan os.Signal)
+	manager   *server.Manager
+	osSignals = make(chan os.Signal)
 
 	// Used for certificate generation
 	defaultOrg          = "WHIDS Manager"
 	defaultCertValidity = time.Hour * 24 * 365
 
-	simpleManagerConfig = api.ManagerConfig{
-		AdminAPI: api.AdminAPIConfig{
+	simpleManagerConfig = server.ManagerConfig{
+		AdminAPI: server.AdminAPIConfig{
 			Host: "localhost",
 			Port: api.AdmAPIDefaultPort,
 		},
-		EndpointAPI: api.EndpointAPIConfig{
+		EndpointAPI: server.EndpointAPIConfig{
 			Host: "0.0.0.0",
 			Port: api.EptAPIDefaultPort,
 		},
-		Logging: api.ManagerLogConfig{
+		Logging: server.ManagerLogConfig{
 			Root:        "./data/logs",
 			LogBasename: "forwarded",
 		},
@@ -89,7 +89,7 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 
 func generateCert(hosts []string) error {
 	if len(hosts) == 0 {
-		return fmt.Errorf("Missing required --host parameter")
+		return fmt.Errorf("missing required --host parameter")
 	}
 
 	var priv interface{}
@@ -135,7 +135,7 @@ func generateCert(hosts []string) error {
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
 
 	if err != nil {
-		return fmt.Errorf("Failed to create certificate: %s", err)
+		return fmt.Errorf("failed to create certificate: %s", err)
 	}
 
 	certOut, err := os.OpenFile("cert.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -247,26 +247,26 @@ func main() {
 	}
 
 	if openapi {
-		fmt.Println(api.OpenAPIDefinition)
+		fmt.Println(server.OpenAPIDefinition)
 		os.Exit(0)
 	}
 
-	managerConf, err := api.LoadManagerConfig(config)
+	managerConf, err := server.LoadManagerConfig(config)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("Failed to load manager configuration: %s", err))
+		log.Abort(exitFail, fmt.Errorf("failed to load manager configuration: %s", err))
 	}
 
 	if user != "" {
-		u := &api.AdminAPIUser{
+		u := &server.AdminAPIUser{
 			Uuid:       utils.UnsafeUUIDGen().String(),
 			Identifier: user,
 			Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
 		}
 
-		manager, err = api.NewManager(managerConf)
+		manager, err = server.NewManager(managerConf)
 
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
+			log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 		}
 
 		if err = manager.CreateNewAdminAPIUser(u); err != nil {
@@ -279,9 +279,9 @@ func main() {
 	}
 
 	if imprules != "" {
-		manager, err = api.NewManager(managerConf)
+		manager, err = server.NewManager(managerConf)
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
+			log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 		}
 
 		if err = manager.ImportRules(imprules); err != nil {
@@ -294,7 +294,7 @@ func main() {
 	if certgen {
 		err = generateCert([]string{managerConf.EndpointAPI.Host, managerConf.AdminAPI.Host})
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("Failed to generate key/cert pair: %s", err))
+			log.Abort(exitFail, fmt.Errorf("failed to generate key/cert pair: %s", err))
 		}
 		log.Infof("Certificate and key generated should be used for testing purposes only.")
 		os.Exit(0)
@@ -305,9 +305,9 @@ func main() {
 		log.Infof("Attempting to repair broken database")
 	}
 
-	manager, err = api.NewManager(managerConf)
+	manager, err = server.NewManager(managerConf)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("Failed to create manager: %s", err))
+		log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 	}
 
 	// Registering signal handler for sig interrupt

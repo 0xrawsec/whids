@@ -1,4 +1,6 @@
+package server
 
+var OpenAPIDefinition = `
 {
   "openapi": "3.0.2",
   "info": {
@@ -5244,4 +5246,4 @@
     }
   ]
 }
-
+`
