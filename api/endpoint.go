@@ -22,10 +22,10 @@ type Endpoint struct {
 	Score          float64             `json:"score"`
 	Status         string              `json:"status"`
 	SystemInfo     *sysinfo.SystemInfo `json:"system-info,omitempty"`
-	Config         *config.Agent
-	LastEvent      time.Time `json:"last-event"`
-	LastDetection  time.Time `json:"last-detection"`
-	LastConnection time.Time `json:"last-connection"`
+	Config         *config.Agent       `json:"config,omitempty"`
+	LastEvent      time.Time           `json:"last-event"`
+	LastDetection  time.Time           `json:"last-detection"`
+	LastConnection time.Time           `json:"last-connection"`
 }
 
 // NewEndpoint returns a new Endpoint structure

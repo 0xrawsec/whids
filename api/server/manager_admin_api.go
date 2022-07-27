@@ -18,6 +18,7 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"
 	"github.com/0xrawsec/sod"
+	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/ioc"
@@ -321,6 +322,8 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 				if endpt.Criticality < int(criticality) {
 					continue
 				}
+				// never show config
+				endpt.Config = nil
 				// never show command
 				endpt.Command = nil
 				if !showKey {
@@ -395,6 +398,11 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 				}
 			}
 
+			// never show command
+			endpt.Command = nil
+			// never show config
+			endpt.Config = nil
+
 			// score is updated at every call as it depends on all the other endpoints
 			endpt.Score = m.gene.reducer.BoundedScore(endpt.Uuid)
 
@@ -418,35 +426,71 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-// CommandAPI structure used by Admin API clients to POST commands
-type CommandAPI struct {
-	CommandLine string        `json:"command-line"`
-	FetchFiles  []string      `json:"fetch-files"`
-	DropFiles   []string      `json:"drop-files"`
-	Timeout     time.Duration `json:"timeout"`
-}
+func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request) {
+	var euuid string
+	var err error
 
-// ToCommand converts a CommandAPI to a Command
-func (c *CommandAPI) ToCommand() (*api.EndpointCommand, error) {
-	cmd := api.NewEndpointCommand()
-	// adding command line
-	if err := cmd.SetCommandLine(c.CommandLine); err != nil {
-		return cmd, err
+	qpfmt := rq.URL.Query().Get(api.QpFormat)
+
+	if euuid, err = muxGetVar(rq, "euuid"); err == nil {
+		if endpt, ok := m.Endpoint(euuid); ok {
+			var err error
+
+			switch rq.Method {
+
+			case "POST":
+				c := config.Agent{}
+				log.Info("format=", qpfmt)
+				switch qpfmt {
+				case "toml":
+					log.Info("reading toml")
+					err = readPostAsTOML(rq, &c)
+				default:
+					err = readPostAsJSON(rq, &c)
+				}
+
+				if err != nil && rq.ContentLength > 0 {
+					wt.Write(admErr(err.Error()))
+					return
+				}
+
+				endpt.Config = &c
+
+				if err = m.db.InsertOrUpdate(endpt); err != nil {
+					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
+				}
+
+			case "DELETE":
+
+				// delete configuration
+				endpt.Config = nil
+
+				if err = m.db.InsertOrUpdate(endpt); err != nil {
+					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
+				}
+			}
+
+			var respData any
+			respData = endpt.Config
+
+			if qpfmt == "toml" {
+				if endpt.Config != nil {
+					respData, err = utils.TomlString(endpt.Config)
+				}
+			}
+
+			apiResp := NewAdminAPIResponse(respData)
+			if err != nil {
+				apiResp.Error = err.Error()
+			}
+
+			wt.Write(apiResp.ToJSON())
+		} else {
+			wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
+		}
+	} else {
+		wt.Write(admErr(format("Failed to parse URL: %s", err)))
 	}
-
-	// adding files to fetch
-	for _, ff := range c.FetchFiles {
-		cmd.AddFetchFile(ff)
-	}
-
-	// adding files to drop on the endpoint
-	for _, df := range c.DropFiles {
-		cmd.AddDropFileFromPath(df)
-	}
-
-	cmd.Timeout = c.Timeout
-
-	return cmd, nil
 }
 
 func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request) {
@@ -1517,6 +1561,7 @@ func (m *Manager) runAdminAPI() {
 		rt.HandleFunc(api.AdmAPIUserByID, m.admAPIUser).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(api.AdmAPIEndpointsPath, m.admAPIEndpoints).Methods("GET", "PUT")
 		rt.HandleFunc(api.AdmAPIEndpointsByIDPath, m.admAPIEndpoint).Methods("GET", "POST", "DELETE")
+		rt.HandleFunc(api.AdmAPIEndpointConfigPath, m.admAPIEndpointConfig).Methods("GET", "POST", "DELETE")
 		rt.HandleFunc(api.AdmAPIEndpointCommandPath, m.admAPIEndpointCommand).Methods("GET", "POST")
 		rt.HandleFunc(api.AdmAPIEndpointCommandFieldPath, m.admAPIEndpointCommandField).Methods("GET")
 		rt.HandleFunc(api.AdmAPIEndpointsReportsPath, m.admAPIEndpointsReports).Methods("GET")

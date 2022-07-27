@@ -138,7 +138,7 @@ func TestHooks(t *testing.T) {
 	defer os.RemoveAll(tmp)
 
 	c := BuildDefaultConfig(tmp)
-	c.Actions = &config.Actions{
+	c.Actions = config.Actions{
 		AvailableActions: AvailableActions,
 		Low:              []string{},
 		Medium:           []string{},

@@ -167,7 +167,7 @@ func NewAgent(c *config.Agent) (h *Agent, err error) {
 	}
 
 	// loading forwarder config
-	if h.forwarder, err = client.NewForwarder(h.ctx, h.config.FwdConfig); err != nil {
+	if h.forwarder, err = client.NewForwarder(h.ctx, &h.config.FwdConfig); err != nil {
 		return
 	}
 

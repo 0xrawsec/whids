@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/code/builder"
 	"github.com/0xrawsec/toast"
+	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/client"
@@ -154,7 +156,10 @@ var (
 			URL: defaultServerConfig.AdminAPIUrl(),
 		})
 
-	systemInfo = &sysinfo.SystemInfo{}
+	systemInfo  = &sysinfo.SystemInfo{}
+	agentConfig = config.Agent{
+		DatabasePath: "somerandompath",
+	}
 )
 
 func init() {
@@ -302,7 +307,7 @@ func writeConfig(filename string, data []byte) {
 	f.Write(data)
 }
 
-func TestOpenApi(t *testing.T) {
+func TestOpenApiUserManagement(t *testing.T) {
 	f := func(t *testing.T) {
 		// User Management
 		usersPath := openapi.PathItem{
@@ -440,6 +445,84 @@ func TestOpenApiEndpointManagement(t *testing.T) {
 			},
 			Output: AdminAPIResponse{},
 		})
+	}
+
+	runAdminApiTest(t, f)
+}
+
+func TestOpenApiEndpointConfiguration(t *testing.T) {
+	f := func(t *testing.T) {
+		tt := toast.FromT(t)
+
+		c := &config.Agent{}
+		out := &AdminAPIResponse{Data: c}
+		qptoml := openapi.QueryParameter(api.QpFormat, "toml", "Select output format (allowed toml, json)")
+		qpjson := openapi.QueryParameter(api.QpFormat, "json", "Select output format (allowed toml, json)")
+		agentConfigStr, err := utils.TomlString(agentConfig)
+		tt.CheckErr(err)
+		tomlBody := openapi.BinaryRequestBody("Configuration content", []byte(agentConfigStr), true)
+		configAPI := openapi.Operation{
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+			},
+			Output: out,
+		}
+
+		// Endpoint Management
+		endpointPath := openapi.PathItem{
+			Summary: "Endpoint Configuration",
+			Value:   api.AdmAPIEndpointsPath,
+		}
+
+		openAPI.Do(endpointPath, openapi.Operation{
+			Method:  "POST",
+			Summary: "Change endpoint configuration",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+			},
+			//RequestBody: openapi.BinaryRequestBody("Configuration content", []byte(agentConfigStr), true),
+			RequestBody: openapi.JsonRequestBody("Configuration content", agentConfig, true),
+			Output:      AdminAPIResponse{Data: config.Agent{}},
+		})
+
+		// cannot parse toml string into config.Agent
+		tt.Assert(openAPI.Test(endpointPath, configAPI.GET(qptoml)) != nil)
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.GET()))
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.GET(qpjson)))
+		// checking that POST method worked as intented
+		tt.Assert(reflect.DeepEqual(*c, agentConfig))
+
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.DELETE()))
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.POST(tomlBody, qptoml)))
+		c = &config.Agent{}
+		out.Data = c
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.GET()))
+		tt.Assert(c.DatabasePath == agentConfig.DatabasePath)
+
+		openAPI.Do(endpointPath, openapi.Operation{
+			Method:  "GET",
+			Summary: "Get endpoint configuration",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+			},
+			Output: AdminAPIResponse{Data: config.Agent{}},
+		})
+
+		// deleting configuration
+
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.DELETE()))
+		tt.CheckErr(openAPI.Test(endpointPath, configAPI.GET(qpjson)))
+		tt.Assert(out.Data == nil)
+
+		openAPI.Do(endpointPath, openapi.Operation{
+			Method:  "DELETE",
+			Summary: "Delete endpoint configuration (this causes the endpoint to sync again its current configuration)",
+			Parameters: []*openapi.Parameter{
+				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+			},
+			Output: AdminAPIResponse{Data: config.Agent{}},
+		})
+
 	}
 
 	runAdminApiTest(t, f)

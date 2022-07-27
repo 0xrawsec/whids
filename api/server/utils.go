@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/pelletier/go-toml"
 )
 
 func muxGetVar(rq *http.Request, name string) (string, error) {
@@ -30,6 +31,15 @@ func readPostAsJSON(rq *http.Request, i interface{}) error {
 		return fmt.Errorf("failed to read POST body: %w", err)
 	}
 	return json.Unmarshal(b, i)
+}
+
+func readPostAsTOML(rq *http.Request, i interface{}) error {
+	defer rq.Body.Close()
+	b, err := ioutil.ReadAll(rq.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read POST body: %w", err)
+	}
+	return toml.Unmarshal(b, i)
 }
 
 func readPostAsXML(rq *http.Request, i interface{}) error {

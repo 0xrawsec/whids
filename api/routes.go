@@ -69,7 +69,11 @@ const (
 	AdmAPIEndpointsOSQueryiPath   = AdmAPIEndpointsOSPath + `/osqueryi`
 	AdmAPIEndpointsOSQueryiBinary = AdmAPIEndpointsOSQueryiPath + `/binary`
 
+	// Endpoint by UUID
 	AdmAPIEndpointsByIDPath = AdmAPIEndpointsPath + "/{euuid:" + uuidRe + "}"
+	// Config related
+	AdmAPIConfigSuffix       = "/config"
+	AdmAPIEndpointConfigPath = AdmAPIEndpointsByIDPath + AdmAPIConfigSuffix
 	// Command related
 	AdmAPICommandSuffix            = "/command"
 	AdmAPIEndpointCommandPath      = AdmAPIEndpointsByIDPath + AdmAPICommandSuffix

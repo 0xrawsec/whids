@@ -63,7 +63,7 @@ var (
 
 // OSQuery holds configuration about OSQuery tool
 type OSQuery struct {
-	Tables []string `toml:"tables" comment:"OSQuery tables to add to the report"`
+	Tables []string `json:"tables" toml:"tables" comment:"OSQuery tables to add to the report"`
 }
 
 // PrepareCommands builds up osquery commands
@@ -84,10 +84,10 @@ func (c *OSQuery) PrepareCommands() (cmds []ReportCommand) {
 
 // Report holds report configuration
 type Report struct {
-	EnableReporting bool            `toml:"en-reporting" comment:"Enables IR reporting"`
-	OSQuery         OSQuery         `toml:"osquery" comment:"OSQuery configuration"`
-	Commands        []ReportCommand `toml:"commands" comment:"Commands to execute in addition to the OSQuery ones" commented:"true"`
-	CommandTimeout  time.Duration   `toml:"timeout" comment:"Timeout after which every command expires (to prevent too long commands)"`
+	EnableReporting bool            `json:"en-reporting" toml:"en-reporting" comment:"Enables IR reporting"`
+	OSQuery         OSQuery         `json:"osquery" toml:"osquery" comment:"OSQuery configuration"`
+	Commands        []ReportCommand `json:"commands" toml:"commands" comment:"Commands to execute in addition to the OSQuery ones" commented:"true"`
+	CommandTimeout  time.Duration   `json:"timeout" toml:"timeout" comment:"Timeout after which every command expires (to prevent too long commands)"`
 }
 
 // PrepareCommands builds up all commands to run

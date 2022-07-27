@@ -20,6 +20,7 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils/powershell"
+	"github.com/pelletier/go-toml"
 )
 
 var (
@@ -50,6 +51,24 @@ func Json(i interface{}) []byte {
 // JsonString returns a Json string out of i
 func JsonString(i interface{}) string {
 	return string(Json(i))
+}
+
+func Toml(i interface{}) (b []byte, err error) {
+	buf := new(bytes.Buffer)
+	enc := toml.NewEncoder(buf)
+	enc.Order(toml.OrderPreserve)
+	if err = enc.Encode(i); err != nil {
+		return
+	}
+	b = buf.Bytes()
+	return
+}
+
+func TomlString(i any) (s string, err error) {
+	var b []byte
+	b, err = Toml(i)
+	s = string(b)
+	return
 }
 
 // ExpandEnvs expands several strings with environment variable
