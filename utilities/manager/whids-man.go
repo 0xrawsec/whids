@@ -273,7 +273,7 @@ func main() {
 			log.Abort(exitFail, err)
 		}
 
-		log.Infof("New user successfully created: %s", utils.PrettyJson(u))
+		log.Infof("New user successfully created: %s", utils.PrettyJsonOrPanic(u))
 
 		log.Abort(0, "User creation: SUCCESS")
 	}

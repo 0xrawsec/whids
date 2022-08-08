@@ -14,7 +14,7 @@ func TestSystemInfo(t *testing.T) {
 	if h, err = utils.HashInterface(info); err != nil {
 		t.Error(err)
 	}
-	t.Log(utils.PrettyJson(info))
+	t.Log(utils.PrettyJsonOrPanic(info))
 	t.Logf("Structure hash: %s", h)
 	for i := 0; i < 1000; i++ {
 		if n, err := utils.HashInterface(info); err != nil {

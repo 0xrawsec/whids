@@ -119,7 +119,7 @@ func (f *Forwarder) ArchiveLogs() {
 func (f *Forwarder) PipeEvent(event interface{}) {
 	f.Lock()
 	defer f.Unlock()
-	f.Pipe.Write(utils.Json(event))
+	f.Pipe.Write(utils.JsonOrPanic(event))
 	f.Pipe.WriteByte('\n')
 	f.EventsPiped++
 }

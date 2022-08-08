@@ -17,6 +17,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/log"
+	aconfig "github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/client/config"
@@ -40,6 +41,7 @@ var (
 	ErrServerUnauthenticated    = errors.New("server authentication failed")
 	ErrUnexpectedResponseStatus = errors.New("unexpected response status code")
 	ErrNoSysmonConfig           = errors.New("no sysmon config available in manager")
+	ErrNoAgentConfig            = errors.New("no sysmon config available in manager")
 )
 
 func init() {
@@ -549,6 +551,37 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 		}
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&c)
+	}
+
+	return
+}
+
+func (m *ManagerClient) GetAgentConfig() (config *aconfig.Agent, err error) {
+	var req *http.Request
+	var resp *http.Response
+
+	if auth, _ := m.IsServerAuthenticated(); !auth {
+		return nil, ErrServerUnauthenticated
+	}
+
+	if req, err = m.Prepare("GET", api.EptAPIConfigPath, nil); err != nil {
+		return
+	}
+
+	if resp, err = m.HTTPClient.Do(req); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+		if resp.StatusCode == http.StatusNoContent {
+			err = ErrNoAgentConfig
+			return
+		}
+		// decoding configuration
+		dec := json.NewDecoder(resp.Body)
+		err = dec.Decode(&config)
 	}
 
 	return

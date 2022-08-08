@@ -357,7 +357,7 @@ func hookUpdateGeneScore(h *Agent, e *event.EdrEvent) {
 		return
 	}
 
-	if t := h.tracker.SourceTrackFromEvent(e); t.IsZero() {
+	if t = h.tracker.SourceTrackFromEvent(e); t.IsZero() {
 		return
 	}
 

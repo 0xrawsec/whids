@@ -47,7 +47,7 @@ func (e *EdrEvent) Hash() string {
 	tmp := *e
 	// null out EdrData as it does not come into hash calculation
 	tmp.Event.EdrData = nil
-	return utils.HashEventBytes(utils.Json(tmp))
+	return utils.HashEventBytes(utils.JsonOrPanic(tmp))
 }
 
 func (e *EdrEvent) GetStringOr(p *engine.XPath, or string) string {

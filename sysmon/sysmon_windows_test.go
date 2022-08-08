@@ -35,7 +35,7 @@ func TestSysmonInfo(t *testing.T) {
 	tt.CheckErr(InstallOrUpdate("./data/Sysmon64.exe"))
 
 	i, err := NewSysmonInfo()
-	t.Log(utils.PrettyJson(i))
+	t.Log(utils.PrettyJsonOrPanic(i))
 	tt.CheckErr(err)
 
 	// we deserialize config

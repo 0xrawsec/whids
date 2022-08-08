@@ -31,8 +31,8 @@ func IsValidUUID(uuid string) bool {
 	return RegexUuid.MatchString(uuid)
 }
 
-// PrettyJson returns a JSON pretty string out of i
-func PrettyJson(i interface{}) string {
+// PrettyJsonOrPanic returns a JSON pretty string out of i
+func PrettyJsonOrPanic(i interface{}) string {
 	b, err := json.MarshalIndent(i, "", "    ")
 	if err != nil {
 		panic(err)
@@ -40,17 +40,30 @@ func PrettyJson(i interface{}) string {
 	return string(b)
 }
 
-func Json(i interface{}) []byte {
-	b, err := json.Marshal(i)
+func Json(i any) ([]byte, error) {
+	return json.Marshal(i)
+}
+
+func JsonString(i any) (s string, err error) {
+	var b []byte
+	if b, err = Json(i); err != nil {
+		return
+	}
+	s = string(b)
+	return
+}
+
+func JsonOrPanic(i interface{}) []byte {
+	b, err := Json(i)
 	if err != nil {
 		panic(err)
 	}
 	return b
 }
 
-// JsonString returns a Json string out of i
-func JsonString(i interface{}) string {
-	return string(Json(i))
+// JsonStringOrPanic returns a Json string out of i
+func JsonStringOrPanic(i interface{}) string {
+	return string(JsonOrPanic(i))
 }
 
 func Toml(i interface{}) (b []byte, err error) {

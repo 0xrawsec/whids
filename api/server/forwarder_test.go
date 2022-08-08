@@ -110,7 +110,7 @@ func countEvents(s *logger.EventSearcher) (n int) {
 func readerFromEvents(count int) io.Reader {
 	buf := new(bytes.Buffer)
 	for event := range emitEvents(count, false) {
-		buf.WriteString(format("%s\n", string(utils.Json(event))))
+		buf.WriteString(format("%s\n", string(utils.JsonOrPanic(event))))
 	}
 	return buf
 }

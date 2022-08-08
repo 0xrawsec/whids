@@ -37,7 +37,7 @@ func TestCmdHash(t *testing.T) {
 	fi, err := cmdHash(filepath.Join(testDir, testFile))
 	tt.CheckErr(err)
 	tt.Assert(fi.Type == "file")
-	t.Log(utils.PrettyJson(fi))
+	t.Log(utils.PrettyJsonOrPanic(fi))
 }
 
 func TestCmdDir(t *testing.T) {
@@ -50,7 +50,7 @@ func TestCmdDir(t *testing.T) {
 	for _, fi := range d {
 		tt.Assert(fi.Dir == dir)
 	}
-	t.Log(utils.PrettyJson(d))
+	t.Log(utils.PrettyJsonOrPanic(d))
 }
 
 func TestCmdFind(t *testing.T) {

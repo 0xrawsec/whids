@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/client"
@@ -153,6 +154,7 @@ func (m *Manager) runEndpointAPI() {
 
 		// GET and POST
 		rt.HandleFunc(api.EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
+		rt.HandleFunc(api.EptAPIConfigPath, m.eptAPIConfig).Methods("GET", "POST")
 
 		uri := fmt.Sprintf("%s:%d", m.Config.EndpointAPI.Host, m.Config.EndpointAPI.Port)
 		m.endpointAPI = &http.Server{
@@ -190,6 +192,59 @@ func (m *Manager) eptAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.gene.rules))
 }
 
+// eptAPIConfigHTTP handler
+func (m *Manager) eptAPIConfig(wt http.ResponseWriter, rq *http.Request) {
+	var endpt *api.Endpoint
+
+	if endpt = m.eptAPIMutEndpointFromRequest(rq); endpt == nil {
+		m.logAPIErrorf("unknown endpoint")
+		return
+	}
+
+	switch rq.Method {
+	case "GET":
+
+		// if configuration is nil we return StatusNoContent
+		if endpt.Config == nil {
+			http.Error(wt, "", http.StatusNoContent)
+			return
+		}
+
+		out, err := json.Marshal(endpt.Config)
+		if err != nil {
+			m.logAPIErrorf("failed at serializing config to JSON: %s", err)
+			return
+		}
+
+		wt.Write(out)
+
+	case "POST":
+		var config config.Agent
+
+		// we don't update configuration if not nil
+		if endpt.Config != nil {
+			m.logAPIErrorf("client attempt to modify config: %s", endpt.Uuid)
+			http.Error(wt, "", http.StatusForbidden)
+			return
+		}
+
+		// handle modification
+		if err := readPostAsJSON(rq, &config); err != nil {
+			m.logAPIErrorf("failed to unmarshal client config: %s", err)
+			http.Error(wt, "failed to unmarshal config", http.StatusInternalServerError)
+			return
+		}
+
+		endpt.Config = &config
+
+		if err := m.db.InsertOrUpdate(endpt); err != nil {
+			m.logAPIErrorf("failed to update client config: %s", err)
+			http.Error(wt, "failed to update client config", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 // eptAPIRulesSha256 returns the sha256 of the latest set of rules loaded into the manager
 func (m *Manager) eptAPIRulesSha256(wt http.ResponseWriter, rq *http.Request) {
 	m.RLock()
@@ -200,7 +255,7 @@ func (m *Manager) eptAPIRulesSha256(wt http.ResponseWriter, rq *http.Request) {
 func (m *Manager) eptAPIIoCs(wt http.ResponseWriter, rq *http.Request) {
 	if data, err := json.Marshal(m.iocs.StringSlice()); err != nil {
 		m.logAPIErrorf("failed to marshal IoCs: %s", err)
-		http.Error(wt, "Failed to marshal IoCs", http.StatusInternalServerError)
+		http.Error(wt, "failed to marshal IoCs", http.StatusInternalServerError)
 	} else {
 		wt.Write(data)
 	}
@@ -216,7 +271,7 @@ func (m *Manager) eptAPIUploadDump(wt http.ResponseWriter, rq *http.Request) {
 
 	if m.Config.DumpDir == "" {
 		m.logAPIErrorf("handler won't dump because no dump directory set")
-		http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
+		http.Error(wt, "failed to dump file", http.StatusInternalServerError)
 		return
 	}
 
@@ -226,14 +281,14 @@ func (m *Manager) eptAPIUploadDump(wt http.ResponseWriter, rq *http.Request) {
 	if endpt := m.eptAPIMutEndpointFromRequest(rq); endpt != nil {
 		if err := dec.Decode(&fu); err != nil {
 			m.logAPIErrorf("handler failed to decode JSON")
-			http.Error(wt, "Failed to decode JSON", http.StatusInternalServerError)
+			http.Error(wt, "failed to decode JSON", http.StatusInternalServerError)
 			return
 		}
 
 		endptDumpDir := filepath.Join(m.Config.DumpDir, endpt.Uuid)
 		if err := fu.Dump(endptDumpDir); err != nil {
 			m.logAPIErrorf("handler failed to dump file (%s): %s", fu.Implode(), err)
-			http.Error(wt, "Failed to dump file", http.StatusInternalServerError)
+			http.Error(wt, "failed to dump file", http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -390,7 +445,7 @@ func (m *Manager) eptAPISystemInfo(wt http.ResponseWriter, rq *http.Request) {
 			info := sysinfo.SystemInfo{}
 			if err := readPostAsJSON(rq, &info); err != nil {
 				m.logAPIErrorf("failed to receive system information for %s", endpt.Uuid)
-				http.Error(wt, "Failed to unmarshal data", http.StatusInternalServerError)
+				http.Error(wt, "failed to unmarshal data", http.StatusInternalServerError)
 			} else {
 				endpt.SystemInfo = &info
 				m.db.InsertOrUpdate(endpt)

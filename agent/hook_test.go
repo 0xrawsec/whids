@@ -123,7 +123,7 @@ func installSysmon() {
 }
 
 func testHook(h *Agent, e *event.EdrEvent) {
-	fmt.Println(utils.PrettyJson(e))
+	fmt.Println(utils.PrettyJsonOrPanic(e))
 }
 
 func TestHooks(t *testing.T) {
@@ -176,5 +176,5 @@ func TestHooks(t *testing.T) {
 
 	tt.Assert(gotSysmonEvent, "failed to monitor Sysmon events")
 
-	t.Log(utils.PrettyJson(h.tracker.Modules()))
+	t.Log(utils.PrettyJsonOrPanic(h.tracker.Modules()))
 }

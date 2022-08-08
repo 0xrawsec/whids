@@ -12,11 +12,13 @@ import (
 func BuildDefaultConfig(root string) *config.Agent {
 
 	logDir := filepath.Join(root, "Logs")
+	dbDir := filepath.Join(root, "Database")
 
 	return &config.Agent{
+		DatabasePath: filepath.Join(dbDir, "Sod"),
 		RulesConfig: config.Rules{
-			RulesDB:        filepath.Join(root, "Database", "Rules"),
-			ContainersDB:   filepath.Join(root, "Database", "Containers"),
+			RulesDB:        filepath.Join(dbDir, "Rules"),
+			ContainersDB:   filepath.Join(dbDir, "Containers"),
 			UpdateInterval: 60 * time.Second,
 		},
 

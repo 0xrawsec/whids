@@ -787,7 +787,7 @@ func (h *Agent) Run() {
 			// we keep process termination event because it is used to control if process termination is enabled
 			if h.IsHIDSEvent(event) && !isSysmonProcessTerminate(event) {
 				if h.PrintAll {
-					fmt.Println(utils.JsonString(event))
+					fmt.Println(utils.JsonStringOrPanic(event))
 				}
 				goto CONTINUE
 			}
@@ -821,7 +821,7 @@ func (h *Agent) Run() {
 
 			// Print everything
 			if h.PrintAll {
-				fmt.Println(utils.JsonString(event))
+				fmt.Println(utils.JsonStringOrPanic(event))
 			}
 
 			// We log all events

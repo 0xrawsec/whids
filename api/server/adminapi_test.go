@@ -395,7 +395,7 @@ func TestAdminAPIGetEndpointLogs(t *testing.T) {
 		default:
 			npivot++
 		}
-		buf.WriteString(format("%s\n", utils.Json(e)))
+		buf.WriteString(format("%s\n", utils.JsonOrPanic(e)))
 	}
 
 	req, err := mc.PrepareGzip("POST", api.EptAPIPostLogsPath, buf)
@@ -474,7 +474,7 @@ func TestAdminAPIGetEndpointAlerts(t *testing.T) {
 				npivot++
 			}
 		}
-		r, err := mc.PrepareGzip("POST", api.EptAPIPostLogsPath, bytes.NewBuffer(utils.Json(e)))
+		r, err := mc.PrepareGzip("POST", api.EptAPIPostLogsPath, bytes.NewBuffer(utils.JsonOrPanic(e)))
 		tt.CheckErr(err)
 		_, err = mc.HTTPClient.Do(r)
 		tt.CheckErr(err)

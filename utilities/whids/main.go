@@ -167,7 +167,7 @@ func proctectDir(dir string) {
 	// we first need to reset the ACLs otherwise next command does not work
 	cmd := []string{"icacls", dir, "/reset"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
-		log.Errorf("Failed to reset installation directory ACLs: %s", err)
+		log.Errorf("failed to reset installation directory ACLs: %s", err)
 		log.Errorf("icacls output: %s", string(out))
 		return
 	}
@@ -175,7 +175,7 @@ func proctectDir(dir string) {
 	// we grant Administrators and SYSTEM full access rights
 	cmd = []string{"icacls", dir, "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
-		log.Errorf("Failed to protect installation directory with ACLs: %s", err)
+		log.Errorf("failed to protect installation directory with ACLs: %s", err)
 		log.Errorf("icacls output: %s", string(out))
 		return
 	}
@@ -227,24 +227,25 @@ func main() {
 			// dump configuration first as config is needed
 			// by subsequent functions
 			if err := configure(); err != nil {
-				log.Errorf("Failed to build configuration: %s", err)
+				log.Errorf("failed to build configuration: %s", err)
 				os.Exit(exitFail)
 			}
 		}
 
 		conf, err := config.LoadsHIDSConfig(configFile)
 		if err != nil {
-			log.Errorf("Failed to load configuration: %s", err)
+			log.Errorf("failed to load configuration: %s", err)
 			os.Exit(exitFail)
 		}
 
 		if err := deleteAutologger(); err != nil {
-			log.Errorf("Failed to delete autologger: %s", err)
-			os.Exit(exitFail)
+			log.Errorf("failed to delete autologger: %s", err)
+			// do not exit as autologger might not be existing but still report error
+			//os.Exit(exitFail)
 		}
 
 		if err := updateAutologger(&conf); err != nil {
-			log.Errorf("Failed to update autologger: %s", err)
+			log.Errorf("failed to update autologger: %s", err)
 			os.Exit(exitFail)
 		}
 
@@ -260,12 +261,12 @@ func main() {
 		if conf, err = config.LoadsHIDSConfig(configFile); err == nil {
 			cleanCanaries(&conf)
 		} else {
-			log.Errorf("Failed to load configuration: %s", err)
+			log.Errorf("failed to load configuration: %s", err)
 			rc = exitFail
 		}
 
 		if err := deleteAutologger(); err != nil {
-			log.Errorf("Failed to delete autologger: %s", err)
+			log.Errorf("failed to delete autologger: %s", err)
 			rc = exitFail
 		}
 
@@ -302,7 +303,7 @@ func main() {
 
 	hidsConf, err := config.LoadsHIDSConfig(configFile)
 	if err != nil {
-		log.Abort(exitFail, fmt.Sprintf("Failed to load configuration: %s", err))
+		log.Abort(exitFail, fmt.Sprintf("failed to load configuration: %s", err))
 	}
 
 	if flagRestore {
@@ -320,23 +321,23 @@ func main() {
 		eng.SetDumpRaw(true)
 
 		if err := eng.LoadDirectory(importRules); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
 		prules, psha256 := hidsConf.RulesConfig.RulesPaths()
 		rules := new(bytes.Buffer)
 		for rule := range eng.GetRawRule(".*") {
 			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
-				log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
+				log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 			}
 		}
 
 		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
 		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("Failed to import rules: %s", err))
+			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
 		log.Infof("IMPORT SUCCESSFUL: %s", prules)

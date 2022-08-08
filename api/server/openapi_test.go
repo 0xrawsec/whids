@@ -456,8 +456,8 @@ func TestOpenApiEndpointConfiguration(t *testing.T) {
 
 		c := &config.Agent{}
 		out := &AdminAPIResponse{Data: c}
-		qptoml := openapi.QueryParameter(api.QpFormat, "toml", "Select output format (allowed toml, json)")
-		qpjson := openapi.QueryParameter(api.QpFormat, "json", "Select output format (allowed toml, json)")
+		qptoml := openapi.QueryParameter(api.QpFormat, "toml", "Select input and output format (allowed toml, json)")
+		qpjson := openapi.QueryParameter(api.QpFormat, "json", "Select input and output format (allowed toml, json)")
 		agentConfigStr, err := utils.TomlString(agentConfig)
 		tt.CheckErr(err)
 		tomlBody := openapi.BinaryRequestBody("Configuration content", []byte(agentConfigStr), true)
@@ -479,6 +479,7 @@ func TestOpenApiEndpointConfiguration(t *testing.T) {
 			Summary: "Change endpoint configuration",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+				qpjson,
 			},
 			//RequestBody: openapi.BinaryRequestBody("Configuration content", []byte(agentConfigStr), true),
 			RequestBody: openapi.JsonRequestBody("Configuration content", agentConfig, true),
@@ -504,6 +505,7 @@ func TestOpenApiEndpointConfiguration(t *testing.T) {
 			Summary: "Get endpoint configuration",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+				qpjson,
 			},
 			Output: AdminAPIResponse{Data: config.Agent{}},
 		})
@@ -519,6 +521,7 @@ func TestOpenApiEndpointConfiguration(t *testing.T) {
 			Summary: "Delete endpoint configuration (this causes the endpoint to sync again its current configuration)",
 			Parameters: []*openapi.Parameter{
 				openapi.PathParameter("uuid", cconf.UUID).Suffix(api.AdmAPIConfigSuffix),
+				qpjson,
 			},
 			Output: AdminAPIResponse{Data: config.Agent{}},
 		})
