@@ -130,7 +130,7 @@ Please visit [doc/configuration.md](doc/configuration.md)
   - [X] better sysmon integration (config, deployment, update)
   - [ ] endpoint configuration from manager
   - [X] tooling management (update, install), like OSQuery
-  - [ ] code refactoring and optimization
+  - [X] code refactoring and optimization
   - [X] implement a performance monitor
   - [X] get rid of any on-disk configuration
   - [X] implement IOC management capabilities
