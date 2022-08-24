@@ -479,6 +479,36 @@ func (m *Manager) AddEndpoint(uuid, key string) {
 	m.db.InsertOrUpdate(api.NewEndpoint(uuid, key))
 }
 
+func (m *Manager) AddIoCs(iocs []*ioc.IOC) (err error) {
+
+	// we preprocess to update existing IOCs
+	insert := make([]*ioc.IOC, 0, len(iocs))
+	for _, i := range iocs {
+		// we need to apply transformation before searching otherwise we
+		// might not find some values which have been transformed
+		i.Transform()
+		search := m.db.Search(&ioc.IOC{},
+			"Uuid", "=", i.Uuid)
+		if o, err := search.One(); err == nil {
+			// in order to update existing IOCs
+			i.Initialize(o.UUID())
+		}
+
+		insert = append(insert, i)
+	}
+
+	// Do bulk insertion
+	if _, err = m.db.InsertOrUpdateMany(sod.ToObjectSlice(insert)...); err != nil {
+		//wt.Write(admErr(err))
+		return
+	}
+
+	// Add IoCs to sync with endpoints
+	m.iocs.Add(insert...)
+
+	return
+}
+
 // UpdateReducer updates the reducer member of the Manager
 func (m *Manager) UpdateReducer(identifier string, e *event.EdrEvent) {
 	if e.Event.Detection != nil {

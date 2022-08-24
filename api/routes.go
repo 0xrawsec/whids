@@ -7,7 +7,8 @@ const (
 	// EptAPIServerKeyPath API route used to get server key
 	EptAPIServerKeyPath = "/key"
 	// EptAPIConfigPath API route used to get/post endpoint configuration
-	EptAPIConfigPath = "/config"
+	EptAPIConfigPath       = "/config"
+	EptAPIConfigSha256Path = "/config/sha256"
 	// EptAPIRulesPath API route used to get Gene rules available in server
 	EptAPIRulesPath = "/rules"
 	// EptAPIRulesSha256Path API route used to retrieve sha256 of latest batch of Gene rules

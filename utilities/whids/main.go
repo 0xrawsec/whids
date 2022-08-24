@@ -65,7 +65,7 @@ var (
 	flagRestore    bool
 	flagAutologger bool
 
-	hostIDS *agent.Agent
+	edrAgent *agent.Agent
 
 	importRules string
 
@@ -128,18 +128,18 @@ func runHids(service bool) {
 
 	log.Infof("Running HIDS as Windows service: %t", service)
 
-	hidsConf, err = config.LoadsHIDSConfig(configFile)
+	hidsConf, err = config.LoadAgentConfig(configFile)
 	if err != nil {
 		log.Abort(exitFail, fmt.Errorf("failed to load configuration: %s", err))
 	}
 
-	hostIDS, err = agent.NewAgent(&hidsConf)
+	edrAgent, err = agent.NewAgent(&hidsConf)
 	if err != nil {
 		log.Abort(exitFail, fmt.Errorf("failed to create HIDS: %s", err))
 	}
 
-	hostIDS.DryRun = flagDryRun
-	hostIDS.PrintAll = flagPrintAll
+	edrAgent.DryRun = flagDryRun
+	edrAgent.PrintAll = flagPrintAll
 
 	// If not a service we need to be able to stop the HIDS
 	if !service {
@@ -149,14 +149,14 @@ func runHids(service bool) {
 			<-osSignals
 			log.Infof("Received SIGINT")
 			// runs stop on sigint
-			hostIDS.Stop()
+			edrAgent.Stop()
 		}()
 	}
 
 	// Runs HIDS and wait for the output
-	hostIDS.Run()
+	edrAgent.Run()
 	if !service {
-		hostIDS.Wait()
+		edrAgent.Wait()
 	}
 }
 
@@ -232,7 +232,7 @@ func main() {
 			}
 		}
 
-		conf, err := config.LoadsHIDSConfig(configFile)
+		conf, err := config.LoadAgentConfig(configFile)
 		if err != nil {
 			log.Errorf("failed to load configuration: %s", err)
 			os.Exit(exitFail)
@@ -258,7 +258,7 @@ func main() {
 
 		rc := exitSuccess
 
-		if conf, err = config.LoadsHIDSConfig(configFile); err == nil {
+		if conf, err = config.LoadAgentConfig(configFile); err == nil {
 			cleanCanaries(&conf)
 		} else {
 			log.Errorf("failed to load configuration: %s", err)
@@ -301,7 +301,7 @@ func main() {
 		log.InitLogger(log.LDebug)
 	}
 
-	hidsConf, err := config.LoadsHIDSConfig(configFile)
+	hidsConf, err := config.LoadAgentConfig(configFile)
 	if err != nil {
 		log.Abort(exitFail, fmt.Sprintf("failed to load configuration: %s", err))
 	}
@@ -357,6 +357,6 @@ func main() {
 		return
 	} else {
 		runHids(false)
-		hostIDS.LogStats()
+		edrAgent.LogStats()
 	}
 }

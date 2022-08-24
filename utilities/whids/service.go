@@ -17,10 +17,8 @@ func (m *WhidsService) Execute(args []string, r <-chan svc.ChangeRequest, change
 	runHids(true)
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
+
 loop:
-	/*for {
-	select {
-	case c := <-r:*/
 	for c := range r {
 		switch c.Cmd {
 		case svc.Interrogate:
@@ -28,13 +26,13 @@ loop:
 		case svc.Stop:
 			changes <- svc.Status{State: svc.StopPending}
 			// Stop WHIDS there
-			hostIDS.Stop()
-			hostIDS.Wait()
-			hostIDS.LogStats()
+			edrAgent.Stop()
+			edrAgent.Wait()
+			edrAgent.LogStats()
 			break loop
 		}
-		//	}
 	}
+
 	changes <- svc.Status{State: svc.Stopped}
 	return
 }

@@ -443,7 +443,6 @@ func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request)
 				log.Info("format=", qpfmt)
 				switch qpfmt {
 				case "toml":
-					log.Info("reading toml")
 					err = readPostAsTOML(rq, &c)
 				default:
 					err = readPostAsJSON(rq, &c)
@@ -1286,31 +1285,12 @@ func (m *Manager) admAPIIocs(wt http.ResponseWriter, rq *http.Request) {
 			wt.Write(admErr(err))
 		} else {
 
-			// we preprocess to update existing IOCs
-			insert := make([]*ioc.IOC, 0, len(iocs))
-			for _, i := range iocs {
-				// we need to apply transformation before searching otherwise we
-				// might not find some values which have been transformed
-				i.Transform()
-				search := m.db.Search(&ioc.IOC{},
-					"Uuid", "=", i.Uuid)
-				if o, err := search.One(); err == nil {
-					// in order to update existing IOCs
-					i.Initialize(o.UUID())
-				}
-
-				insert = append(insert, i)
-			}
-
-			// Do bulk insertion
-			if _, err := m.db.InsertOrUpdateMany(sod.ToObjectSlice(insert)...); err != nil {
+			if err := m.AddIoCs(iocs); err != nil {
 				wt.Write(admErr(err))
 				return
 			}
 
-			// Add IoCs to sync with endpoints
-			m.iocs.Add(insert...)
-			wt.Write(admJSONResp(insert))
+			wt.Write(admJSONResp(iocs))
 		}
 
 	case "DELETE":

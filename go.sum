@@ -1,5 +1,7 @@
 github.com/0xrawsec/crony v1.0.1 h1:DpkkcuvFYEgHyrm0CxeVYPxsRmEO2qX043s3SDTHaH8=
 github.com/0xrawsec/crony v1.0.1/go.mod h1:4MUBMHBeM5HKSUIDXYU7nkmny/pUBHXqg5ZXXC9coe0=
+github.com/0xrawsec/crony v1.0.2 h1:MMAGXy/11MmXvfGOFmUmjSCrxDp0usrEMxOJqXApbmw=
+github.com/0xrawsec/crony v1.0.2/go.mod h1:4MUBMHBeM5HKSUIDXYU7nkmny/pUBHXqg5ZXXC9coe0=
 github.com/0xrawsec/gene/v2 v2.3.0 h1:AuScsQ/PlD8DwPzIaJmRuhDB1SgGnKZaKBB95mih0Sc=
 github.com/0xrawsec/gene/v2 v2.3.0/go.mod h1:Ns5p9jwmvCAAmzIBSMOL5hhMIlszxTXqVxBdJU/jm/w=
 github.com/0xrawsec/golang-etw v1.5.1 h1:+d/n98k2jbcxVtPNddNDG8uLgnGgUeeEQIPqqEwpYq8=

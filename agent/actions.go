@@ -62,7 +62,7 @@ var (
 
 type ActionHandler struct {
 	ctx                    context.Context
-	hids                   *Agent
+	edr                    *Agent
 	queue                  *datastructs.Fifo
 	compressionQueue       *datastructs.Fifo
 	compressionLoopRunning bool
@@ -72,7 +72,7 @@ type ActionHandler struct {
 func NewActionHandler(h *Agent) *ActionHandler {
 	return &ActionHandler{
 		ctx:              h.ctx,
-		hids:             h,
+		edr:              h,
 		queue:            &datastructs.Fifo{},
 		compressionQueue: &datastructs.Fifo{},
 		semJobs:          semaphore.New(2)}
@@ -86,19 +86,19 @@ func (m *ActionHandler) dumpname(src string) string {
 func (m *ActionHandler) prepare(e *event.EdrEvent, filename string) string {
 	id := e.Hash()
 	guid := sourceGUIDFromEvent(e)
-	dumpDir := filepath.Join(m.hids.config.Dump.Dir, guid, id)
+	dumpDir := filepath.Join(m.edr.config.Dump.Dir, guid, id)
 	utils.HidsMkdirAll(dumpDir)
 	return filepath.Join(dumpDir, filename)
 }
 
 func (m *ActionHandler) shouldDump(e *event.EdrEvent) bool {
 	guid := sourceGUIDFromEvent(e)
-	return m.hids.tracker.CheckDumpCountOrInc(guid, m.hids.config.Dump.MaxDumps, m.hids.config.Dump.DumpUntracked)
+	return m.edr.tracker.CheckDumpCountOrInc(guid, m.edr.config.Dump.MaxDumps, m.edr.config.Dump.DumpUntracked)
 }
 
 func (m *ActionHandler) writeReader(dst string, reader io.Reader) error {
-	compress := m.hids.config.Dump.Compression
-	return utils.HidsWriteReader(dst, reader, compress)
+	// compression is managed by compression routine
+	return utils.HidsWriteReader(dst, reader, false)
 }
 
 func (m *ActionHandler) dumpAsJson(path string, i interface{}) (err error) {
@@ -136,7 +136,7 @@ func (m *ActionHandler) dumpFile(src, dst string) (err error) {
 	// dump sha256 of file anyway
 	utils.HidsWriteData(fmt.Sprintf("%s.sha256", dst), []byte(sha256))
 	// we dump file
-	if !m.hids.filedumped.Contains(sha256) {
+	if !m.edr.filedumped.Contains(sha256) {
 		var f *os.File
 		log.Debugf("Dumping file: %s->%s", src, dst)
 		if f, err = os.Open(src); err != nil {
@@ -146,7 +146,7 @@ func (m *ActionHandler) dumpFile(src, dst string) (err error) {
 			return
 		}
 		// we mark file dumped
-		m.hids.filedumped.Add(sha256)
+		m.edr.filedumped.Add(sha256)
 		// queueing compression
 		m.queueCompression(dst)
 	}
@@ -179,7 +179,7 @@ func listFilesFromCommandLine(cmdLine string, cwd string) []string {
 func (m *ActionHandler) filedumpSet(e *event.EdrEvent) *datastructs.Set {
 	s := datastructs.NewSet()
 
-	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+	if pt := m.edr.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		s.Add(pt.Image)
 		s.Add(pt.ParentImage)
 		// parse command line
@@ -212,7 +212,7 @@ func (m *ActionHandler) filedumpSet(e *event.EdrEvent) *datastructs.Set {
 				if hashes, ok := e.GetString(pathSysmonHashes); ok {
 					if target, ok := e.GetString(pathSysmonTargetFilename); ok {
 						fname := fmt.Sprintf("%s%s", sysmonArcFileRe.ReplaceAllString(hashes, ""), filepath.Ext(target))
-						path := filepath.Join(m.hids.config.Sysmon.ArchiveDirectory, fname)
+						path := filepath.Join(m.edr.config.Sysmon.ArchiveDirectory, fname)
 						s.Add(path)
 					}
 				}
@@ -241,14 +241,14 @@ func (m *ActionHandler) filedump(e *event.EdrEvent) {
 
 func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 	hash := e.Hash()
-	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+	if pt := m.edr.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		guid := sourceGUIDFromEvent(e)
 		pid := int(pt.PID)
-		if kernel32.IsPIDRunning(pid) && pid != os.Getpid() && !m.hids.memdumped.Contains(guid) && !m.hids.dumping.Contains(guid) {
+		if kernel32.IsPIDRunning(pid) && pid != os.Getpid() && !m.edr.memdumped.Contains(guid) && !m.edr.dumping.Contains(guid) {
 			// To avoid dumping the same process twice, possible if two alerts
 			// comes from the same GUID in a short period of time
-			m.hids.dumping.Add(guid)
-			defer m.hids.dumping.Del(guid)
+			m.edr.dumping.Add(guid)
+			defer m.edr.dumping.Del(guid)
 
 			dumpFilename := fmt.Sprintf("%s_%d_%d.dmp", filepath.Base(pt.Image), pid, time.Now().UnixNano())
 			dumpPath := m.prepare(e, dumpFilename)
@@ -256,7 +256,7 @@ func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 				return fmt.Errorf("failed to dump process event=%s pid=%d image=%s: %s", hash, pid, pt.Image, err)
 			} else {
 				// dump was successfull
-				m.hids.memdumped.Add(guid)
+				m.edr.memdumped.Add(guid)
 				m.queueCompression(dumpPath)
 			}
 		} else {
@@ -300,7 +300,7 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
-	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+	if pt := m.edr.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			// before we kill we suspend the process
@@ -310,7 +310,7 @@ func (m *ActionHandler) suspend_process(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) kill_process(e *event.EdrEvent) error {
-	if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+	if pt := m.edr.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 		// additional check not to suspend agent
 		if pt.PID != int64(os.Getpid()) {
 			if err := pt.TerminateProcess(); err != nil {
@@ -323,7 +323,7 @@ func (m *ActionHandler) kill_process(e *event.EdrEvent) error {
 }
 
 func (m *ActionHandler) Queue(e *event.EdrEvent) {
-	if !m.hids.IsHIDSEvent(e) && m.hids.config.Endpoint {
+	if !m.edr.IsHIDSEvent(e) && m.edr.config.Endpoint {
 		if det := e.GetDetection(); det != nil {
 			if det.Actions.Len() > 0 {
 				m.queue.Push(e)
@@ -336,7 +336,7 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 
 	det := e.GetDetection()
 
-	if m.shouldDump(e) && !m.hids.IsHIDSEvent(e) && det != nil {
+	if m.shouldDump(e) && !m.edr.IsHIDSEvent(e) && det != nil {
 		hash := e.Hash()
 
 		// Test variables
@@ -346,10 +346,10 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 
 		// handling blacklisting action
 		if det.Actions.Contains(ActionBlacklist) {
-			if pt := m.hids.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
+			if pt := m.edr.tracker.SourceTrackFromEvent(e); !pt.IsZero() {
 				// additional check not to blacklist agent
 				if int(pt.PID) != os.Getpid() {
-					m.hids.tracker.Blacklist(pt.CommandLine)
+					m.edr.tracker.Blacklist(pt.CommandLine)
 				}
 			}
 		}
@@ -375,9 +375,9 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		}
 
 		// handling report dumping
-		if (report || brief) && m.hids.config.Report.EnableReporting {
+		if (report || brief) && m.edr.config.Report.EnableReporting {
 			reportPath := m.prepare(e, reportFilename)
-			if err := m.dumpAsJson(reportPath, m.hids.Report(brief)); err != nil {
+			if err := m.dumpAsJson(reportPath, m.edr.Report(brief)); err != nil {
 				log.Errorf("Failed to dump report for event %s: %s", hash, err)
 			} else {
 				m.queueCompression(reportPath)
@@ -406,13 +406,14 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 }
 
 func (m *ActionHandler) queueCompression(path string) {
-	if m.hids.config.Dump.Compression && m.compressionLoopRunning {
+	if m.edr.config.Dump.Compression && m.compressionLoopRunning {
 		m.compressionQueue.Push(path)
 	}
 }
 
 func (m *ActionHandler) compressionLoop() {
-	if !m.hids.config.Dump.Compression {
+	log.Info("Compression loop starting")
+	if !m.edr.config.Dump.Compression {
 		return
 	}
 

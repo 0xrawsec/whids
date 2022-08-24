@@ -103,21 +103,40 @@ func Sha256StringArray(array []string) string {
 	return hex.EncodeToString(sha256.Sum(nil))
 }
 
-// HashEventBytes return a hash from a byte slice assuming
-// the event has been JSON encoded with the json.Marshal
-func HashEventBytes(b []byte) string {
-	return data.Sha1(bytes.Trim(b, " \n\r\t"))
-}
-
-// HashInterface return a sha1 hash from an interface
-func HashInterface(i interface{}) (h string, err error) {
-	var b []byte
-
+func toBytes(i any) (b []byte, err error) {
 	if b, err = json.Marshal(i); err != nil {
 		return
 	}
 
-	return data.Sha1(bytes.Trim(b, " \n\r\t")), nil
+	b = bytes.Trim(b, " \n\r\t")
+	return
+}
+
+// HashEventBytes return a hash from a byte slice assuming
+// the event has been JSON encoded with the json.Marshal
+func Sha1EventBytes(b []byte) string {
+	return data.Sha1(bytes.Trim(b, " \n\r\t"))
+}
+
+// Sha1Interface return a sha1 hash from an interface
+func Sha1Interface(i interface{}) (h string, err error) {
+	var b []byte
+
+	if b, err = toBytes(i); err != nil {
+		return
+	}
+
+	return data.Sha1(b), nil
+}
+
+func Sha256Interface(i interface{}) (h string, err error) {
+	var b []byte
+
+	if b, err = toBytes(i); err != nil {
+		return
+	}
+
+	return data.Sha256(b), nil
 }
 
 func GetCurFuncName() string {

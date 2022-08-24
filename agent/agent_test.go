@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,7 +16,11 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/agent/config"
+	"github.com/0xrawsec/whids/api"
+	cconfig "github.com/0xrawsec/whids/api/client/config"
+	"github.com/0xrawsec/whids/api/server"
 	"github.com/0xrawsec/whids/event"
+	"github.com/0xrawsec/whids/ioc"
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -71,7 +77,117 @@ var (
     </RuleGroup>
   </EventFiltering>
 </Sysmon>`
+
+	testAdminUser = &server.AdminAPIUser{
+		Identifier: "test",
+		Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
+	}
+
+	mroot = filepath.Join(os.TempDir(), utils.UnsafeUUIDGen().String(), "data")
+	mconf = server.ManagerConfig{
+		AdminAPI: server.AdminAPIConfig{
+			Host: "localhost",
+			Port: randport(),
+		},
+		EndpointAPI: server.EndpointAPIConfig{
+			Host: "localhost",
+			Port: randport(),
+		},
+		Logging: server.ManagerLogConfig{
+			Root:        filepath.Join(mroot, "logs"),
+			LogBasename: "alerts",
+		},
+		Database: filepath.Join(mroot, "database"),
+		DumpDir:  filepath.Join(mroot, "uploads"),
+		TLS: server.TLSConfig{
+			Cert: filepath.Join(mroot, "cert.pem"),
+			Key:  filepath.Join(mroot, "key.pem"),
+		},
+	}
 )
+
+func generateCert(c server.ManagerConfig) {
+	hosts := []string{c.AdminAPI.Host, c.EndpointAPI.Host}
+	key, cert, err := utils.GenerateCert("Test", hosts, time.Hour*24*365)
+	if err != nil {
+		panic(err)
+	}
+	if err = os.MkdirAll(mroot, 0777); err != nil {
+		panic(err)
+	}
+	if err = utils.HidsWriteData(c.TLS.Cert, cert); err != nil {
+		panic(err)
+	}
+	if err = utils.HidsWriteData(c.TLS.Key, key); err != nil {
+		panic(err)
+	}
+}
+
+func randport() (port int) {
+	for ; port <= 10000; port = rand.Intn(65535) {
+	}
+	return
+}
+
+func randomIoCs(n int) (iocs []*ioc.IOC) {
+	for ; n > 0; n-- {
+		iocs = append(iocs, &ioc.IOC{
+			Uuid:      utils.UnsafeUUIDGen().String(),
+			GroupUuid: utils.UnsafeUUIDGen().String(),
+			Source:    "Xyz",
+			Value:     fmt.Sprintf("%d.some.random.domain", rand.Intn(10000)),
+			Type:      "domain",
+		})
+	}
+	return
+}
+
+func makeClientConfig(mc *server.ManagerConfig) (c cconfig.Client) {
+	var err error
+
+	c = cconfig.Client{
+		Proto:  "https",
+		Host:   "localhost",
+		Port:   mc.EndpointAPI.Port,
+		UUID:   utils.UnsafeUUIDGen().String(),
+		Key:    utils.UnsafeUUIDGen().String(),
+		Unsafe: true,
+	}
+
+	if c.ServerFingerprint, err = utils.CertFileSha256(mc.TLS.Cert); err != nil {
+		panic(err)
+	}
+
+	return
+}
+
+func prepareManager() (m *server.Manager, cconf cconfig.Client) {
+	var err error
+
+	mconf := mconf
+	generateCert(mconf)
+	cconf = makeClientConfig(&mconf)
+
+	if m, err = server.NewManager(&mconf); err != nil {
+		panic(err)
+	}
+
+	// we don't handle error as we don't care if user
+	// already exists
+	m.CreateNewAdminAPIUser(testAdminUser)
+
+	m.AddEndpoint(cconf.UUID, cconf.Key)
+	if err := m.AddIoCs(randomIoCs(1000)); err != nil {
+		panic(err)
+	}
+	m.Run()
+
+	return
+}
+
+func cleanup() {
+	os.RemoveAll(mroot)
+}
 
 func installSysmon() {
 	var i *sysmon.Info
@@ -126,7 +242,9 @@ func testHook(h *Agent, e *event.EdrEvent) {
 	fmt.Println(utils.PrettyJsonOrPanic(e))
 }
 
-func TestHooks(t *testing.T) {
+func TestAgent(t *testing.T) {
+	defer cleanup()
+	_, clConf := prepareManager()
 
 	installSysmon()
 
@@ -138,6 +256,8 @@ func TestHooks(t *testing.T) {
 	defer os.RemoveAll(tmp)
 
 	c := BuildDefaultConfig(tmp)
+	c.FwdConfig.Local = false
+	c.FwdConfig.Client = clConf
 	c.Actions = config.Actions{
 		AvailableActions: AvailableActions,
 		Low:              []string{},
@@ -146,12 +266,19 @@ func TestHooks(t *testing.T) {
 		Critical:         []string{},
 	}
 
-	h, err := NewAgent(c)
+	log.SetOutput(os.Stdout)
+	a, err := NewAgent(c)
 	// show EDR logs in console
 	log.SetOutput(os.Stdout)
+	// reduce scheduled task ticker
+	for _, t := range a.scheduler.Tasks() {
+		if t.Tick() > 0 {
+			t.Ticker(time.Second * 5)
+		}
+	}
 
 	// add a final hook to catch all events after enrichment
-	h.preHooks.Hook(func(h *Agent, e *event.EdrEvent) {
+	a.preHooks.Hook(func(h *Agent, e *event.EdrEvent) {
 		if e.Channel() == sysmonChannel {
 			gotSysmonEvent = true
 		}
@@ -159,22 +286,22 @@ func TestHooks(t *testing.T) {
 		d := engine.NewDetection(true, true)
 		// enable all actions
 		//d.Actions = datastructs.NewInitSet(datastructs.ToInterfaceSlice(AvailableActions)...)
-		d.Actions = datastructs.NewInitSet(ActionFiledump, ActionRegdump, ActionBlacklist, ActionBrief, ActionReport)
+		d.Actions = datastructs.NewInitSet(ActionFiledump, ActionRegdump, ActionBrief, ActionReport)
 		d.Criticality = 6
 		e.SetDetection(d)
 	}, fltAnyEvent)
 
 	tt.TimeIt(
 		"configuring autologgers",
-		func() { tt.CheckErr(h.config.EtwConfig.ConfigureAutologger()) },
+		func() { tt.CheckErr(a.config.EtwConfig.ConfigureAutologger()) },
 	)
 
 	tt.CheckErr(err)
-	h.Run()
+	a.Run()
 	time.Sleep(20 * time.Second)
-	h.Stop()
+	a.Stop()
 
 	tt.Assert(gotSysmonEvent, "failed to monitor Sysmon events")
 
-	t.Log(utils.PrettyJsonOrPanic(h.tracker.Modules()))
+	t.Log(utils.PrettyJsonOrPanic(a.tracker.Modules()))
 }

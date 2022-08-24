@@ -111,6 +111,8 @@ func (c *Audit) Restore() {
 
 // Agent structure
 type Agent struct {
+	path string
+
 	DatabasePath    string           `json:"db-path" toml:"db-path" comment:"Path to local database root directory"`
 	CritTresh       int              `json:"criticality-treshold" toml:"criticality-treshold" comment:"Dumps/forward only events above criticality threshold\n or filtered events (i.e. Gene filtering rules)" `
 	EnableHooks     bool             `json:"en-hooks" toml:"en-hooks" comment:"Enable enrichment hooks and dump hooks"`
@@ -129,8 +131,8 @@ type Agent struct {
 	CanariesConfig  Canaries         `json:"canaries" toml:"canaries" comment:"Canary files configuration"`
 }
 
-// LoadsHIDSConfig loads a HIDS configuration from a file
-func LoadsHIDSConfig(path string) (c Agent, err error) {
+// LoadAgentConfig loads a HIDS configuration from a file
+func LoadAgentConfig(path string) (c Agent, err error) {
 	fd, err := os.Open(path)
 	if err != nil {
 		return
@@ -138,7 +140,12 @@ func LoadsHIDSConfig(path string) (c Agent, err error) {
 	defer fd.Close()
 	dec := toml.NewDecoder(fd)
 	err = dec.Decode(&c)
+	c.path = path
 	return
+}
+
+func (c *Agent) Sha256() (string, error) {
+	return utils.Sha256Interface(c)
 }
 
 // IsForwardingEnabled returns true if a forwarder is actually configured to forward logs
@@ -151,15 +158,19 @@ func (c *Agent) Prepare() {
 	if !fsutil.Exists(c.RulesConfig.RulesDB) {
 		os.MkdirAll(c.RulesConfig.RulesDB, 0600)
 	}
+
 	if !fsutil.Exists(c.RulesConfig.ContainersDB) {
 		os.MkdirAll(c.RulesConfig.ContainersDB, 0600)
 	}
+
 	if !fsutil.Exists(c.Dump.Dir) {
 		os.MkdirAll(c.Dump.Dir, 0600)
 	}
+
 	if !fsutil.Exists(filepath.Dir(c.FwdConfig.Logging.Dir)) {
 		os.MkdirAll(filepath.Dir(c.FwdConfig.Logging.Dir), 0600)
 	}
+
 	if !fsutil.Exists(filepath.Dir(c.Logfile)) {
 		os.MkdirAll(filepath.Dir(c.Logfile), 0600)
 	}
@@ -174,4 +185,19 @@ func (c *Agent) Verify() error {
 		return fmt.Errorf("containers database must be a directory")
 	}
 	return nil
+}
+
+func (c *Agent) Path() string {
+	return c.path
+}
+
+// Save saves configuration to path
+func (c *Agent) Save(path string) (err error) {
+	var b []byte
+
+	if b, err = utils.Json(c); err != nil {
+		return
+	}
+
+	return utils.HidsWriteData(path, b)
 }

@@ -23,8 +23,8 @@ import (
 	"github.com/0xrawsec/whids/utils"
 )
 
-func (h *Agent) containCmd() *exec.Cmd {
-	ip := h.forwarder.Client.ManagerIP
+func (a *Agent) containCmd() *exec.Cmd {
+	ip := a.forwarder.Client.ManagerIP
 	// only allow connection to the manager configured
 	return exec.Command("netsh.exe",
 		"advfirewall",
@@ -37,7 +37,7 @@ func (h *Agent) containCmd() *exec.Cmd {
 		"action=block")
 }
 
-func (h *Agent) uncontainCmd() *exec.Cmd {
+func (a *Agent) uncontainCmd() *exec.Cmd {
 	return exec.Command("netsh.exe", "advfirewall",
 		"firewall",
 		"delete",
@@ -46,7 +46,7 @@ func (h *Agent) uncontainCmd() *exec.Cmd {
 	)
 }
 
-func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
+func (a *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 
 	// command documentation template:
 	/*
@@ -71,7 +71,7 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 			}
 	*/
 	case "contain":
-		cmd.FromExecCmd(h.containCmd())
+		cmd.FromExecCmd(a.containCmd())
 
 	/*
 		@command: {
@@ -81,7 +81,7 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 		}
 	*/
 	case "uncontain":
-		cmd.FromExecCmd(h.uncontainCmd())
+		cmd.FromExecCmd(a.uncontainCmd())
 
 	/*
 		@command: {
@@ -250,7 +250,7 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 	case "report":
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.Report(false)
+		cmd.Json = a.Report(false)
 
 	/*
 		@command: {
@@ -260,11 +260,11 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 		}
 	*/
 	case "processes":
-		h.tracker.RLock()
+		a.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.PS()
-		h.tracker.RUnlock()
+		cmd.Json = a.tracker.PS()
+		a.tracker.RUnlock()
 
 	/*
 		@command: {
@@ -274,11 +274,11 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 		}
 	*/
 	case "modules":
-		h.tracker.RLock()
+		a.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.Modules()
-		h.tracker.RUnlock()
+		cmd.Json = a.tracker.Modules()
+		a.tracker.RUnlock()
 
 	/*
 		@command: {
@@ -288,11 +288,11 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 		}
 	*/
 	case "drivers":
-		h.tracker.RLock()
+		a.tracker.RLock()
 		cmd.Unrunnable()
 		cmd.ExpectJSON = true
-		cmd.Json = h.tracker.Drivers
-		h.tracker.RUnlock()
+		cmd.Json = a.tracker.Drivers
+		a.tracker.RUnlock()
 	}
 
 	// we finally run the command
@@ -305,7 +305,7 @@ func (h *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 
 // routine which manages command to be executed on the endpoint
 // it is made in such a way that we can send burst of commands
-func (h *Agent) taskCommandRunner() {
+func (a *Agent) taskCommandRunner() {
 	defaultSleep := time.Second * 5
 	sleep := defaultSleep
 
@@ -314,15 +314,15 @@ func (h *Agent) taskCommandRunner() {
 	burstSleep := time.Millisecond * 500
 
 	for {
-		if cmd, err := h.forwarder.Client.FetchCommand(); err != nil && err != client.ErrNothingToDo {
+		if cmd, err := a.forwarder.Client.FetchCommand(); err != nil && err != client.ErrNothingToDo {
 			log.Error(err)
 		} else if err == nil {
 			// reduce sleeping time if a command was received
 			sleep = burstSleep
 			burstDur = 0
 			log.Infof("[command runner] handling manager command: %s", cmd.String())
-			h.handleManagerCommand(cmd)
-			if err := h.forwarder.Client.PostCommand(cmd); err != nil {
+			a.handleManagerCommand(cmd)
+			if err := a.forwarder.Client.PostCommand(cmd); err != nil {
 				log.Error("[command runner]", err)
 			}
 		}
@@ -340,9 +340,9 @@ func (h *Agent) taskCommandRunner() {
 	}
 }
 
-func (h *Agent) scheduleCleanArchivedTask() error {
-	if h.config.Sysmon.CleanArchived {
-		archivePath := h.config.Sysmon.ArchiveDirectory
+func (a *Agent) scheduleCleanArchivedTask() error {
+	if a.config.Sysmon.CleanArchived {
+		archivePath := a.config.Sysmon.ArchiveDirectory
 
 		if archivePath == "" {
 			return errors.New("sysmon archive directory not configured")
@@ -356,7 +356,7 @@ func (h *Agent) scheduleCleanArchivedTask() error {
 		reported := datastructs.NewSyncedSet()
 
 		log.Infof("Scheduling archive cleanup loop for directory: %s", archivePath)
-		h.scheduler.Schedule(crony.NewTask("Sysmon archived files cleaner").Func(func() {
+		a.scheduler.Schedule(crony.NewTask("Sysmon archived files cleaner").Func(func() {
 			// used to mark files for which we already reported errors
 			// expiration fixed to five minutes
 			expired := time.Now().Add(time.Minute * -5)
@@ -380,9 +380,9 @@ func (h *Agent) scheduleCleanArchivedTask() error {
 	return nil
 }
 
-func (h *Agent) taskUploadDumps() {
+func (a *Agent) taskUploadDumps() {
 	// Sending dump files over to the manager
-	for wi := range fswalker.Walk(h.config.Dump.Dir) {
+	for wi := range fswalker.Walk(a.config.Dump.Dir) {
 		for _, fi := range wi.Files {
 			sp := strings.Split(wi.Dirpath, string(os.PathSeparator))
 			// upload only file with some extensions
@@ -401,14 +401,14 @@ func (h *Agent) taskUploadDumps() {
 						continue
 					}
 
-					if shrink.Size() > h.config.FwdConfig.Client.MaxUploadSize {
+					if shrink.Size() > a.config.FwdConfig.Client.MaxUploadSize {
 						log.Warnf("[dump uploader] dump file is above allowed upload limit, %s will be deleted without being sent", fullpath)
 						goto CleanShrinker
 					}
 
 					// we shrink a file into several chunks to reduce memory impact
 					for fu := shrink.Next(); fu != nil; fu = shrink.Next() {
-						if err = h.forwarder.Client.PostDump(fu); err != nil {
+						if err = a.forwarder.Client.PostDump(fu); err != nil {
 							log.Error(err)
 							break
 						}
@@ -434,12 +434,12 @@ func (h *Agent) taskUploadDumps() {
 	}
 }
 
-func (h *Agent) updateTools() (err error) {
+func (a *Agent) updateTools() (err error) {
 	var mtools map[string]*tools.Tool
 	var locToolNames []string
 
 	// getting the list of tools from the manager, only metatada are returned
-	if mtools, err = h.forwarder.Client.ListTools(); err != nil {
+	if mtools, err = a.forwarder.Client.ListTools(); err != nil {
 		return
 	}
 
@@ -448,17 +448,17 @@ func (h *Agent) updateTools() (err error) {
 		var old *tools.Tool
 
 		// if the tool is already there we continue
-		if h.db.Search(&tools.Tool{}, "Metadata.Sha512", "=", t.Metadata.Sha512).Len() == 1 {
+		if a.db.Search(&tools.Tool{}, "Metadata.Sha512", "=", t.Metadata.Sha512).Len() == 1 {
 			continue
 		}
 
 		// we get the tool from manager
-		if t, err = h.forwarder.Client.GetTool(t.Metadata.Sha256); err != nil {
+		if t, err = a.forwarder.Client.GetTool(t.Metadata.Sha256); err != nil {
 			return
 		}
 
 		// search for a tool with the same name
-		if err = h.db.Search(&tools.Tool{}, "Name", "=", t.Name).And("OS", "=", los.OS).AssignUnique(&old); err != nil && !sod.IsNoObjectFound(err) {
+		if err = a.db.Search(&tools.Tool{}, "Name", "=", t.Name).And("OS", "=", los.OS).AssignUnique(&old); err != nil && !sod.IsNoObjectFound(err) {
 			return
 		} else if err == nil {
 			// we use same UUID not to duplicate entry
@@ -466,7 +466,7 @@ func (h *Agent) updateTools() (err error) {
 		}
 
 		// we update local database
-		if err = h.db.InsertOrUpdate(t); err != nil {
+		if err = a.db.InsertOrUpdate(t); err != nil {
 			return
 		}
 
@@ -477,7 +477,7 @@ func (h *Agent) updateTools() (err error) {
 	}
 
 	// We retrieve the names of the local files
-	if err = h.db.AssignIndex(&tools.Tool{}, "Name", &locToolNames); err != nil {
+	if err = a.db.AssignIndex(&tools.Tool{}, "Name", &locToolNames); err != nil {
 		return
 	}
 
@@ -486,7 +486,7 @@ func (h *Agent) updateTools() (err error) {
 		// if we have a tool locally that has been deleted from remote
 		if _, ok := mtools[locName]; !ok {
 			var t *tools.Tool
-			s := h.db.Search(&tools.Tool{}, "Name", "=", locName)
+			s := a.db.Search(&tools.Tool{}, "Name", "=", locName)
 			if err = s.AssignUnique(&t); err != nil {
 				return
 			}
@@ -504,108 +504,128 @@ func (h *Agent) updateTools() (err error) {
 	return
 }
 
-func (h *Agent) scheduleTasks() {
+func (a *Agent) scheduleTasks() {
 	inLittleWhile := time.Now().Add(time.Second * 5)
 
 	// routines scheduled only if connected to a manager
-	if h.config.IsForwardingEnabled() {
-		// command runner routine, we run it only once as it creates a go routine to handle commands
-		h.scheduler.Schedule(
-			crony.NewAsyncTask("Command handler goroutine").
-				Func(h.taskCommandRunner).
-				Schedule(time.Now()),
+	if a.config.IsForwardingEnabled() {
+		// High prio tasks
+
+		// agent configuration update
+		a.scheduler.Schedule(
+			crony.NewTask("Configuration update").
+				Func(func() {
+					task := "[configuration update]"
+					log.Info(task, "update starting")
+					if err := a.updateAgentConfig(); err != nil {
+						log.Error(task, err)
+					}
+				}).Ticker(time.Minute*15).Schedule(time.Now()),
+			crony.PrioHigh,
+		)
+
+		// updating tools
+		a.scheduler.Schedule(crony.NewTask("Utilities update").
+			Func(func() {
+				task := "[utilities update]"
+				log.Info(task, "update starting")
+				if err := a.updateTools(); err != nil {
+					log.Error(task, err)
+				}
+			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioHigh)
 
 		// updating engine
-		h.scheduler.Schedule(crony.NewTask("Rule/IOC Update").
+		a.scheduler.Schedule(crony.NewTask("Rule/IOC Update").
 			Func(func() {
 				task := "[rule/ioc update]"
 				log.Info(task, "update starting")
-				if err := h.update(false); err != nil {
+				if err := a.update(false); err != nil {
 					log.Error(task, err)
 				}
-			}).Ticker(h.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+			}).Ticker(a.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
 			crony.PrioHigh)
 
+		// command runner routine, we run it only once as it creates a go routine to handle commands
+		a.scheduler.Schedule(
+			crony.NewAsyncTask("Command handler goroutine").
+				Func(a.taskCommandRunner).
+				Schedule(time.Now()),
+			crony.PrioHigh)
+
+		// Medium Prio Tasks
+
 		// uploading dumps
-		h.scheduler.Schedule(crony.NewTask("Upload Dump").
-			Func(h.taskUploadDumps).Ticker(time.Minute),
+		a.scheduler.Schedule(crony.NewTask("Upload Dump").
+			Func(a.taskUploadDumps).Ticker(time.Minute),
 			crony.PrioMedium)
 
-		// updating system information
-		h.scheduler.Schedule(crony.NewTask("System Info Update").
-			Func(func() {
-				task := "[system info update]"
-				log.Info(task, "update starting")
-				if err := h.updateSystemInfo(); err != nil {
-					log.Error(task, err)
-				}
-			}).Ticker(h.config.RulesConfig.UpdateInterval).
-			Schedule(inLittleWhile),
-			crony.PrioLow)
-
 		// updating sysmon
-		h.scheduler.Schedule(crony.NewTask("Sysmon update").
+		a.scheduler.Schedule(crony.NewTask("Sysmon update").
 			Func(func() {
 				task := "[sysmon update]"
 				log.Info(task, "update starting")
-				if err := h.updateSysmon(); err != nil {
+				if err := a.updateSysmonBin(); err != nil {
 					log.Error(task, err)
 				}
 			}).Ticker(time.Hour).Schedule(inLittleWhile),
 			crony.PrioMedium)
 
 		// updating sysmon configuration
-		h.scheduler.Schedule(crony.NewTask("Sysmon configuration update").
+		a.scheduler.Schedule(crony.NewTask("Sysmon configuration update").
 			Func(func() {
 				task := "[sysmon config update]"
 				log.Info(task, "update starting")
-				if err := h.updateSysmonConfig(); err != nil {
+				if err := a.updateSysmonConfig(); err != nil {
 					log.Error(task, err)
 				}
 			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioMedium)
 
-		// updating tools
-		h.scheduler.Schedule(crony.NewTask("Utilities update").
+		// Low Prio Tasks
+
+		// updating system information
+		a.scheduler.Schedule(crony.NewTask("System Info Update").
 			Func(func() {
-				task := "[utilities update]"
+				task := "[system info update]"
 				log.Info(task, "update starting")
-				if err := h.updateTools(); err != nil {
+				if err := a.updateSystemInfo(); err != nil {
 					log.Error(task, err)
 				}
-			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
-			crony.PrioHigh)
+			}).Ticker(a.config.RulesConfig.UpdateInterval).
+			Schedule(inLittleWhile),
+			crony.PrioLow)
+
 	}
 
 	// routines scheduled in any case
 
 	// Forwarder scheduling
-	h.scheduler.Schedule(crony.NewTask("Log forwarder").Func(func() {
+	a.scheduler.Schedule(crony.NewTask("Log forwarder").Func(func() {
 		// this call starts a new go routine so we don't need to create
 		// a new AsyncTask as it is not a blocking call
-		h.forwarder.Run()
+		a.forwarder.Run()
 	}).Schedule(time.Now()), crony.PrioHigh)
 
 	// routine managing Sysmon archived files cleanup
-	if err := h.scheduleCleanArchivedTask(); err != nil {
+	if err := a.scheduleCleanArchivedTask(); err != nil {
 		log.Error("failed to schedule sysmon archived file cleaning: ", err)
 	}
 
 	// routine creating canary files
-	h.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").Func(func() {
+	a.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").Func(func() {
 		task := "[canary configuration]"
-		if err := h.config.CanariesConfig.Configure(); err != nil {
+		if err := a.config.CanariesConfig.Configure(); err != nil {
 			log.Error(task, err)
 		}
 	}).Schedule(time.Now()), crony.PrioHigh)
 
 	// Action handler scheduling
-	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler").Func(func() {
-		h.actionHandler.handleActionsLoop()
+	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler").Func(func() {
+		a.actionHandler.handleActionsLoop()
 	}).Schedule(time.Now()), crony.PrioHigh)
 
-	h.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").Func(func() {
-		h.actionHandler.compressionLoop()
+	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").Func(func() {
+		a.actionHandler.compressionLoop()
 	}).Schedule(time.Now()), crony.PrioHigh)
 }

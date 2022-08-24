@@ -151,6 +151,7 @@ func (m *Manager) runEndpointAPI() {
 		rt.HandleFunc(api.EptAPISysmonConfigPath, m.eptAPISysmonConfig).Methods("GET")
 		rt.HandleFunc(api.EptAPISysmonConfigSha256Path, m.eptAPISysmonConfigSha256).Methods("GET")
 		rt.HandleFunc(api.EptAPITools, m.eptAPITools).Methods("GET")
+		rt.HandleFunc(api.EptAPIConfigSha256Path, m.eptAPIConfigSha256).Methods("GET")
 
 		// GET and POST
 		rt.HandleFunc(api.EptAPICommandPath, m.eptAPICommand).Methods("GET", "POST")
@@ -192,6 +193,30 @@ func (m *Manager) eptAPIRules(wt http.ResponseWriter, rq *http.Request) {
 	wt.Write([]byte(m.gene.rules))
 }
 
+// eptAPIConfigSha256 HTTP handler
+func (m *Manager) eptAPIConfigSha256(wt http.ResponseWriter, rq *http.Request) {
+	var endpt *api.Endpoint
+
+	if endpt = m.eptAPIMutEndpointFromRequest(rq); endpt == nil {
+		m.logAPIErrorf("unknown endpoint")
+		return
+	}
+
+	// if configuration is nil we return StatusNoContent
+	if endpt.Config == nil {
+		http.Error(wt, "", http.StatusNoContent)
+		return
+	}
+
+	sha256, err := endpt.Config.Sha256()
+	if err != nil {
+		http.Error(wt, "failed to compute config hash", http.StatusInternalServerError)
+		return
+	}
+
+	wt.Write([]byte(sha256))
+}
+
 // eptAPIConfigHTTP handler
 func (m *Manager) eptAPIConfig(wt http.ResponseWriter, rq *http.Request) {
 	var endpt *api.Endpoint
@@ -213,6 +238,7 @@ func (m *Manager) eptAPIConfig(wt http.ResponseWriter, rq *http.Request) {
 		out, err := json.Marshal(endpt.Config)
 		if err != nil {
 			m.logAPIErrorf("failed at serializing config to JSON: %s", err)
+			http.Error(wt, "failed to serialize config", http.StatusInternalServerError)
 			return
 		}
 
@@ -321,7 +347,7 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 
 			// building up EdrData
 			edrData := event.EdrData{}
-			edrData.Event.Hash = utils.HashEventBytes(tok)
+			edrData.Event.Hash = utils.Sha1EventBytes(tok)
 			edrData.Event.ReceiptTime = time.Now().UTC()
 
 			edrData.Endpoint.UUID = uuid

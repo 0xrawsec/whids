@@ -556,6 +556,35 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 	return
 }
 
+func (m *ManagerClient) GetAgentConfigSha256() (sha256 string, err error) {
+	var req *http.Request
+	var resp *http.Response
+
+	if auth, _ := m.IsServerAuthenticated(); !auth {
+		return "", ErrServerUnauthenticated
+	}
+
+	if req, err = m.Prepare("GET", api.EptAPIConfigSha256Path, nil); err != nil {
+		return
+	}
+
+	if resp, err = m.HTTPClient.Do(req); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+		if resp.StatusCode == http.StatusNoContent {
+			err = ErrNoAgentConfig
+			return
+		}
+		sha256 = respBodyToString(resp)
+	}
+
+	return
+}
+
 func (m *ManagerClient) GetAgentConfig() (config *aconfig.Agent, err error) {
 	var req *http.Request
 	var resp *http.Response
@@ -582,6 +611,37 @@ func (m *ManagerClient) GetAgentConfig() (config *aconfig.Agent, err error) {
 		// decoding configuration
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&config)
+	}
+
+	return
+}
+
+func (m *ManagerClient) PostAgentConfig(c *aconfig.Agent) (err error) {
+
+	var b []byte
+	var req *http.Request
+	var resp *http.Response
+
+	if auth, _ := m.IsServerAuthenticated(); !auth {
+		return ErrServerUnauthenticated
+	}
+
+	if b, err = utils.Json(c); err != nil {
+		return
+	}
+
+	if req, err = m.PrepareGzip("POST", api.EptAPIConfigPath, bytes.NewBuffer(b)); err != nil {
+		return
+	}
+
+	if resp, err = m.HTTPClient.Do(req); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if err = ValidateRespStatus(resp, http.StatusOK); err != nil {
+		return
 	}
 
 	return

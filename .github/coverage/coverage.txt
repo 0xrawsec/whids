@@ -1,13 +1,13 @@
-ok  	github.com/0xrawsec/whids/agent	53.872s	coverage: 52.0% of statements
-ok  	github.com/0xrawsec/whids/agent/config	4.223s	coverage: 46.1% of statements
-ok  	github.com/0xrawsec/whids/agent/sysinfo	0.966s	coverage: 95.2% of statements
-ok  	github.com/0xrawsec/whids/api/server	220.042s	coverage: 66.6% of statements
-ok  	github.com/0xrawsec/whids/event	92.751s	coverage: 75.3% of statements
-ok  	github.com/0xrawsec/whids/ioc	44.868s	coverage: 73.3% of statements
-ok  	github.com/0xrawsec/whids/logger	70.295s	coverage: 76.7% of statements
-ok  	github.com/0xrawsec/whids/sysmon	9.328s	coverage: 83.1% of statements
-ok  	github.com/0xrawsec/whids/utils	22.681s	coverage: 17.1% of statements
-ok  	github.com/0xrawsec/whids/utils/command	1.058s	coverage: 100.0% of statements
+ok  	github.com/0xrawsec/whids/agent	57.877s	coverage: 60.8% of statements
+ok  	github.com/0xrawsec/whids/agent/config	3.042s	coverage: 44.6% of statements
+ok  	github.com/0xrawsec/whids/agent/sysinfo	0.929s	coverage: 90.5% of statements
+ok  	github.com/0xrawsec/whids/api/server	193.186s	coverage: 65.9% of statements
+ok  	github.com/0xrawsec/whids/event	60.038s	coverage: 75.3% of statements
+ok  	github.com/0xrawsec/whids/ioc	48.623s	coverage: 73.3% of statements
+ok  	github.com/0xrawsec/whids/logger	50.776s	coverage: 76.7% of statements
+ok  	github.com/0xrawsec/whids/sysmon	7.109s	coverage: 83.1% of statements
+ok  	github.com/0xrawsec/whids/utils	12.258s	coverage: 13.7% of statements
+ok  	github.com/0xrawsec/whids/utils/command	0.867s	coverage: 100.0% of statements
 github.com/0xrawsec/whids/agent/actions.go:72:				NewActionHandler		100.0%
 github.com/0xrawsec/whids/agent/actions.go:81:				dumpname			100.0%
 github.com/0xrawsec/whids/agent/actions.go:86:				prepare				100.0%
@@ -24,34 +24,37 @@ github.com/0xrawsec/whids/agent/actions.go:271:				regdump				26.7%
 github.com/0xrawsec/whids/agent/actions.go:302:				suspend_process			0.0%
 github.com/0xrawsec/whids/agent/actions.go:312:				kill_process			0.0%
 github.com/0xrawsec/whids/agent/actions.go:325:				Queue				100.0%
-github.com/0xrawsec/whids/agent/actions.go:335:				HandleActions			67.7%
+github.com/0xrawsec/whids/agent/actions.go:335:				HandleActions			58.1%
 github.com/0xrawsec/whids/agent/actions.go:408:				queueCompression		100.0%
-github.com/0xrawsec/whids/agent/actions.go:414:				compressionLoop			90.0%
-github.com/0xrawsec/whids/agent/actions.go:433:				handleActionsLoop		100.0%
+github.com/0xrawsec/whids/agent/actions.go:414:				compressionLoop			81.8%
+github.com/0xrawsec/whids/agent/actions.go:434:				handleActionsLoop		100.0%
 github.com/0xrawsec/whids/agent/agent.go:104:				newActionnableEngine		100.0%
-github.com/0xrawsec/whids/agent/agent.go:123:				NewAgent			81.0%
-github.com/0xrawsec/whids/agent/agent.go:196:				initEnvVariables		100.0%
-github.com/0xrawsec/whids/agent/agent.go:200:				initDB				66.7%
-github.com/0xrawsec/whids/agent/agent.go:209:				initEventProvider		71.4%
-github.com/0xrawsec/whids/agent/agent.go:229:				initHooks			100.0%
-github.com/0xrawsec/whids/agent/agent.go:256:				update				37.5%
-github.com/0xrawsec/whids/agent/agent.go:350:				needsRulesUpdate		0.0%
-github.com/0xrawsec/whids/agent/agent.go:376:				needsIoCsUpdate			0.0%
-github.com/0xrawsec/whids/agent/agent.go:399:				fetchRulesFromManager		0.0%
-github.com/0xrawsec/whids/agent/agent.go:427:				containerPaths			0.0%
-github.com/0xrawsec/whids/agent/agent.go:433:				fetchIoCsFromManager		0.0%
-github.com/0xrawsec/whids/agent/agent.go:486:				loadContainers			14.3%
-github.com/0xrawsec/whids/agent/agent.go:518:				updateSystemInfo		0.0%
-github.com/0xrawsec/whids/agent/agent.go:546:				updateSysmon			0.0%
-github.com/0xrawsec/whids/agent/agent.go:592:				updateSysmonConfig		0.0%
-github.com/0xrawsec/whids/agent/agent.go:652:				cleanup				33.3%
-github.com/0xrawsec/whids/agent/agent.go:668:				IsHIDSEvent			93.8%
-github.com/0xrawsec/whids/agent/agent.go:702:				Report				0.0%
-github.com/0xrawsec/whids/agent/agent.go:729:				Run				58.0%
-github.com/0xrawsec/whids/agent/agent.go:846:				LogStats			0.0%
-github.com/0xrawsec/whids/agent/agent.go:855:				Stop				68.8%
-github.com/0xrawsec/whids/agent/agent.go:891:				Wait				0.0%
-github.com/0xrawsec/whids/agent/agent.go:896:				WaitWithTimeout			0.0%
+github.com/0xrawsec/whids/agent/agent.go:123:				NewAgent			100.0%
+github.com/0xrawsec/whids/agent/agent.go:133:				Initialize			100.0%
+github.com/0xrawsec/whids/agent/agent.go:155:				Prepare				81.0%
+github.com/0xrawsec/whids/agent/agent.go:210:				initEnvVariables		100.0%
+github.com/0xrawsec/whids/agent/agent.go:214:				initDB				66.7%
+github.com/0xrawsec/whids/agent/agent.go:223:				initEventProvider		71.4%
+github.com/0xrawsec/whids/agent/agent.go:243:				initHooks			100.0%
+github.com/0xrawsec/whids/agent/agent.go:270:				update				52.1%
+github.com/0xrawsec/whids/agent/agent.go:364:				needsRulesUpdate		75.0%
+github.com/0xrawsec/whids/agent/agent.go:390:				needsIoCsUpdate			90.0%
+github.com/0xrawsec/whids/agent/agent.go:413:				fetchRulesFromManager		69.2%
+github.com/0xrawsec/whids/agent/agent.go:441:				containerPaths			100.0%
+github.com/0xrawsec/whids/agent/agent.go:447:				fetchIoCsFromManager		69.2%
+github.com/0xrawsec/whids/agent/agent.go:500:				loadContainers			66.7%
+github.com/0xrawsec/whids/agent/agent.go:532:				updateSystemInfo		88.9%
+github.com/0xrawsec/whids/agent/agent.go:560:				updateSysmonBin			30.0%
+github.com/0xrawsec/whids/agent/agent.go:606:				updateSysmonConfig		66.7%
+github.com/0xrawsec/whids/agent/agent.go:666:				updateAgentConfig		36.0%
+github.com/0xrawsec/whids/agent/agent.go:716:				cleanup				33.3%
+github.com/0xrawsec/whids/agent/agent.go:732:				IsHIDSEvent			93.8%
+github.com/0xrawsec/whids/agent/agent.go:766:				Report				0.0%
+github.com/0xrawsec/whids/agent/agent.go:793:				Run				58.0%
+github.com/0xrawsec/whids/agent/agent.go:910:				LogStats			0.0%
+github.com/0xrawsec/whids/agent/agent.go:919:				Stop				68.8%
+github.com/0xrawsec/whids/agent/agent.go:955:				Wait				0.0%
+github.com/0xrawsec/whids/agent/agent.go:960:				WaitWithTimeout			0.0%
 github.com/0xrawsec/whids/agent/commands.go:33:				Path				100.0%
 github.com/0xrawsec/whids/agent/commands.go:37:				Hash				90.9%
 github.com/0xrawsec/whids/agent/commands.go:71:				FromFSFileInfo			100.0%
@@ -76,10 +79,13 @@ github.com/0xrawsec/whids/agent/config/canary_windows.go:247:		Clean				80.0%
 github.com/0xrawsec/whids/agent/config/config.go:59:			RulesPaths			0.0%
 github.com/0xrawsec/whids/agent/config/config.go:73:			Configure			0.0%
 github.com/0xrawsec/whids/agent/config/config.go:99:			Restore				0.0%
-github.com/0xrawsec/whids/agent/config/config.go:133:			LoadsHIDSConfig			0.0%
-github.com/0xrawsec/whids/agent/config/config.go:145:			IsForwardingEnabled		0.0%
-github.com/0xrawsec/whids/agent/config/config.go:150:			Prepare				0.0%
-github.com/0xrawsec/whids/agent/config/config.go:169:			Verify				0.0%
+github.com/0xrawsec/whids/agent/config/config.go:135:			LoadAgentConfig			0.0%
+github.com/0xrawsec/whids/agent/config/config.go:147:			Sha256				0.0%
+github.com/0xrawsec/whids/agent/config/config.go:152:			IsForwardingEnabled		0.0%
+github.com/0xrawsec/whids/agent/config/config.go:157:			Prepare				0.0%
+github.com/0xrawsec/whids/agent/config/config.go:180:			Verify				0.0%
+github.com/0xrawsec/whids/agent/config/config.go:190:			Path				0.0%
+github.com/0xrawsec/whids/agent/config/config.go:195:			Save				0.0%
 github.com/0xrawsec/whids/agent/config/etw_windows.go:36:		ConfigureAutologger		62.5%
 github.com/0xrawsec/whids/agent/config/etw_windows.go:55:		UnifiedProviders		75.0%
 github.com/0xrawsec/whids/agent/config/etw_windows.go:69:		UnifiedTraces			0.0%
@@ -89,15 +95,15 @@ github.com/0xrawsec/whids/agent/config/reports.go:94:			PrepareCommands			0.0%
 github.com/0xrawsec/whids/agent/cron.go:26:				containCmd			0.0%
 github.com/0xrawsec/whids/agent/cron.go:40:				uncontainCmd			0.0%
 github.com/0xrawsec/whids/agent/cron.go:49:				handleManagerCommand		0.0%
-github.com/0xrawsec/whids/agent/cron.go:308:				taskCommandRunner		0.0%
+github.com/0xrawsec/whids/agent/cron.go:308:				taskCommandRunner		55.0%
 github.com/0xrawsec/whids/agent/cron.go:343:				scheduleCleanArchivedTask	42.1%
 github.com/0xrawsec/whids/agent/cron.go:383:				taskUploadDumps			0.0%
-github.com/0xrawsec/whids/agent/cron.go:437:				updateTools			0.0%
-github.com/0xrawsec/whids/agent/cron.go:507:				scheduleTasks			29.3%
+github.com/0xrawsec/whids/agent/cron.go:437:				updateTools			22.6%
+github.com/0xrawsec/whids/agent/cron.go:507:				scheduleTasks			82.6%
 github.com/0xrawsec/whids/agent/defaults.go:12:				BuildDefaultConfig		100.0%
 github.com/0xrawsec/whids/agent/filters.go:73:				NewFilter			100.0%
 github.com/0xrawsec/whids/agent/filters.go:81:				Match				100.0%
-github.com/0xrawsec/whids/agent/hookdefs.go:39:				hookSetImageSize		82.4%
+github.com/0xrawsec/whids/agent/hookdefs.go:39:				hookSetImageSize		94.1%
 github.com/0xrawsec/whids/agent/hookdefs.go:71:				hookImageLoad			95.0%
 github.com/0xrawsec/whids/agent/hookdefs.go:108:			trackSysmonProcessCreate	76.1%
 github.com/0xrawsec/whids/agent/hookdefs.go:229:			hookTrack			50.0%
@@ -154,7 +160,7 @@ github.com/0xrawsec/whids/agent/ptrack.go:406:				freeRtn				100.0%
 github.com/0xrawsec/whids/agent/ptrack.go:444:				CheckDumpCountOrInc		100.0%
 github.com/0xrawsec/whids/agent/ptrack.go:458:				Add				100.0%
 github.com/0xrawsec/whids/agent/ptrack.go:469:				PS				0.0%
-github.com/0xrawsec/whids/agent/ptrack.go:480:				Blacklist			100.0%
+github.com/0xrawsec/whids/agent/ptrack.go:480:				Blacklist			0.0%
 github.com/0xrawsec/whids/agent/ptrack.go:484:				IsBlacklisted			100.0%
 github.com/0xrawsec/whids/agent/ptrack.go:488:				SourceTrackFromEvent		80.0%
 github.com/0xrawsec/whids/agent/ptrack.go:500:				TargetTrackFromEvent		80.0%
@@ -185,7 +191,7 @@ github.com/0xrawsec/whids/agent/stats.go:85:				DynEPS				75.0%
 github.com/0xrawsec/whids/agent/stats.go:93:				HasPerfIssue			38.5%
 github.com/0xrawsec/whids/agent/stats.go:113:				HasCriticalPerfIssue		0.0%
 github.com/0xrawsec/whids/agent/sysinfo/sysinfo.go:15:			RegisterEdrInfo			0.0%
-github.com/0xrawsec/whids/agent/sysinfo/windows_sysinfo.go:31:		NewSystemInfo			100.0%
+github.com/0xrawsec/whids/agent/sysinfo/windows_sysinfo.go:31:		NewSystemInfo			95.0%
 github.com/0xrawsec/whids/api/server/command.go:18:			ToCommand			77.8%
 github.com/0xrawsec/whids/api/server/log_streamer.go:18:		Queue				75.0%
 github.com/0xrawsec/whids/api/server/log_streamer.go:26:		Stream				100.0%
@@ -216,12 +222,13 @@ github.com/0xrawsec/whids/api/server/manager.go:424:			Endpoints			85.7%
 github.com/0xrawsec/whids/api/server/manager.go:440:			ImportRules			0.0%
 github.com/0xrawsec/whids/api/server/manager.go:465:			CreateNewAdminAPIUser		50.0%
 github.com/0xrawsec/whids/api/server/manager.go:478:			AddEndpoint			100.0%
-github.com/0xrawsec/whids/api/server/manager.go:483:			UpdateReducer			100.0%
-github.com/0xrawsec/whids/api/server/manager.go:498:			logAPIErrorf			100.0%
-github.com/0xrawsec/whids/api/server/manager.go:511:			Wait				100.0%
-github.com/0xrawsec/whids/api/server/manager.go:516:			IsDone				0.0%
-github.com/0xrawsec/whids/api/server/manager.go:521:			Shutdown			82.4%
-github.com/0xrawsec/whids/api/server/manager.go:550:			Run				100.0%
+github.com/0xrawsec/whids/api/server/manager.go:482:			AddIoCs				81.8%
+github.com/0xrawsec/whids/api/server/manager.go:513:			UpdateReducer			100.0%
+github.com/0xrawsec/whids/api/server/manager.go:528:			logAPIErrorf			100.0%
+github.com/0xrawsec/whids/api/server/manager.go:541:			Wait				100.0%
+github.com/0xrawsec/whids/api/server/manager.go:546:			IsDone				0.0%
+github.com/0xrawsec/whids/api/server/manager.go:551:			Shutdown			82.4%
+github.com/0xrawsec/whids/api/server/manager.go:580:			Run				100.0%
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:43:		admApiParseDuration		71.4%
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:56:		admApiParseTime			66.7%
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:80:		NewAdminAPIResponse		100.0%
@@ -239,47 +246,48 @@ github.com/0xrawsec/whids/api/server/manager_admin_api.go:170:		admAPIUsers			54
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:238:		admAPIUser			59.4%
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:299:		admAPIEndpoints			82.1%
 github.com/0xrawsec/whids/api/server/manager_admin_api.go:352:		admAPIEndpoint			77.8%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:429:		admAPIEndpointConfig		78.8%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:496:		admAPIEndpointCommand		74.1%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:552:		admAPIEndpointCommandField	52.9%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:589:		admAPIEndpointLogs		70.7%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:729:		admAPIEndpointReport		78.9%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:769:		admAPIEndpointReportArchive	67.4%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:844:		admAPIEndpointsReports		83.3%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:871:		listEndpointDumps		80.6%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:938:		admAPIArtifacts			61.1%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:969:		admAPIEndpointArtifacts		61.1%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1000:		admAPIEndpointArtifact		62.9%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1066:		admAPIEndpointSysmonConfig	65.7%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1139:		admAPIEndpointToolMgmt		66.7%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1226:		admAPIEndpointSysmonBinary	100.0%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1230:		admAPIEndpointOSQueryiBinary	100.0%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1239:		admAPIStats			75.0%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1251:		admAPIIocs			62.1%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1373:		admAPIRules			58.8%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1479:		wsHandleControlMessage		100.0%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1489:		admAPIStreamEvents		71.4%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1512:		admAPIStreamDetections		0.0%
-github.com/0xrawsec/whids/api/server/manager_admin_api.go:1537:		runAdminAPI			87.8%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:429:		admAPIEndpointConfig		78.1%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:495:		admAPIEndpointCommand		74.1%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:551:		admAPIEndpointCommandField	52.9%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:588:		admAPIEndpointLogs		70.7%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:728:		admAPIEndpointReport		78.9%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:768:		admAPIEndpointReportArchive	67.4%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:843:		admAPIEndpointsReports		83.3%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:870:		listEndpointDumps		80.6%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:937:		admAPIArtifacts			61.1%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:968:		admAPIEndpointArtifacts		61.1%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:999:		admAPIEndpointArtifact		62.9%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1065:		admAPIEndpointSysmonConfig	65.7%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1138:		admAPIEndpointToolMgmt		66.7%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1225:		admAPIEndpointSysmonBinary	100.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1229:		admAPIEndpointOSQueryiBinary	100.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1238:		admAPIStats			75.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1250:		admAPIIocs			58.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1353:		admAPIRules			58.8%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1459:		wsHandleControlMessage		100.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1469:		admAPIStreamEvents		71.4%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1492:		admAPIStreamDetections		0.0%
+github.com/0xrawsec/whids/api/server/manager_admin_api.go:1517:		runAdminAPI			87.8%
 github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:34:	eptAPIMutEndpointFromRequest	75.0%
 github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:44:	endpointAuthorizationMiddleware	65.2%
 github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:87:	isVerboseURL			100.0%
 github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:96:	endptLogHTTPMiddleware		0.0%
 github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:104:	endptQuietLogHTTPMiddleware	100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:114:	runEndpointAPI			81.2%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:184:	eptAPIServerKey			100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:189:	eptAPIRules			100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:196:	eptAPIConfig			0.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:249:	eptAPIRulesSha256		100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:255:	eptAPIIoCs			50.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:264:	eptAPIIoCsSha256		100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:269:	eptAPIUploadDump		44.4%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:302:	eptAPICollect			86.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:385:	eptAPICommand			79.3%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:441:	eptAPISystemInfo		70.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:460:	eptAPISysmonConfig		87.5%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:477:	eptAPISysmonConfigSha256	100.0%
-github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:490:	eptAPITools			0.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:114:	runEndpointAPI			81.8%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:185:	eptAPIServerKey			100.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:190:	eptAPIRules			100.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:197:	eptAPIConfigSha256		0.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:221:	eptAPIConfig			0.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:275:	eptAPIRulesSha256		100.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:281:	eptAPIIoCs			50.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:290:	eptAPIIoCsSha256		100.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:295:	eptAPIUploadDump		44.4%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:328:	eptAPICollect			86.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:411:	eptAPICommand			79.3%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:467:	eptAPISystemInfo		70.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:486:	eptAPISysmonConfig		87.5%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:503:	eptAPISysmonConfigSha256	100.0%
+github.com/0xrawsec/whids/api/server/manager_endpoint_api.go:516:	eptAPITools			0.0%
 github.com/0xrawsec/whids/api/server/utils.go:14:			muxGetVar			75.0%
 github.com/0xrawsec/whids/api/server/utils.go:22:			format				100.0%
 github.com/0xrawsec/whids/api/server/utils.go:27:			readPostAsJSON			80.0%
@@ -415,6 +423,11 @@ github.com/0xrawsec/whids/utils/audit.go:190:				RemoveEDRAuditACL		77.8%
 github.com/0xrawsec/whids/utils/command/command.go:15:			Command				100.0%
 github.com/0xrawsec/whids/utils/command/command.go:22:			CommandTimeout			100.0%
 github.com/0xrawsec/whids/utils/command/command.go:29:			Terminate			100.0%
+github.com/0xrawsec/whids/utils/crypto.go:22:				publicKey			0.0%
+github.com/0xrawsec/whids/utils/crypto.go:33:				pemBlockForKey			0.0%
+github.com/0xrawsec/whids/utils/crypto.go:49:				GenerateCert			0.0%
+github.com/0xrawsec/whids/utils/crypto.go:122:				CertFileSha256			0.0%
+github.com/0xrawsec/whids/utils/crypto.go:133:				CertSha256			0.0%
 github.com/0xrawsec/whids/utils/files.go:25:				CountFiles			0.0%
 github.com/0xrawsec/whids/utils/files.go:33:				GzipFileBestSpeed		0.0%
 github.com/0xrawsec/whids/utils/files.go:73:				HidsMkdirAll			0.0%
@@ -443,22 +456,24 @@ github.com/0xrawsec/whids/utils/utils.go:69:				Toml				0.0%
 github.com/0xrawsec/whids/utils/utils.go:80:				TomlString			0.0%
 github.com/0xrawsec/whids/utils/utils.go:89:				ExpandEnvs			0.0%
 github.com/0xrawsec/whids/utils/utils.go:98:				Sha256StringArray		0.0%
-github.com/0xrawsec/whids/utils/utils.go:108:				HashEventBytes			0.0%
-github.com/0xrawsec/whids/utils/utils.go:113:				HashInterface			0.0%
-github.com/0xrawsec/whids/utils/utils.go:123:				GetCurFuncName			0.0%
-github.com/0xrawsec/whids/utils/utils.go:151:				NewWindowsLogger		0.0%
-github.com/0xrawsec/whids/utils/utils.go:164:				Log				0.0%
-github.com/0xrawsec/whids/utils/utils.go:175:				Close				0.0%
-github.com/0xrawsec/whids/utils/utils.go:184:				Round				0.0%
-github.com/0xrawsec/whids/utils/utils.go:190:				RegQuery			0.0%
-github.com/0xrawsec/whids/utils/utils.go:202:				Utf16ToUtf8			0.0%
-github.com/0xrawsec/whids/utils/utils.go:234:				Len				0.0%
-github.com/0xrawsec/whids/utils/utils.go:238:				Swap				0.0%
-github.com/0xrawsec/whids/utils/utils.go:244:				Less				0.0%
+github.com/0xrawsec/whids/utils/utils.go:106:				toBytes				0.0%
+github.com/0xrawsec/whids/utils/utils.go:117:				Sha1EventBytes			0.0%
+github.com/0xrawsec/whids/utils/utils.go:122:				Sha1Interface			0.0%
+github.com/0xrawsec/whids/utils/utils.go:132:				Sha256Interface			0.0%
+github.com/0xrawsec/whids/utils/utils.go:142:				GetCurFuncName			0.0%
+github.com/0xrawsec/whids/utils/utils.go:170:				NewWindowsLogger		0.0%
+github.com/0xrawsec/whids/utils/utils.go:183:				Log				0.0%
+github.com/0xrawsec/whids/utils/utils.go:194:				Close				0.0%
+github.com/0xrawsec/whids/utils/utils.go:203:				Round				0.0%
+github.com/0xrawsec/whids/utils/utils.go:209:				RegQuery			0.0%
+github.com/0xrawsec/whids/utils/utils.go:221:				Utf16ToUtf8			0.0%
+github.com/0xrawsec/whids/utils/utils.go:253:				Len				0.0%
+github.com/0xrawsec/whids/utils/utils.go:257:				Swap				0.0%
+github.com/0xrawsec/whids/utils/utils.go:263:				Less				0.0%
 github.com/0xrawsec/whids/utils/windows.go:22:				ArgvFromCommandLine		0.0%
 github.com/0xrawsec/whids/utils/windows.go:41:				HideFile			0.0%
 github.com/0xrawsec/whids/utils/windows.go:53:				ResolveCDrive			0.0%
 github.com/0xrawsec/whids/utils/windows.go:76:				RegValue			0.0%
 github.com/0xrawsec/whids/utils/windows.go:91:				RegJoin				0.0%
 github.com/0xrawsec/whids/utils/windows.go:98:				RegValueToString		0.0%
-total:									(statements)			58.4%
+total:									(statements)			60.5%
