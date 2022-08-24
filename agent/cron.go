@@ -14,7 +14,6 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/sod"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/client"
@@ -297,7 +296,7 @@ func (a *Agent) handleManagerCommand(cmd *api.EndpointCommand) {
 
 	// we finally run the command
 	if err := cmd.Run(); err != nil {
-		log.Errorf("failed to run command sent by manager \"%s\": %s", cmd.String(), err)
+		a.logger.Errorf("failed to run command sent by manager \"%s\": %s", cmd.String(), err)
 	}
 }
 
@@ -315,15 +314,15 @@ func (a *Agent) taskCommandRunner() {
 
 	for {
 		if cmd, err := a.forwarder.Client.FetchCommand(); err != nil && err != client.ErrNothingToDo {
-			log.Error(err)
+			a.logger.Error(err)
 		} else if err == nil {
 			// reduce sleeping time if a command was received
 			sleep = burstSleep
 			burstDur = 0
-			log.Infof("[command runner] handling manager command: %s", cmd.String())
+			a.logger.Infof("[command runner] handling manager command: %s", cmd.String())
 			a.handleManagerCommand(cmd)
 			if err := a.forwarder.Client.PostCommand(cmd); err != nil {
-				log.Error("[command runner]", err)
+				a.logger.Error("[command runner]", err)
 			}
 		}
 
@@ -355,7 +354,7 @@ func (a *Agent) scheduleCleanArchivedTask() error {
 		// to track already reported deletion errors
 		reported := datastructs.NewSyncedSet()
 
-		log.Infof("Scheduling archive cleanup loop for directory: %s", archivePath)
+		a.logger.Infof("Scheduling archive cleanup loop for directory: %s", archivePath)
 		a.scheduler.Schedule(crony.NewTask("Sysmon archived files cleaner").Func(func() {
 			// used to mark files for which we already reported errors
 			// expiration fixed to five minutes
@@ -367,7 +366,7 @@ func (a *Agent) scheduleCleanArchivedTask() error {
 						if fi.ModTime().Before(expired) {
 							// we print out error only once
 							if err := os.Remove(path); err != nil && !reported.Contains(path) {
-								log.Error("[sysmon archived files cleaner]", "failed to remove archived file:", err)
+								a.logger.Error("[sysmon archived files cleaner]", "failed to remove archived file:", err)
 								reported.Add(path)
 							}
 						}
@@ -397,19 +396,19 @@ func (a *Agent) taskUploadDumps() {
 
 					// we create upload shrinker object
 					if shrink, err = client.NewUploadShrinker(fullpath, guid, ehash); err != nil {
-						log.Errorf("[dump uploader] failed to create upload iterator: %s", err)
+						a.logger.Errorf("[dump uploader] failed to create upload iterator: %s", err)
 						continue
 					}
 
 					if shrink.Size() > a.config.FwdConfig.Client.MaxUploadSize {
-						log.Warnf("[dump uploader] dump file is above allowed upload limit, %s will be deleted without being sent", fullpath)
+						a.logger.Warnf("[dump uploader] dump file is above allowed upload limit, %s will be deleted without being sent", fullpath)
 						goto CleanShrinker
 					}
 
 					// we shrink a file into several chunks to reduce memory impact
 					for fu := shrink.Next(); fu != nil; fu = shrink.Next() {
 						if err = a.forwarder.Client.PostDump(fu); err != nil {
-							log.Error(err)
+							a.logger.Error(err)
 							break
 						}
 					}
@@ -419,15 +418,15 @@ func (a *Agent) taskUploadDumps() {
 					shrink.Close()
 
 					if shrink.Err() == nil {
-						log.Infof("[dump uploader] dump file successfully sent to manager, deleting: %s", fullpath)
+						a.logger.Infof("[dump uploader] dump file successfully sent to manager, deleting: %s", fullpath)
 						if err := os.Remove(fullpath); err != nil {
-							log.Errorf("[dump uploader] failed to remove file %s: %s", fullpath, err)
+							a.logger.Errorf("[dump uploader] failed to remove file %s: %s", fullpath, err)
 						}
 					} else {
-						log.Errorf("[dump uploader] failed to post dump file: %s", shrink.Err())
+						a.logger.Errorf("[dump uploader] failed to post dump file: %s", shrink.Err())
 					}
 				} else {
-					log.Errorf("[dump uploader] unexpected directory layout, cannot send dump to manager")
+					a.logger.Errorf("[dump uploader] unexpected directory layout, cannot send dump to manager")
 				}
 			}
 		}
@@ -516,9 +515,9 @@ func (a *Agent) scheduleTasks() {
 			crony.NewTask("Configuration update").
 				Func(func() {
 					task := "[configuration update]"
-					log.Info(task, "update starting")
+					a.logger.Info(task, "update starting")
 					if err := a.updateAgentConfig(); err != nil {
-						log.Error(task, err)
+						a.logger.Error(task, err)
 					}
 				}).Ticker(time.Minute*15).Schedule(time.Now()),
 			crony.PrioHigh,
@@ -528,9 +527,9 @@ func (a *Agent) scheduleTasks() {
 		a.scheduler.Schedule(crony.NewTask("Utilities update").
 			Func(func() {
 				task := "[utilities update]"
-				log.Info(task, "update starting")
+				a.logger.Info(task, "update starting")
 				if err := a.updateTools(); err != nil {
-					log.Error(task, err)
+					a.logger.Error(task, err)
 				}
 			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioHigh)
@@ -539,9 +538,9 @@ func (a *Agent) scheduleTasks() {
 		a.scheduler.Schedule(crony.NewTask("Rule/IOC Update").
 			Func(func() {
 				task := "[rule/ioc update]"
-				log.Info(task, "update starting")
+				a.logger.Info(task, "update starting")
 				if err := a.update(false); err != nil {
-					log.Error(task, err)
+					a.logger.Error(task, err)
 				}
 			}).Ticker(a.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
 			crony.PrioHigh)
@@ -564,9 +563,9 @@ func (a *Agent) scheduleTasks() {
 		a.scheduler.Schedule(crony.NewTask("Sysmon update").
 			Func(func() {
 				task := "[sysmon update]"
-				log.Info(task, "update starting")
+				a.logger.Info(task, "update starting")
 				if err := a.updateSysmonBin(); err != nil {
-					log.Error(task, err)
+					a.logger.Error(task, err)
 				}
 			}).Ticker(time.Hour).Schedule(inLittleWhile),
 			crony.PrioMedium)
@@ -575,9 +574,9 @@ func (a *Agent) scheduleTasks() {
 		a.scheduler.Schedule(crony.NewTask("Sysmon configuration update").
 			Func(func() {
 				task := "[sysmon config update]"
-				log.Info(task, "update starting")
+				a.logger.Info(task, "update starting")
 				if err := a.updateSysmonConfig(); err != nil {
-					log.Error(task, err)
+					a.logger.Error(task, err)
 				}
 			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
 			crony.PrioMedium)
@@ -588,9 +587,9 @@ func (a *Agent) scheduleTasks() {
 		a.scheduler.Schedule(crony.NewTask("System Info Update").
 			Func(func() {
 				task := "[system info update]"
-				log.Info(task, "update starting")
+				a.logger.Info(task, "update starting")
 				if err := a.updateSystemInfo(); err != nil {
-					log.Error(task, err)
+					a.logger.Error(task, err)
 				}
 			}).Ticker(a.config.RulesConfig.UpdateInterval).
 			Schedule(inLittleWhile),
@@ -609,14 +608,14 @@ func (a *Agent) scheduleTasks() {
 
 	// routine managing Sysmon archived files cleanup
 	if err := a.scheduleCleanArchivedTask(); err != nil {
-		log.Error("failed to schedule sysmon archived file cleaning: ", err)
+		a.logger.Error("failed to schedule sysmon archived file cleaning: ", err)
 	}
 
 	// routine creating canary files
 	a.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").Func(func() {
 		task := "[canary configuration]"
 		if err := a.config.CanariesConfig.Configure(); err != nil {
-			log.Error(task, err)
+			a.logger.Error(task, err)
 		}
 	}).Schedule(time.Now()), crony.PrioHigh)
 

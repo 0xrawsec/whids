@@ -18,6 +18,7 @@ import (
 	"github.com/0xrawsec/golang-etw/etw"
 	"github.com/0xrawsec/golang-win32/win32"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/sod"
 
 	"github.com/0xrawsec/gene/v2/engine"
@@ -25,7 +26,6 @@ import (
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/api/client"
@@ -96,6 +96,9 @@ type Agent struct {
 	// local structure database
 	db *sod.DB
 
+	//logger
+	logger *golog.Logger
+
 	Engine   *engine.Engine
 	DryRun   bool
 	PrintAll bool
@@ -150,6 +153,7 @@ func (a *Agent) Initialize() {
 	a.filedumped = datastructs.NewSyncedSet()
 	// has to be empty to post structure the first time
 	a.systemInfo = &sysinfo.SystemInfo{}
+	a.logger = golog.FromStdout()
 }
 
 func (a *Agent) Prepare(c *config.Agent) (err error) {
@@ -167,7 +171,9 @@ func (a *Agent) Prepare(c *config.Agent) (err error) {
 
 	// Create logfile asap if needed
 	if c.Logfile != "" {
-		log.SetLogfile(c.Logfile, 0600)
+		if a.logger, err = golog.FromPath(c.Logfile, 0600); err != nil {
+			return
+		}
 	}
 
 	// initialize database
@@ -195,7 +201,7 @@ func (a *Agent) Prepare(c *config.Agent) (err error) {
 	// schedule tasks
 	a.scheduleTasks()
 	// fixing local audit policies if necessary
-	a.config.AuditConfig.Configure()
+	a.configureAuditPolicies()
 
 	// update and load engine
 	if err = a.update(true); err != nil {
@@ -225,7 +231,7 @@ func (a *Agent) initEventProvider() {
 	// parses the providers and init filters
 	for _, sprov := range a.config.EtwConfig.UnifiedProviders() {
 		if prov, err := etw.ParseProvider(sprov); err != nil {
-			log.Errorf("Error while parsing provider %s: %s", sprov, err)
+			a.logger.Errorf("Error while parsing provider %s: %s", sprov, err)
 		} else {
 			a.eventProvider.Filter.Update(&prov)
 		}
@@ -234,7 +240,7 @@ func (a *Agent) initEventProvider() {
 	// open traces
 	for _, trace := range a.config.EtwConfig.UnifiedTraces() {
 		if err := a.eventProvider.OpenTrace(trace); err != nil {
-			log.Errorf("Failed to open trace %s: %s", trace, err)
+			a.logger.Errorf("Failed to open trace %s: %s", trace, err)
 		}
 	}
 
@@ -267,6 +273,47 @@ func (a *Agent) initHooks(advanced bool) {
 	}
 }
 
+func (a *Agent) configureAuditPolicies() {
+	c := a.config.AuditConfig
+
+	if c.Enable {
+		for _, ap := range c.AuditPolicies {
+			if err := utils.EnableAuditPolicy(ap); err != nil {
+				a.logger.Errorf("Failed to enable audit policy %s: %s", ap, err)
+			} else {
+				a.logger.Infof("Enabled Audit Policy: %s", ap)
+			}
+		}
+	}
+
+	// run this function async as it might take a little bit of time
+	go func() {
+		dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
+		if len(dirs) > 0 {
+			a.logger.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
+			if err := utils.SetEDRAuditACL(dirs...); err != nil {
+				a.logger.Errorf("Error while setting configured File System Audit ACLs: %s", err)
+			}
+			a.logger.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
+		}
+	}()
+}
+
+func (a *Agent) restoreAuditPolicies() {
+	c := a.config.AuditConfig
+
+	for _, ap := range c.AuditPolicies {
+		if err := utils.DisableAuditPolicy(ap); err != nil {
+			a.logger.Errorf("Failed to disable audit policy %s: %s", ap, err)
+		}
+	}
+
+	dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
+	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
+		a.logger.Errorf("Error while restoring File System Audit ACLs: %s", err)
+	}
+}
+
 func (a *Agent) update(force bool) (last error) {
 	var reloadRules, reloadContainers bool
 
@@ -278,28 +325,28 @@ func (a *Agent) update(force bool) (last error) {
 
 	// check if we need rule update
 	if reloadRules {
-		log.Info("Updating WHIDS rules")
+		a.logger.Info("Updating WHIDS rules")
 		if err := a.fetchRulesFromManager(); err != nil {
-			log.Errorf("Failed to fetch rules from manager: %s", err)
+			a.logger.Errorf("Failed to fetch rules from manager: %s", err)
 			reloadRules = false
 		}
 	}
 
 	if reloadContainers {
-		log.Info("Updating WHIDS containers")
+		a.logger.Info("Updating WHIDS containers")
 		if err := a.fetchIoCsFromManager(); err != nil {
-			log.Errorf("Failed to fetch containers from manager: %s", err)
+			a.logger.Errorf("Failed to fetch containers from manager: %s", err)
 			reloadContainers = false
 		}
 	}
 
-	log.Debugf("reloading rules:%t containers:%t forced:%t", reloadRules, reloadContainers, force)
+	a.logger.Debugf("reloading rules:%t containers:%t forced:%t", reloadRules, reloadContainers, force)
 	if reloadRules || reloadContainers || force {
 		// We need to create a new engine if we received a rule/containers update
 		newEngine := newActionnableEngine(a.config)
 
 		// containers must be loaded before the rules anyway
-		log.Infof("Loading HIDS containers (used in rules) from: %s", a.config.RulesConfig.ContainersDB)
+		a.logger.Infof("Loading HIDS containers (used in rules) from: %s", a.config.RulesConfig.ContainersDB)
 		if err := a.loadContainers(newEngine); err != nil {
 			err = fmt.Errorf("failed at loading containers: %s", err)
 			last = err
@@ -308,42 +355,42 @@ func (a *Agent) update(force bool) (last error) {
 		// Loading IOC container rules
 		for _, rule := range IoCRules {
 			if err := newEngine.LoadRule(&rule); err != nil {
-				log.Errorf("Failed to load IoC rule: %s", err)
+				a.logger.Errorf("Failed to load IoC rule: %s", err)
 				last = err
 			}
 		}
 
 		// Loading canary rules
 		if a.config.CanariesConfig.Enable {
-			log.Infof("Loading canary rules")
+			a.logger.Infof("Loading canary rules")
 			// Sysmon rule
 			sr := a.config.CanariesConfig.GenRuleSysmon()
 			if err := newEngine.LoadRule(&sr); err != nil {
-				log.Errorf("Failed to load canary rule: %s", err)
+				a.logger.Errorf("Failed to load canary rule: %s", err)
 				last = err
 			}
 
 			// File System Audit Rule
 			fsr := a.config.CanariesConfig.GenRuleFSAudit()
 			if err := newEngine.LoadRule(&fsr); err != nil {
-				log.Errorf("Failed to load canary rule: %s", err)
+				a.logger.Errorf("Failed to load canary rule: %s", err)
 				last = err
 			}
 
 			// File System Audit Rule
 			kfr := a.config.CanariesConfig.GenRuleKernelFile()
 			if err := newEngine.LoadRule(&kfr); err != nil {
-				log.Errorf("Failed to load canary rule: %s", err)
+				a.logger.Errorf("Failed to load canary rule: %s", err)
 				last = err
 			}
 		}
 
 		// Loading rules
-		log.Infof("Loading HIDS rules from: %s", a.config.RulesConfig.RulesDB)
+		a.logger.Infof("Loading HIDS rules from: %s", a.config.RulesConfig.RulesDB)
 		if err := newEngine.LoadDirectory(a.config.RulesConfig.RulesDB); err != nil {
 			last = fmt.Errorf("failed to load rules: %s", err)
 		}
-		log.Infof("Number of rules loaded in engine: %d", newEngine.Count())
+		a.logger.Infof("Number of rules loaded in engine: %d", newEngine.Count())
 
 		// updating engine if no error
 		if last == nil {
@@ -351,10 +398,10 @@ func (a *Agent) update(force bool) (last error) {
 			// no need to lock HIDS as newEngine is ready to use at this point
 			a.Engine = newEngine
 		} else {
-			log.Error("EDR engine not updated:", last)
+			a.logger.Error("EDR engine not updated:", last)
 		}
 	} else {
-		log.Debug("Neither rules nor containers need to be updated")
+		a.logger.Debug("Neither rules nor containers need to be updated")
 	}
 
 	return
@@ -372,7 +419,7 @@ func (a *Agent) needsRulesUpdate() bool {
 	}
 
 	if sha256, err = a.forwarder.Client.GetRulesSha256(); err != nil {
-		log.Errorf("Failed to fetch rules sha256: %s", err)
+		a.logger.Errorf("Failed to fetch rules sha256: %s", err)
 		return false
 	}
 
@@ -380,7 +427,7 @@ func (a *Agent) needsRulesUpdate() bool {
 
 	// log message only if we need to update
 	if oldSha256 != sha256 {
-		log.Infof("Rules: remote=%s local=%s", sha256, oldSha256)
+		a.logger.Infof("Rules: remote=%s local=%s", sha256, oldSha256)
 	}
 
 	return oldSha256 != sha256
@@ -404,7 +451,7 @@ func (a *Agent) needsIoCsUpdate() bool {
 
 	// log message only if we need to update
 	if localSha256 != remoteSha256 {
-		log.Infof("container %s: remote=%s local=%s", container, remoteSha256, localSha256)
+		a.logger.Infof("container %s: remote=%s local=%s", container, remoteSha256, localSha256)
 	}
 
 	return localSha256 != remoteSha256
@@ -420,7 +467,7 @@ func (a *Agent) fetchRulesFromManager() (err error) {
 		return
 	}
 
-	log.Infof("Fetching new rules available in manager")
+	a.logger.Infof("Fetching new rules available in manager")
 	if sha256, err = a.forwarder.Client.GetRulesSha256(); err != nil {
 		return err
 	}
@@ -516,10 +563,10 @@ func (a *Agent) loadContainers(engine *engine.Engine) (lastErr error) {
 					fd.Close()
 					continue
 				}
-				log.Infof("Loading container %s from path %s", cont, path)
+				a.logger.Infof("Loading container %s from path %s", cont, path)
 				if err = engine.LoadContainer(cont, r); err != nil {
 					lastErr = fmt.Errorf("failed to load container %s: %s", cont, err)
-					log.Error(lastErr)
+					a.logger.Error(lastErr)
 				}
 				r.Close()
 				fd.Close()
@@ -583,7 +630,7 @@ func (a *Agent) updateSysmonBin() (err error) {
 	}
 
 	// we install or update Sysmon
-	log.Infof("Install/updating sysmon old=%s new=%s", si.Version, version)
+	a.logger.Infof("Install/updating sysmon old=%s new=%s", si.Version, version)
 	if err = sysmon.InstallOrUpdate(sysmonPath); err != nil {
 		return fmt.Errorf("failed to install/update sysmon: %w", err)
 	}
@@ -594,7 +641,7 @@ func (a *Agent) updateSysmonBin() (err error) {
 		return fmt.Errorf("failed to update system info: %w", err)
 	}
 
-	log.Info("Updating sysmon config")
+	a.logger.Info("Updating sysmon config")
 	// we update configuration
 	if err = a.updateSysmonConfig(); err != nil {
 		return fmt.Errorf("failed to update sysmon config: %w", err)
@@ -631,7 +678,7 @@ func (a *Agent) updateSysmonConfig() (err error) {
 	case client.ErrNoSysmonConfig:
 		// no configuration available on the manager
 
-		log.Info("No Sysmon config found on manager, trying to use default config")
+		a.logger.Info("No Sysmon config found on manager, trying to use default config")
 
 		if cfg, err = sysmon.AgnosticConfig(schemaVersion); err != nil {
 			return
@@ -647,7 +694,7 @@ func (a *Agent) updateSysmonConfig() (err error) {
 		return
 	}
 
-	log.Infof("Deploying new sysmon configuration old=%s new=%s", sha256, cfg.XmlSha256)
+	a.logger.Infof("Deploying new sysmon configuration old=%s new=%s", sha256, cfg.XmlSha256)
 	if xml, err = cfg.XML(); err != nil {
 		return
 	}
@@ -694,11 +741,11 @@ func (a *Agent) updateAgentConfig() (err error) {
 		return fmt.Errorf("failed to get agent config: %w", err)
 	}
 
-	log.Infof("received endpoint configuration update old=%s new=%s, saving it at %s", localSha256, remoteSha256, a.config.Path())
+	a.logger.Infof("received endpoint configuration update old=%s new=%s, saving it at %s", localSha256, remoteSha256, a.config.Path())
 	// overwrite current configuration
 	newConf.Save(a.config.Path())
 
-	log.Infof("stopping agent after update")
+	a.logger.Infof("stopping agent after update")
 	a.Stop()
 	a.Wait()
 
@@ -707,7 +754,7 @@ func (a *Agent) updateAgentConfig() (err error) {
 		err = fmt.Errorf("failed to prepare agent with new configuration: %w", err)
 		return
 	}
-	log.Infof("restarting agent after update")
+	a.logger.Infof("restarting agent after update")
 	a.Run()
 
 	return
@@ -796,13 +843,13 @@ func (a *Agent) Run() {
 	a.scheduler.Start()
 
 	for _, t := range a.scheduler.Tasks() {
-		log.Infof("Scheduler running: %s", t.Name)
+		a.logger.Infof("Scheduler running: %s", t.Name)
 	}
 
 	// Dry run don't do anything
 	if a.DryRun {
 		for _, trace := range a.config.EtwConfig.UnifiedTraces() {
-			log.Infof("Dry run: would open trace %s", trace)
+			a.logger.Infof("Dry run: would open trace %s", trace)
 		}
 		return
 	}
@@ -819,25 +866,25 @@ func (a *Agent) Run() {
 
 		// Trying to raise thread priority
 		if err := kernel32.SetCurrentThreadPriority(win32.THREAD_PRIORITY_ABOVE_NORMAL); err != nil {
-			log.Errorf("Failed to raise IDS thread priority: %s", err)
+			a.logger.Errorf("Failed to raise IDS thread priority: %s", err)
 		}
 
 		for e := range a.eventProvider.Events {
 			event := event.NewEdrEvent(e)
 
 			if yes, eps := a.stats.HasPerfIssue(); yes {
-				log.Warnf("Average event rate above limit of %.2f e/s in the last %s: %.2f e/s", a.stats.Threshold(), a.stats.Duration(), eps)
+				a.logger.Warnf("Average event rate above limit of %.2f e/s in the last %s: %.2f e/s", a.stats.Threshold(), a.stats.Duration(), eps)
 
 				if a.stats.HasCriticalPerfIssue() {
-					log.Critical("Event throughput too high for too long, consider filtering out events")
+					a.logger.Critical("Event throughput too high for too long, consider filtering out events")
 				} else if crit := a.stats.CriticalEPS(); eps > crit {
-					log.Criticalf("Event throughput above %.0fx the limit, if repeated consider filtering out events", eps/a.stats.Threshold())
+					a.logger.Criticalf("Event throughput above %.0fx the limit, if repeated consider filtering out events", eps/a.stats.Threshold())
 				}
 			}
 
 			// Warning message in certain circumstances
 			if a.config.EnableHooks && !a.flagProcTermEn && a.stats.Events() > 0 && int64(a.stats.Events())%1000 == 0 {
-				log.Warn("Sysmon process termination events seem to be missing. WHIDS won't work as expected.")
+				a.logger.Warn("Sysmon process termination events seem to be missing. WHIDS won't work as expected.")
 			}
 
 			a.RLock()
@@ -898,7 +945,7 @@ func (a *Agent) Run() {
 		CONTINUE:
 			a.RUnlock()
 		}
-		log.Infof("HIDS main loop terminated")
+		a.logger.Infof("HIDS main loop terminated")
 	}()
 
 	// Run bogus command so that at least one Process Terminate
@@ -908,47 +955,47 @@ func (a *Agent) Run() {
 
 // LogStats logs whids statistics
 func (a *Agent) LogStats() {
-	log.Infof("Time Running: %s", a.stats.SinceStart())
-	log.Infof("Count Event Scanned: %.0f", a.stats.Events())
-	log.Infof("Average Event Rate: %.2f EPS", a.stats.EPS())
-	log.Infof("Alerts Reported: %.0f", a.stats.Detections())
-	log.Infof("Count Rules Used (loaded + generated): %d", a.Engine.Count())
+	a.logger.Infof("Time Running: %s", a.stats.SinceStart())
+	a.logger.Infof("Count Event Scanned: %.0f", a.stats.Events())
+	a.logger.Infof("Average Event Rate: %.2f EPS", a.stats.EPS())
+	a.logger.Infof("Alerts Reported: %.0f", a.stats.Detections())
+	a.logger.Infof("Count Rules Used (loaded + generated): %d", a.Engine.Count())
 }
 
 // Stop stops the IDS
 func (a *Agent) Stop() {
-	log.Infof("Stopping HIDS")
+	a.logger.Infof("Stopping HIDS")
 	// cancelling parent context
 	a.cancel()
 	// gently close forwarder needs to be done before
 	// stop listening othewise we corrupt local logfiles
 	// because of race condition
-	log.Infof("Closing forwarder")
+	a.logger.Infof("Closing forwarder")
 	a.forwarder.Close()
 
 	// closing event provider
-	log.Infof("Closing event provider")
+	a.logger.Infof("Closing event provider")
 	if err := a.eventProvider.Stop(); err != nil {
-		log.Errorf("Error while closing event provider: %s", err)
+		a.logger.Errorf("Error while closing event provider: %s", err)
 	}
 
 	// cleaning canary files
 	if a.config.CanariesConfig.Enable {
-		log.Infof("Cleaning canaries")
+		a.logger.Infof("Cleaning canaries")
 		a.config.CanariesConfig.Clean()
 	}
 
 	// updating autologger configuration
-	log.Infof("Updating autologger configuration")
+	a.logger.Infof("Updating autologger configuration")
 	if err := config.Autologger.Delete(); err != nil {
-		log.Errorf("Failed to delete autologger: %s", err)
+		a.logger.Errorf("Failed to delete autologger: %s", err)
 	}
 
 	if err := a.config.EtwConfig.ConfigureAutologger(); err != nil {
-		log.Errorf("Failed to update autologger configuration: %s", err)
+		a.logger.Errorf("Failed to update autologger configuration: %s", err)
 	}
 
-	log.Infof("HIDS stopped")
+	a.logger.Infof("HIDS stopped")
 }
 
 // Wait waits the IDS to finish

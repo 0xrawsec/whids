@@ -16,6 +16,9 @@ require (
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 )
 
-require golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
+require (
+	github.com/0xrawsec/golog v1.0.1 // indirect
+	golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
+)
 
 go 1.18

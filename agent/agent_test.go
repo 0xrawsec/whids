@@ -5,7 +5,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -256,6 +255,8 @@ func TestAgent(t *testing.T) {
 	defer os.RemoveAll(tmp)
 
 	c := BuildDefaultConfig(tmp)
+	// make logger log to stdout
+	c.Logfile = ""
 	c.FwdConfig.Local = false
 	c.FwdConfig.Client = clConf
 	c.Actions = config.Actions{
@@ -266,10 +267,8 @@ func TestAgent(t *testing.T) {
 		Critical:         []string{},
 	}
 
-	log.SetOutput(os.Stdout)
 	a, err := NewAgent(c)
-	// show EDR logs in console
-	log.SetOutput(os.Stdout)
+	a.logger.ErrorHandler = tt.CheckErr
 	// reduce scheduled task ticker
 	for _, t := range a.scheduler.Tasks() {
 		if t.Tick() > 0 {

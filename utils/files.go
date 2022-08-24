@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/google/uuid"
 )
 
@@ -30,26 +29,26 @@ func CountFiles(directory string) (cnt int) {
 }
 
 // GzipFileBestSpeed compresses a file to gzip and deletes the original file
-func GzipFileBestSpeed(path string) (err error) {
+func GzipFileBestSpeed(path string) (last error) {
+	var src, dst *os.File
+
 	fname := fmt.Sprintf("%s.gz", path)
 	partname := fmt.Sprintf("%s.part", fname)
 
-	f, err := os.Open(path)
-	if err != nil {
+	if src, last = os.Open(path); last != nil {
 		return
 	}
-	defer f.Close()
+	defer src.Close()
 
-	of, err := os.Create(partname)
-	if err != nil {
+	if dst, last = os.Create(partname); last != nil {
 		return
 	}
-	defer of.Close()
+	defer dst.Close()
 
 	// if valid level error returned is nil so no need to handle it
-	w, _ := gzip.NewWriterLevel(of, gzip.BestSpeed)
+	w, _ := gzip.NewWriterLevel(dst, gzip.BestSpeed)
 	defer w.Close()
-	if _, err := io.Copy(w, f); err != nil {
+	if _, err := io.Copy(w, src); err != nil {
 		return err
 	}
 
@@ -57,15 +56,20 @@ func GzipFileBestSpeed(path string) (err error) {
 	w.Flush()
 	w.Close()
 	// original file
-	f.Close()
+	src.Close()
 	// part file
-	of.Close()
-	log.Infof("Removing original dumpfile: %s", path)
+	dst.Close()
+
 	if err := os.Remove(path); err != nil {
-		log.Errorf("Cannot remove original dumpfile: %s", err)
+		last = fmt.Errorf("cannot remove original dumpfile: %w", err)
 	}
+
+	if err := os.Rename(partname, fname); err != nil {
+		last = err
+	}
+
 	// rename the file to its final name
-	return os.Rename(partname, fname)
+	return last
 }
 
 // HidsMkdirAll is a wrapper around os.MkdirAll with appropriate

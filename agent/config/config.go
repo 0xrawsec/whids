@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/0xrawsec/golang-utils/fsutil"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/api/client/config"
 	"github.com/0xrawsec/whids/utils"
 	"github.com/pelletier/go-toml"
@@ -67,46 +65,6 @@ type Audit struct {
 	Enable        bool     `json:"enable" toml:"enable" comment:"Enable following Audit Policies or not"`
 	AuditPolicies []string `json:"audit-policies" toml:"audit-policies" comment:"Audit Policies to enable (c.f. auditpol /get /category:* /r)"`
 	AuditDirs     []string `json:"audit-dirs" toml:"audit-dirs" comment:"Set Audit ACL to directories, sub-directories and files to generate File System audit events\n https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/audit-file-system)"`
-}
-
-// Configure configures the desired audit policies
-func (c *Audit) Configure() {
-
-	if c.Enable {
-		for _, ap := range c.AuditPolicies {
-			if err := utils.EnableAuditPolicy(ap); err != nil {
-				log.Errorf("Failed to enable audit policy %s: %s", ap, err)
-			} else {
-				log.Infof("Enabled Audit Policy: %s", ap)
-			}
-		}
-	}
-
-	// run this function async as it might take a little bit of time
-	go func() {
-		dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-		if len(dirs) > 0 {
-			log.Infof("Setting ACLs for directories: %s", strings.Join(dirs, ", "))
-			if err := utils.SetEDRAuditACL(dirs...); err != nil {
-				log.Errorf("Error while setting configured File System Audit ACLs: %s", err)
-			}
-			log.Infof("Finished setting up ACLs for directories: %s", strings.Join(dirs, ", "))
-		}
-	}()
-}
-
-// Restore the audit policies
-func (c *Audit) Restore() {
-	for _, ap := range c.AuditPolicies {
-		if err := utils.DisableAuditPolicy(ap); err != nil {
-			log.Errorf("Failed to disable audit policy %s: %s", ap, err)
-		}
-	}
-
-	dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
-		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
-	}
 }
 
 // Agent structure

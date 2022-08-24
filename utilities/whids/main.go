@@ -105,7 +105,17 @@ func updateAutologger(c *config.Agent) error {
 func restoreCanaries(c *config.Agent) {
 	// Removing ACLs found in config
 	log.Infof("Restoring global File System Audit ACLs")
-	c.AuditConfig.Restore()
+	ac := c.AuditConfig
+	for _, ap := range ac.AuditPolicies {
+		if err := utils.DisableAuditPolicy(ap); err != nil {
+			log.Errorf("Failed to disable audit policy %s: %s", ap, err)
+		}
+	}
+
+	dirs := utils.StdDirs(utils.ExpandEnvs(ac.AuditDirs...)...)
+	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
+		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
+	}
 
 	log.Infof("Restoring canary File System Audit ACLs")
 	c.CanariesConfig.RestoreACLs()

@@ -16,7 +16,6 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/file"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/golang-utils/fsutil"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/golang-utils/sync/semaphore"
 	"github.com/0xrawsec/golang-win32/win32/dbghelp"
 	"github.com/0xrawsec/golang-win32/win32/kernel32"
@@ -138,7 +137,7 @@ func (m *ActionHandler) dumpFile(src, dst string) (err error) {
 	// we dump file
 	if !m.edr.filedumped.Contains(sha256) {
 		var f *os.File
-		log.Debugf("Dumping file: %s->%s", src, dst)
+		m.edr.logger.Debugf("Dumping file: %s->%s", src, dst)
 		if f, err = os.Open(src); err != nil {
 			return
 		}
@@ -234,7 +233,7 @@ func (m *ActionHandler) filedump(e *event.EdrEvent) {
 	for _, i := range m.filedumpSet(e).Slice() {
 		filename := i.(string)
 		if err := m.dumpBinFile(e, filename); err != nil {
-			log.Errorf(`Failed to dump file="%s" event=%s`, filename, hash)
+			m.edr.logger.Errorf(`Failed to dump file="%s" event=%s`, filename, hash)
 		}
 	}
 }
@@ -282,12 +281,12 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 						dumpPath := m.prepare(e, "reg.txt")
 						key, value := filepath.Split(targetObject)
 						if content, err = utils.RegQuery(key, value); err != nil {
-							log.Errorf("Failed to run reg query: %s", err)
+							m.edr.logger.Errorf("Failed to run reg query: %s", err)
 							content = fmt.Sprintf("HIDS error dumping %s: %s", targetObject, err)
 						}
 
 						if err = m.writeReader(dumpPath, bytes.NewBufferString(content)); err != nil {
-							log.Errorf("Failed to write registry content to file: %s", err)
+							m.edr.logger.Errorf("Failed to write registry content to file: %s", err)
 						}
 						// we compress files
 						m.queueCompression(dumpPath)
@@ -363,14 +362,14 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		// handling report memdumping
 		if det.Actions.Contains(ActionMemdump) {
 			if err := m.memdump(e); err != nil {
-				log.Error(err)
+				m.edr.logger.Error(err)
 			}
 		}
 
 		// we kill the process after we dumped memory
 		if kill {
 			if err := m.kill_process(e); err != nil {
-				log.Error(err)
+				m.edr.logger.Error(err)
 			}
 		}
 
@@ -378,7 +377,7 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		if (report || brief) && m.edr.config.Report.EnableReporting {
 			reportPath := m.prepare(e, reportFilename)
 			if err := m.dumpAsJson(reportPath, m.edr.Report(brief)); err != nil {
-				log.Errorf("Failed to dump report for event %s: %s", hash, err)
+				m.edr.logger.Errorf("Failed to dump report for event %s: %s", hash, err)
 			} else {
 				m.queueCompression(reportPath)
 			}
@@ -397,7 +396,7 @@ func (m *ActionHandler) HandleActions(e *event.EdrEvent) {
 		// dumping the event
 		eventDumpPath := m.prepare(e, eventFilename)
 		if err := m.dumpAsJson(eventDumpPath, e); err != nil {
-			log.Errorf("Failed to dump event %s: %s", hash, err)
+			m.edr.logger.Errorf("Failed to dump event %s: %s", hash, err)
 		} else {
 			m.queueCompression(eventDumpPath)
 		}
@@ -412,7 +411,7 @@ func (m *ActionHandler) queueCompression(path string) {
 }
 
 func (m *ActionHandler) compressionLoop() {
-	log.Info("Compression loop starting")
+	m.edr.logger.Info("Compression loop starting")
 	if !m.edr.config.Dump.Compression {
 		return
 	}
@@ -423,7 +422,7 @@ func (m *ActionHandler) compressionLoop() {
 			if elt := m.compressionQueue.Pop(); elt != nil {
 				path := elt.Value.(string)
 				if err := utils.GzipFileBestSpeed(path); err != nil {
-					log.Errorf(`Failed to compress %s: %s`, path, err)
+					m.edr.logger.Errorf(`Failed to compress %s: %s`, path, err)
 				}
 			}
 		}
