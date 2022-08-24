@@ -128,14 +128,14 @@ Please visit [doc/configuration.md](doc/configuration.md)
 
   - [ ] find a new name to the project because we all agree it sucks
   - [X] better sysmon integration (config, deployment, update)
-  - [ ] endpoint configuration from manager
+  - [X] endpoint configuration from manager
   - [X] tooling management (update, install), like OSQuery
-  - [X] code refactoring and optimization
+  - [ ] code refactoring and optimization
   - [X] implement a performance monitor
   - [X] get rid of any on-disk configuration
   - [X] implement IOC management capabilities
   - [X] ETW support
-  - [X] automatic documentation and testing of manager's API
+  - [X] automatic documentation (OpenAPI) and testing of manager's API
   - [X] provide endpoint system information in manager
   - [X] implement actionable rules
   - [X] provide canary file management
