@@ -7,6 +7,7 @@
 [![Coverage](.github/coverage/badge.svg)](https://raw.githubusercontent.com/0xrawsec/whids/master/.github/coverage/coverage.txt)
 [![Latest Commit](https://badgen.net/github/last-commit/0xrawsec/whids)](https://github.com/0xrawsec/whids/commits/master)
 [![Latest Release](https://badgen.net/github/release/0xrawsec/whids)](https://github.com/0xrawsec/whids/releases)
+[![Downloads](https://img.shields.io/github/downloads/0xrawsec/whids/total.svg)]()
 [![License](https://badgen.net/github/license/0xrawsec/whids)](https://raw.githubusercontent.com/0xrawsec/whids/master/LICENSE)
 [<img src="https://validator.swagger.io/validator?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json" style="height:20px">](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json)
 
