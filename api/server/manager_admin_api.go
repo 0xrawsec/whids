@@ -1006,7 +1006,7 @@ func (m *Manager) admAPIEndpointArtifact(wt http.ResponseWriter, rq *http.Reques
 					// sanitize pguid
 					pguid = format("{%s}", strings.Trim(pguid, "{}"))
 					dumpDir := filepath.Join(m.Config.DumpDir, euuid, pguid, ehash)
-					if dumpFiles, err := ioutil.ReadDir(dumpDir); err == nil {
+					if dumpFiles, err := os.ReadDir(dumpDir); err == nil {
 						for _, dfi := range dumpFiles {
 							exists := filepath.Join(dumpDir, dfi.Name())
 							fetch := filepath.Join(dumpDir, fname)

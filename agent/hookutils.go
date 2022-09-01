@@ -41,30 +41,3 @@ func terminate(pid int) error {
 func isSysmonProcessTerminate(e *event.EdrEvent) bool {
 	return e.Channel() == sysmonChannel && e.EventID() == SysmonProcessTerminate
 }
-
-func srcPIDFromEvent(e *event.EdrEvent) int64 {
-
-	if pid, ok := e.GetInt(pathSysmonProcessId); ok {
-		return pid
-	}
-
-	if pid, ok := e.GetInt(pathSysmonSourceProcessId); ok {
-		return pid
-	}
-
-	return -1
-}
-
-func hasAction(e *event.EdrEvent, action string) bool {
-	if d := e.GetDetection(); d != nil {
-		return d.Actions.Contains(action)
-	}
-	return false
-}
-
-func getCriticality(e *event.EdrEvent) int {
-	if d := e.GetDetection(); d != nil {
-		return d.Criticality
-	}
-	return 0
-}

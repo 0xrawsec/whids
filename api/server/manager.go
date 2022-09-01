@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/big"
 	"math/rand"
@@ -145,7 +144,7 @@ type ManagerConfig struct {
 // LoadManagerConfig loads the manager configuration from a file
 func LoadManagerConfig(path string) (*ManagerConfig, error) {
 	mc := ManagerConfig{}
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +184,7 @@ func (mc *ManagerConfig) Save() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(mc.path, b, 0650)
+	return os.WriteFile(mc.path, b, 0650)
 }
 
 // Manager structure definition

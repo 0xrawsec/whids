@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"reflect"
-	"runtime"
 	"sync"
 
 	"github.com/0xrawsec/whids/event"
@@ -118,8 +116,4 @@ func (hm *HookManager) RunHooksOn(h *Agent, e *event.EdrEvent) (ret bool) {
 	}
 
 	return
-}
-
-func getFunctionName(i interface{}) string {
-	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }

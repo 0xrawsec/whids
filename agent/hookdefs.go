@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -758,7 +757,7 @@ func hookClipboardEvents(h *Agent, e *event.EdrEvent) {
 		if fi, err := os.Stat(path); err == nil {
 			// limit size of ClipboardData to 1 Mega
 			if fi.Mode().IsRegular() && fi.Size() < utils.Mega {
-				if data, err := ioutil.ReadFile(path); err == nil {
+				if data, err := os.ReadFile(path); err == nil {
 					// We try to decode utf16 content because regexp can only match utf8
 					// Thus doing this is needed to apply detection rule on clipboard content
 					if enc, err := utils.Utf16ToUtf8(data); err == nil {

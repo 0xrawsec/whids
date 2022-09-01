@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,7 +81,7 @@ func (c *EndpointCommand) AddDropFile(filename, filepath string) error {
 	ef := EndpointFile{
 		UUID: utils.UnsafeUUIDGen().String(),
 		Name: filename}
-	if ef.Data, err = ioutil.ReadFile(filepath); err != nil {
+	if ef.Data, err = os.ReadFile(filepath); err != nil {
 		return fmt.Errorf("failed at reading file to drop: %w", err)
 	}
 
@@ -145,7 +144,7 @@ func (c *EndpointCommand) Run() (err error) {
 		// dropped files as arguments to the command line
 		for _, ef := range c.Drop {
 			binPath := filepath.Join(tmpDir, ef.Name)
-			err := ioutil.WriteFile(binPath, ef.Data, 0700)
+			err := os.WriteFile(binPath, ef.Data, 0700)
 			if err != nil {
 				ef.Error = fmt.Sprintf("%s", err)
 			}
@@ -199,7 +198,7 @@ func (c *EndpointCommand) Run() (err error) {
 
 	// fetching files after the command has been ran
 	for fn := range c.Fetch {
-		data, err := ioutil.ReadFile(fn)
+		data, err := os.ReadFile(fn)
 		if err != nil {
 			c.Fetch[fn].Error = fmt.Sprintf("%s", err)
 		}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -179,7 +178,7 @@ func (f *FileUpload) write(root string) (err error) {
 
 		for i := 1; i < f.Total; i++ {
 			chunkPath := fmt.Sprintf("%s.%d", path, i)
-			if content, err = ioutil.ReadFile(chunkPath); err != nil {
+			if content, err = os.ReadFile(chunkPath); err != nil {
 				return
 			}
 

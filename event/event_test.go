@@ -3,8 +3,8 @@ package event
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 
@@ -25,7 +25,7 @@ const (
 )
 
 func init() {
-	data, err := ioutil.ReadFile(eventFile)
+	data, err := os.ReadFile(eventFile)
 	if err != nil {
 		panic(err)
 	}

@@ -1,13 +1,13 @@
 package config
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"time"
 
 	"github.com/0xrawsec/whids/tools"
+	"github.com/0xrawsec/whids/utils/command"
 )
 
 // ReportCommand is a structure both to configure commands to run in a report
@@ -18,7 +18,7 @@ type ReportCommand struct {
 	Args        []string      `json:"args" toml:"args" comment:"Argument of the command line"`
 	ExpectJSON  bool          `json:"expect-json" toml:"expect-json" comment:"Expect JSON formated output on stdout"`
 	Stdout      interface{}   `json:"stdout" toml:",omitempty"`
-	Stderr      []byte        `json:"stderr" toml:",omitempty"`
+	Stderr      string        `json:"stderr" toml:",omitempty"`
 	Error       string        `json:"error" toml:",omitempty"`
 	Timestamp   time.Time     `json:"timestamp" toml:",omitempty"`
 	Timeout     time.Duration `json:"timeout" toml:"timeout" comment:"Timeout to apply to the command (if > 0 this takes precedence over the global report timeout setting)"`
@@ -26,25 +26,27 @@ type ReportCommand struct {
 
 // Run the desired command
 func (c *ReportCommand) Run() {
-	var cmd *exec.Cmd
+	var cmd *command.Cmd
 	var err error
 	var stdout []byte
-	var cancel context.CancelFunc
 
-	ctx := context.Background()
 	if c.Timeout > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), c.Timeout)
-		defer cancel()
+		cmd = command.CommandTimeout(c.Timeout, c.Name, c.Args...)
+	} else {
+		cmd = command.Command(c.Name, c.Args...)
 	}
 
-	cmd = exec.CommandContext(ctx, c.Name, c.Args...)
+	defer cmd.Terminate()
 	// set timestamp
 	c.Timestamp = time.Now()
+
 	if stdout, err = cmd.Output(); err != nil {
 		c.Error = err.Error()
 		if ee, ok := err.(*exec.ExitError); ok {
-			c.Stderr = ee.Stderr
+			c.Stderr = string(ee.Stderr)
 		}
+		// return if we encountered an error
+		return
 	}
 
 	if c.ExpectJSON {
@@ -52,9 +54,11 @@ func (c *ReportCommand) Run() {
 			c.Stdout = string(stdout)
 			c.Error = err.Error()
 		}
-	} else {
-		c.Stdout = stdout
+		return
 	}
+
+	// we don't want to parse output as JSON
+	c.Stdout = stdout
 }
 
 var (

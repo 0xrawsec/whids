@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -299,21 +298,6 @@ func (a *Agent) configureAuditPolicies() {
 	}()
 }
 
-func (a *Agent) restoreAuditPolicies() {
-	c := a.config.AuditConfig
-
-	for _, ap := range c.AuditPolicies {
-		if err := utils.DisableAuditPolicy(ap); err != nil {
-			a.logger.Errorf("Failed to disable audit policy %s: %s", ap, err)
-		}
-	}
-
-	dirs := utils.StdDirs(utils.ExpandEnvs(c.AuditDirs...)...)
-	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
-		a.logger.Errorf("Error while restoring File System Audit ACLs: %s", err)
-	}
-}
-
 func (a *Agent) update(force bool) (last error) {
 	var reloadRules, reloadContainers bool
 
@@ -480,8 +464,8 @@ func (a *Agent) fetchRulesFromManager() (err error) {
 		return fmt.Errorf("failed to verify rules integrity")
 	}
 
-	ioutil.WriteFile(sha256Path, []byte(sha256), 0600)
-	return ioutil.WriteFile(rulePath, []byte(rules), 0600)
+	os.WriteFile(sha256Path, []byte(sha256), 0600)
+	return os.WriteFile(rulePath, []byte(rules), 0600)
 }
 
 // containerPaths returns the path to the container and the path to its sha256 file
@@ -540,7 +524,7 @@ func (a *Agent) fetchIoCsFromManager() (err error) {
 	}
 
 	// Dump current container sha256 to a file
-	return ioutil.WriteFile(contSha256Path, []byte(compSha256), 0600)
+	return os.WriteFile(contSha256Path, []byte(compSha256), 0600)
 }
 
 // loads containers found in container database directory
@@ -762,7 +746,7 @@ func (a *Agent) updateAgentConfig() (err error) {
 
 func (a *Agent) cleanup() {
 	// Cleaning up empty dump directories if needed
-	fis, _ := ioutil.ReadDir(a.config.Dump.Dir)
+	fis, _ := os.ReadDir(a.config.Dump.Dir)
 	for _, fi := range fis {
 		if fi.IsDir() {
 			fp := filepath.Join(a.config.Dump.Dir, fi.Name())
@@ -1005,10 +989,26 @@ func (a *Agent) Wait() {
 
 // WaitWithTimeout waits the IDS to finish
 func (a *Agent) WaitWithTimeout(timeout time.Duration) {
-	t := time.NewTimer(timeout)
+	var slept time.Duration
+
+	step := time.Millisecond * 25
+	stop := make(chan bool)
+
 	go func() {
-		a.waitGroup.Wait()
-		t.Stop()
+		a.Wait()
+		stop <- true
 	}()
-	<-t.C
+
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+			if slept >= timeout {
+				return
+			}
+			time.Sleep(step)
+			slept += step
+		}
+	}
 }

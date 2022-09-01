@@ -3,7 +3,6 @@ package logger
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"sync"
@@ -26,7 +25,7 @@ const (
 )
 
 func init() {
-	data, err := ioutil.ReadFile(eventFile)
+	data, err := os.ReadFile(eventFile)
 	if err != nil {
 		panic(err)
 	}

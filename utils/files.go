@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,10 +97,10 @@ func HidsCreateFile(filename string) (*os.File, error) {
 	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultFileModeFile)
 }
 
-// HidsWriteData is a wrapper around ioutil.WriteFile to write a file
+// HidsWriteData is a wrapper around os.WriteFile to write a file
 // with the good permissions
 func HidsWriteData(dest string, data []byte) error {
-	return ioutil.WriteFile(dest, data, DefaultFileModeFile)
+	return os.WriteFile(dest, data, DefaultFileModeFile)
 }
 
 // HidsWriteReader writes the content of a reader to a destination file. If
@@ -142,7 +141,7 @@ func IsPipePath(path string) bool {
 
 // ReadFileString reads bytes from a file
 func ReadFileString(path string) (string, error) {
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	return string(b), err
 }
 

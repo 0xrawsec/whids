@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -125,15 +124,20 @@ func cmdHash(path string) (nfi FileInfo, err error) {
 }
 
 func cmdDir(path string) (sfi []FileInfo, err error) {
-	var ofi []fs.FileInfo
+	var ofi []os.DirEntry
 
-	if ofi, err = ioutil.ReadDir(path); err != nil {
+	if ofi, err = os.ReadDir(path); err != nil {
 		return
 	}
 
 	sfi = make([]FileInfo, len(ofi))
-	for i, fi := range ofi {
+	for i, de := range ofi {
+		var fi fs.FileInfo
+
 		sfi[i].Dir = path
+		if fi, sfi[i].Err = de.Info(); sfi[i].Err != nil {
+			continue
+		}
 		sfi[i].FromFSFileInfo(fi)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -104,7 +103,7 @@ func updateAutologger(c *config.Agent) error {
 	return nil
 }
 
-func restoreCanaries(c *config.Agent) {
+func restoreAuditPolicies(c *config.Agent) {
 	// Removing ACLs found in config
 	logger.Infof("Restoring global File System Audit ACLs")
 	ac := c.AuditConfig
@@ -119,15 +118,21 @@ func restoreCanaries(c *config.Agent) {
 		logger.Errorf("Error while restoring File System Audit ACLs: %s", err)
 	}
 
-	logger.Infof("Restoring canary File System Audit ACLs")
-	c.CanariesConfig.RestoreACLs()
+	if err := c.CanariesConfig.RestoreACLs(); err != nil {
+		logger.Errorf("failed to restore canary files ACL: %s", err)
+	}
 }
 
 func cleanCanaries(c *config.Agent) {
-	restoreCanaries(c)
+	logger.Infof("Restoring canary File System Audit ACLs")
+	if err := c.CanariesConfig.RestoreACLs(); err != nil {
+		logger.Errorf("errore restoring canary files ACL: %s", err)
+	}
 
 	logger.Infof("Deleting canary files")
-	c.CanariesConfig.Clean()
+	if err := c.CanariesConfig.Clean(); err != nil {
+		logger.Errorf("error deleting canary files: %s", err)
+	}
 }
 
 func deleteAutologger() error {
@@ -271,7 +276,9 @@ func main() {
 		rc := exitSuccess
 
 		if conf, err = config.LoadAgentConfig(configFile); err == nil {
+			// ToDo return error and set rc accordingly
 			cleanCanaries(&conf)
+			restoreAuditPolicies(&conf)
 		} else {
 			logger.Errorf("failed to load configuration: %s", err)
 			rc = exitFail
@@ -319,7 +326,7 @@ func main() {
 	}
 
 	if flagRestore {
-		restoreCanaries(&agentCfg)
+		restoreAuditPolicies(&agentCfg)
 		os.Exit(exitSuccess)
 	}
 
@@ -344,11 +351,11 @@ func main() {
 			}
 		}
 
-		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultFileModeFile); err != nil {
+		if err := os.WriteFile(prules, rules.Bytes(), utils.DefaultFileModeFile); err != nil {
 			logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
-		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultFileModeFile); err != nil {
+		if err := os.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultFileModeFile); err != nil {
 			logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 

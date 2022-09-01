@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -36,7 +35,7 @@ func init() {
 	// initialize random generator's seed
 	rand.Seed(time.Now().UnixNano())
 
-	data, err := ioutil.ReadFile(eventFile)
+	data, err := os.ReadFile(eventFile)
 	if err != nil {
 		panic(err)
 	}
@@ -450,7 +449,7 @@ func TestForwarderCleanup(t *testing.T) {
 	// closing the forwarder triggers last cleanup
 	f.Close()
 
-	files, _ := ioutil.ReadDir(fconf.Logging.Dir)
+	files, _ := os.ReadDir(fconf.Logging.Dir)
 	// we expect the number of queued files + file to log alerts
 	expected := numberOfQueuedFiles + 1
 	tt.Assert(len(files) == expected, format("Expecting %d remaining in directory but got %d", expected, len(files)))
