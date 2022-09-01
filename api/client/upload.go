@@ -151,7 +151,7 @@ func (f *FileUpload) Dump(root string) (err error) {
 
 	// Create directory if doesn't exist
 	if !fsutil.IsDir(dirpath) {
-		if err = os.MkdirAll(dirpath, utils.DefaultPerms); err != nil {
+		if err = os.MkdirAll(dirpath, utils.DefaultFileModeFile); err != nil {
 			return
 		}
 	}

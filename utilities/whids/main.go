@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/0xrawsec/gene/v2/engine"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/whids/agent"
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
@@ -23,8 +24,6 @@ import (
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
-
-	"github.com/0xrawsec/golang-utils/log"
 )
 
 const (
@@ -69,9 +68,12 @@ var (
 
 	importRules string
 
-	configFile = filepath.Join(abs, "config.toml")
+	configFile  = filepath.Join(abs, "config.toml")
+	logFallback = filepath.Join(abs, "fallback.log")
 
 	osSignals = make(chan os.Signal)
+
+	logger = golog.Stdout
 )
 
 func printInfo(writer io.Writer) {
@@ -104,27 +106,27 @@ func updateAutologger(c *config.Agent) error {
 
 func restoreCanaries(c *config.Agent) {
 	// Removing ACLs found in config
-	log.Infof("Restoring global File System Audit ACLs")
+	logger.Infof("Restoring global File System Audit ACLs")
 	ac := c.AuditConfig
 	for _, ap := range ac.AuditPolicies {
 		if err := utils.DisableAuditPolicy(ap); err != nil {
-			log.Errorf("Failed to disable audit policy %s: %s", ap, err)
+			logger.Errorf("Failed to disable audit policy %s: %s", ap, err)
 		}
 	}
 
 	dirs := utils.StdDirs(utils.ExpandEnvs(ac.AuditDirs...)...)
 	if err := utils.RemoveEDRAuditACL(dirs...); err != nil {
-		log.Errorf("Error while restoring File System Audit ACLs: %s", err)
+		logger.Errorf("Error while restoring File System Audit ACLs: %s", err)
 	}
 
-	log.Infof("Restoring canary File System Audit ACLs")
+	logger.Infof("Restoring canary File System Audit ACLs")
 	c.CanariesConfig.RestoreACLs()
 }
 
 func cleanCanaries(c *config.Agent) {
 	restoreCanaries(c)
 
-	log.Infof("Deleting canary files")
+	logger.Infof("Deleting canary files")
 	c.CanariesConfig.Clean()
 }
 
@@ -136,16 +138,16 @@ func runHids(service bool) {
 	var err error
 	var hidsConf config.Agent
 
-	log.Infof("Running HIDS as Windows service: %t", service)
+	logger.Infof("Running HIDS as Windows service: %t", service)
 
 	hidsConf, err = config.LoadAgentConfig(configFile)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("failed to load configuration: %s", err))
+		logger.Abort(exitFail, fmt.Errorf("failed to load configuration: %s", err))
 	}
 
 	edrAgent, err = agent.NewAgent(&hidsConf)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("failed to create HIDS: %s", err))
+		logger.Abort(exitFail, fmt.Errorf("failed to create HIDS: %s", err))
 	}
 
 	edrAgent.DryRun = flagDryRun
@@ -157,7 +159,7 @@ func runHids(service bool) {
 		signal.Notify(osSignals, os.Interrupt)
 		go func() {
 			<-osSignals
-			log.Infof("Received SIGINT")
+			logger.Infof("Received SIGINT")
 			// runs stop on sigint
 			edrAgent.Stop()
 		}()
@@ -177,20 +179,20 @@ func proctectDir(dir string) {
 	// we first need to reset the ACLs otherwise next command does not work
 	cmd := []string{"icacls", dir, "/reset"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
-		log.Errorf("failed to reset installation directory ACLs: %s", err)
-		log.Errorf("icacls output: %s", string(out))
+		logger.Errorf("failed to reset installation directory ACLs: %s", err)
+		logger.Errorf("icacls output: %s", string(out))
 		return
 	}
 
 	// we grant Administrators and SYSTEM full access rights
 	cmd = []string{"icacls", dir, "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F"}
 	if out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
-		log.Errorf("failed to protect installation directory with ACLs: %s", err)
-		log.Errorf("icacls output: %s", string(out))
+		logger.Errorf("failed to protect installation directory with ACLs: %s", err)
+		logger.Errorf("icacls output: %s", string(out))
 		return
 	}
 
-	log.Infof("Successfully protected installation directory with ACLs")
+	logger.Infof("Successfully protected installation directory with ACLs")
 }
 
 func main() {
@@ -227,7 +229,7 @@ func main() {
 
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
+		logger.Abort(exitFail, fmt.Errorf("failed to determine if we are running in an interactive session: %v", err))
 	}
 
 	if flagInstall || flagAutologger {
@@ -237,25 +239,25 @@ func main() {
 			// dump configuration first as config is needed
 			// by subsequent functions
 			if err := configure(); err != nil {
-				log.Errorf("failed to build configuration: %s", err)
+				logger.Errorf("failed to build configuration: %s", err)
 				os.Exit(exitFail)
 			}
 		}
 
 		conf, err := config.LoadAgentConfig(configFile)
 		if err != nil {
-			log.Errorf("failed to load configuration: %s", err)
+			logger.Errorf("failed to load configuration: %s", err)
 			os.Exit(exitFail)
 		}
 
 		if err := deleteAutologger(); err != nil {
-			log.Errorf("failed to delete autologger: %s", err)
+			logger.Errorf("failed to delete autologger: %s", err)
 			// do not exit as autologger might not be existing but still report error
 			//os.Exit(exitFail)
 		}
 
 		if err := updateAutologger(&conf); err != nil {
-			log.Errorf("failed to update autologger: %s", err)
+			logger.Errorf("failed to update autologger: %s", err)
 			os.Exit(exitFail)
 		}
 
@@ -271,12 +273,12 @@ func main() {
 		if conf, err = config.LoadAgentConfig(configFile); err == nil {
 			cleanCanaries(&conf)
 		} else {
-			log.Errorf("failed to load configuration: %s", err)
+			logger.Errorf("failed to load configuration: %s", err)
 			rc = exitFail
 		}
 
 		if err := deleteAutologger(); err != nil {
-			log.Errorf("failed to delete autologger: %s", err)
+			logger.Errorf("failed to delete autologger: %s", err)
 			rc = exitFail
 		}
 
@@ -286,7 +288,7 @@ func main() {
 	// profile the program
 	if flagProfile {
 		go func() {
-			log.Info("Running profiling server", http.ListenAndServe("0.0.0.0:4242", nil))
+			logger.Info("Running profiling server", http.ListenAndServe("0.0.0.0:4242", nil))
 		}()
 	}
 
@@ -301,23 +303,23 @@ func main() {
 		enc := toml.NewEncoder(writer)
 		enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(DefaultHIDSConfig); err != nil {
-			log.Abort(exitFail, err)
+			logger.Abort(exitFail, err)
 		}
 		os.Exit(exitSuccess)
 	}
 
 	// Enabling debug if needed
 	if flagDebug {
-		log.InitLogger(log.LDebug)
+		logger.Level = golog.LevelDebug
 	}
 
-	hidsConf, err := config.LoadAgentConfig(configFile)
+	agentCfg, err := config.LoadAgentConfig(configFile)
 	if err != nil {
-		log.Abort(exitFail, fmt.Sprintf("failed to load configuration: %s", err))
+		logger.Abort(exitFail, fmt.Sprintf("failed to load configuration: %s", err))
 	}
 
 	if flagRestore {
-		restoreCanaries(&hidsConf)
+		restoreCanaries(&agentCfg)
 		os.Exit(exitSuccess)
 	}
 
@@ -325,48 +327,64 @@ func main() {
 	if importRules != "" {
 		// in order not to write logs into file
 		// TODO: add a stream handler to log facility
-		hidsConf.Logfile = ""
-		log.Infof("Importing rules from %s", importRules)
+		agentCfg.Logfile = ""
+		logger.Infof("Importing rules from %s", importRules)
 		eng := engine.NewEngine()
 		eng.SetDumpRaw(true)
 
 		if err := eng.LoadDirectory(importRules); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
+			logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
-		prules, psha256 := hidsConf.RulesConfig.RulesPaths()
+		prules, psha256 := agentCfg.RulesConfig.RulesPaths()
 		rules := new(bytes.Buffer)
 		for rule := range eng.GetRawRule(".*") {
 			if _, err := rules.Write([]byte(rule + "\n")); err != nil {
-				log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
+				logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 			}
 		}
 
-		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
+		if err := ioutil.WriteFile(prules, rules.Bytes(), utils.DefaultFileModeFile); err != nil {
+			logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
-		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultPerms); err != nil {
-			log.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
+		if err := ioutil.WriteFile(psha256, []byte(data.Sha256(rules.Bytes())), utils.DefaultFileModeFile); err != nil {
+			logger.Abort(exitFail, fmt.Sprintf("failed to import rules: %s", err))
 		}
 
-		log.Infof("IMPORT SUCCESSFUL: %s", prules)
+		logger.Infof("IMPORT SUCCESSFUL: %s", prules)
 		os.Exit(0)
 	}
 
-	// If it is called by the Windows Service Manager (not interactive)
-	if !isIntSess {
-		// set logfile the time the service starts
-		log.SetLogfile(filepath.Join(abs, "bootstrap.log"))
-
-		// if running as service we protect installation directory with appropriate ACLs
-		if fsutil.IsDir(abs) {
-			proctectDir(abs)
-		}
-		runService(svcName, false)
-		return
-	} else {
+	// if we run from command line (interactive session)
+	if isIntSess {
 		runHids(false)
 		edrAgent.LogStats()
+		return
 	}
+
+	// if it is called by the Windows Service Manager (not interactive)
+
+	// set logfile the time the service starts
+	if agentCfg.Logfile != "" {
+		if logger, err = golog.FromPath(agentCfg.Logfile, utils.DefaultFileModeFile); err != nil {
+			golog.Stdout.Error("failed to open logfile", agentCfg.Logfile, err)
+		}
+	}
+
+	// if we failed at opening logfile configured
+	if logger == nil {
+		if logger, err = golog.FromPath(logFallback, utils.DefaultFileModeFile); err != nil {
+			golog.Stdout.Error("failed to open logfile", err)
+			logger = golog.Stdout
+		}
+	}
+
+	// if running as service we protect installation directory with appropriate ACLs
+	if fsutil.IsDir(abs) {
+		proctectDir(abs)
+	}
+
+	runService(svcName, false)
+
 }

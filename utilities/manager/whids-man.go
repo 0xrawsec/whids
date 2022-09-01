@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/server"
 	"github.com/0xrawsec/whids/utils"
@@ -82,6 +82,8 @@ var (
 	fingerprint string
 	user        string
 	imprules    string
+
+	logger *golog.Logger
 )
 
 func main() {
@@ -116,7 +118,7 @@ func main() {
 	if fingerprint != "" {
 		fing, err := utils.CertFileSha256(fingerprint)
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("failed at computing fingerprint: %s", err))
+			logger.Abort(exitFail, fmt.Errorf("failed at computing fingerprint: %s", err))
 		}
 		fmt.Printf("Certificate fingerprint to set in client configuration to enable certificate pinning\n%s\n", fing)
 		os.Exit(0)
@@ -138,7 +140,7 @@ func main() {
 
 	managerConf, err := server.LoadManagerConfig(config)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("failed to load manager configuration: %s", err))
+		logger.Abort(exitFail, fmt.Errorf("failed to load manager configuration: %s", err))
 	}
 
 	if user != "" {
@@ -151,55 +153,55 @@ func main() {
 		manager, err = server.NewManager(managerConf)
 
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
+			logger.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 		}
 
 		if err = manager.CreateNewAdminAPIUser(u); err != nil {
-			log.Abort(exitFail, err)
+			logger.Abort(exitFail, err)
 		}
 
-		log.Infof("New user successfully created: %s", utils.PrettyJsonOrPanic(u))
+		logger.Infof("New user successfully created: %s", utils.PrettyJsonOrPanic(u))
 
-		log.Abort(0, "User creation: SUCCESS")
+		logger.Abort(0, "User creation: SUCCESS")
 	}
 
 	if imprules != "" {
 		manager, err = server.NewManager(managerConf)
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
+			logger.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 		}
 
 		if err = manager.ImportRules(imprules); err != nil {
-			log.Abort(exitFail, err)
+			logger.Abort(exitFail, err)
 		}
 
-		log.Abort(0, "Rules import: SUCCESS")
+		logger.Abort(0, "Rules import: SUCCESS")
 	}
 
 	if certgen {
 		err = generateCert([]string{managerConf.EndpointAPI.Host, managerConf.AdminAPI.Host})
 		if err != nil {
-			log.Abort(exitFail, fmt.Errorf("failed to generate key/cert pair: %s", err))
+			logger.Abort(exitFail, fmt.Errorf("failed to generate key/cert pair: %s", err))
 		}
-		log.Infof("Certificate and key generated should be used for testing purposes only.")
+		logger.Infof("Certificate and key generated should be used for testing purposes only.")
 		os.Exit(0)
 	}
 
 	managerConf.Repair = repairDB
 	if repairDB {
-		log.Infof("Attempting to repair broken database")
+		logger.Infof("Attempting to repair broken database")
 	}
 
 	manager, err = server.NewManager(managerConf)
 	if err != nil {
-		log.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
+		logger.Abort(exitFail, fmt.Errorf("failed to create manager: %s", err))
 	}
 
 	// Registering signal handler for sig interrupt
 	signal.Notify(osSignals, os.Interrupt)
 	go func() {
 		<-osSignals
-		log.Infof("Received SIGINT, shutting the manager down properly")
+		logger.Infof("Received SIGINT, shutting the manager down properly")
 		manager.Shutdown()
 	}()
 	// Running the manager

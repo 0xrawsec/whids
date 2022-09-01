@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/0xrawsec/golog v1.0.1 // indirect
+	github.com/0xrawsec/golog v1.0.3 // indirect
 	golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
 )
 

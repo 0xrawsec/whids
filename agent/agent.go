@@ -187,7 +187,7 @@ func (a *Agent) Prepare(c *config.Agent) (err error) {
 	}
 
 	// loading forwarder config
-	if a.forwarder, err = client.NewForwarder(a.ctx, &a.config.FwdConfig); err != nil {
+	if a.forwarder, err = client.NewForwarder(a.ctx, &a.config.FwdConfig, a.logger); err != nil {
 		return
 	}
 

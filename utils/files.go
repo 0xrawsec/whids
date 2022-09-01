@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	// DefaultPerms default permissions for output files
-	DefaultPerms = 0740
+	// DefaultFileModeFile default permissions for output files
+	DefaultFileModeFile = 0740
 )
 
 // CountFiles counts files in a directory
@@ -75,7 +75,7 @@ func GzipFileBestSpeed(path string) (last error) {
 // HidsMkdirAll is a wrapper around os.MkdirAll with appropriate
 // permissions
 func HidsMkdirAll(dir string) error {
-	return os.MkdirAll(dir, DefaultPerms)
+	return os.MkdirAll(dir, DefaultFileModeFile)
 }
 
 func HidsMkTmpDir() (dir string, err error) {
@@ -95,13 +95,13 @@ func HidsMkTmpDir() (dir string, err error) {
 
 // HidsCreateFile creates a file with the good permissions
 func HidsCreateFile(filename string) (*os.File, error) {
-	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultPerms)
+	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultFileModeFile)
 }
 
 // HidsWriteData is a wrapper around ioutil.WriteFile to write a file
 // with the good permissions
 func HidsWriteData(dest string, data []byte) error {
-	return ioutil.WriteFile(dest, data, DefaultPerms)
+	return ioutil.WriteFile(dest, data, DefaultFileModeFile)
 }
 
 // HidsWriteReader writes the content of a reader to a destination file. If

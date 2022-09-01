@@ -20,7 +20,6 @@ import (
 	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
 
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/gorilla/mux"
 )
 
@@ -93,19 +92,21 @@ func isVerboseURL(u *url.URL) bool {
 	return false
 }
 
-func endptLogHTTPMiddleware(next http.Handler) http.Handler {
+func (m *Manager) endptLogHTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// src-ip:src-port http-method http-proto url user-agent UUID content-length
-		fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
+		//fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
+		m.Logger.Log(r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
 		next.ServeHTTP(w, r)
 	})
 }
 
-func endptQuietLogHTTPMiddleware(next http.Handler) http.Handler {
+func (m *Manager) endptQuietLogHTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isVerboseURL(r.URL) {
 			// src-ip:src-port http-method http-proto url user-agent UUID content-length
-			fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
+			//fmt.Printf("%s %s %s %s %s \"%s\" \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
+			m.Logger.Log(r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.Header.Get(api.EndpointUUIDHeader), r.ContentLength)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -126,15 +127,15 @@ func (m *Manager) runEndpointAPI() {
 		// Middleware initialization
 		// Manages Request Logging
 		if m.Config.Logging.VerboseHTTP {
-			rt.Use(endptLogHTTPMiddleware)
+			rt.Use(m.endptLogHTTPMiddleware)
 		} else {
-			rt.Use(endptQuietLogHTTPMiddleware)
+			rt.Use(m.endptQuietLogHTTPMiddleware)
 		}
 
 		// Manages Authorization
 		rt.Use(m.endpointAuthorizationMiddleware)
 		// Manages Compression
-		rt.Use(gunzipMiddleware)
+		rt.Use(m.gunzipMiddleware)
 
 		// Routes initialization
 		// POST based
@@ -167,15 +168,15 @@ func (m *Manager) runEndpointAPI() {
 
 		if m.Config.TLS.Empty() {
 			// Bind to a port and pass our router in
-			log.Infof("Running endpoint HTTP API server on: %s", uri)
+			m.Logger.Infof("Running endpoint HTTP API server on: %s", uri)
 			if err := m.endpointAPI.ListenAndServe(); err != http.ErrServerClosed {
-				log.Panic(err)
+				m.Logger.Abort(1, err)
 			}
 		} else {
 			// Bind to a port and pass our router in
-			log.Infof("Running endpoint HTTPS API server on: %s", uri)
+			m.Logger.Infof("Running endpoint HTTPS API server on: %s", uri)
 			if err := m.endpointAPI.ListenAndServeTLS(m.Config.TLS.Cert, m.Config.TLS.Key); err != http.ErrServerClosed {
-				log.Panic(err)
+				m.Logger.Abort(1, err)
 			}
 		}
 	}()
@@ -338,7 +339,7 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
 		tok := []byte(s.Text())
-		log.Debugf("%s received Event: %s", funcName, string(tok))
+		m.Logger.Debugf("%s received Event: %s", funcName, string(tok))
 		e := event.EdrEvent{}
 
 		if err := json.Unmarshal(tok, &e); err != nil {
@@ -403,7 +404,7 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 	if err := m.detectionLogger.CommitTransaction(); err != nil {
 		m.logAPIErrorf("failed to commit detection logger transaction: %s", err)
 	}
-	log.Debugf("count Event Received: %d", cnt)
+	m.Logger.Debugf("count Event Received: %d", cnt)
 
 }
 

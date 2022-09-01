@@ -16,7 +16,6 @@ import (
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/fsutil"
-	"github.com/0xrawsec/golang-utils/log"
 	aconfig "github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/api"
@@ -38,7 +37,9 @@ var (
 	// Hostname the client is running on (initialized in init() function)
 	Hostname string
 
+	ErrNothingToDo              = errors.New("nothing to do")
 	ErrServerUnauthenticated    = errors.New("server authentication failed")
+	ErrUnexpectedNilResponse    = errors.New("unexpected nil response")
 	ErrUnexpectedResponseStatus = errors.New("unexpected response status code")
 	ErrNoSysmonConfig           = errors.New("no sysmon config available in manager")
 	ErrNoAgentConfig            = errors.New("no sysmon config available in manager")
@@ -53,12 +54,17 @@ func init() {
 	}
 }
 
-func ValidateRespStatus(resp *http.Response, status ...int) error {
+func ValidateResponse(resp *http.Response, status ...int) error {
+	if resp == nil {
+		return ErrUnexpectedNilResponse
+	}
+
 	for _, s := range status {
 		if resp.StatusCode == s {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("%w %d: %s", ErrUnexpectedResponseStatus, resp.StatusCode, respBodyToString(resp))
 }
 
@@ -105,18 +111,39 @@ func NewManagerClient(c *config.Client) (*ManagerClient, error) {
 }
 
 // Prepare prepares a http.Request to be sent to the manager
-func (m *ManagerClient) Prepare(method, url string, body io.Reader) (*http.Request, error) {
-	r, err := http.NewRequest(method, m.buildURI(url), body)
-
-	if err == nil {
-		r.Header.Add("User-Agent", UserAgent)
-		r.Header.Add(api.EndpointHostnameHeader, Hostname)
-		// the address used by the client to connect to the manager
-		r.Header.Add(api.EndpointIPHeader, m.Config.LocalAddr())
-		r.Header.Add(api.EndpointUUIDHeader, m.Config.UUID)
-		r.Header.Add(api.AuthKeyHeader, m.Config.Key)
+func (m *ManagerClient) Prepare(method, url string, body io.Reader) (r *http.Request, err error) {
+	if r, err = http.NewRequest(method, m.buildURI(url), body); err != nil {
+		return
 	}
-	return r, err
+
+	r.Header.Add("User-Agent", UserAgent)
+	r.Header.Add(api.EndpointHostnameHeader, Hostname)
+	// the address used by the client to connect to the manager
+	r.Header.Add(api.EndpointIPHeader, m.Config.LocalAddr())
+	r.Header.Add(api.EndpointUUIDHeader, m.Config.UUID)
+	r.Header.Add(api.AuthKeyHeader, m.Config.Key)
+
+	return
+}
+
+func (m *ManagerClient) PrepareAndDo(method, url string, body io.Reader) (resp *http.Response, err error) {
+	var req *http.Request
+
+	if req, err = m.Prepare(method, url, body); err != nil {
+		return
+	}
+
+	return m.HTTPClient.Do(req)
+}
+
+func (m *ManagerClient) PrepareAndDoGzip(method, url string, body io.Reader) (resp *http.Response, err error) {
+	var req *http.Request
+
+	if req, err = m.PrepareGzip(method, url, body); err != nil {
+		return
+	}
+
+	return m.HTTPClient.Do(req)
 }
 
 // PrepareGzip prepares a http.Request gzip encoded to be sent to the manager
@@ -145,54 +172,46 @@ func (m *ManagerClient) IsServerAuthEnforced() bool {
 }
 
 // IsServerUp returns true if manager server is up
-func (m *ManagerClient) IsServerUp() bool {
-	get, err := m.Prepare("GET", api.EptAPIServerKeyPath, nil)
-	if err != nil {
-		log.Errorf("IsServerUp cannot create server key request: %s", err)
-		return false
-	}
-	resp, err := m.HTTPClient.Do(get)
-	if err != nil {
-		return false
+func (m *ManagerClient) IsServerUp() (up bool) {
+	var err error
+	var resp *http.Response
+
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIServerKeyPath, nil); err != nil {
+		return
 	}
 
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-
-	return resp.StatusCode == 200
+	defer resp.Body.Close()
+	return ValidateResponse(resp, http.StatusOK) == nil
 }
 
-// IsServerAuthenticated returns true if the server is authenticated and thus can be trusted
-func (m *ManagerClient) IsServerAuthenticated() (auth bool, up bool) {
-	if m.IsServerAuthEnforced() {
-		get, err := m.Prepare("GET", api.EptAPIServerKeyPath, nil)
-		if err != nil {
-			log.Errorf("IsServerAuthenticated cannot create server key request: %s", err)
-			return false, false
-		}
-		resp, err := m.HTTPClient.Do(get)
-		if err != nil {
-			log.Errorf("IsServerAuthenticated cannot issue server key request: %s", err)
-			return false, false
-		}
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == 200 {
-				key, _ := ioutil.ReadAll(resp.Body)
-				if m.Config.ServerKey == string(key) {
-					// if the server can be authenticated
-					return true, true
-				}
-				log.Warn("Failed to authenticate remote server")
-				// if the server is not authenticated
-				return false, true
-			}
-			return false, false
-		}
-		return false, false
+// AuthenticateServer returns nil if server is authenticated (or if server authentication is not enforced)
+// otherwise it returns ErrServerUnauthenticated
+func (m *ManagerClient) AuthenticateServer() (err error) {
+	var resp *http.Response
+
+	if !m.IsServerAuthEnforced() {
+		return
 	}
-	return true, m.IsServerUp()
+
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIServerKeyPath, nil); err != nil {
+		return fmt.Errorf("%w, %s", ErrServerUnauthenticated, err)
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return fmt.Errorf("%w, %s", ErrServerUnauthenticated, err)
+	}
+
+	if resp == nil {
+		return fmt.Errorf("%w, received empty response from server", ErrServerUnauthenticated)
+	}
+
+	key := respBodyToString(resp)
+	if key != m.Config.ServerKey {
+		return fmt.Errorf("%w, keys are not matching", ErrServerUnauthenticated)
+	}
+
+	return
 }
 
 func (m *ManagerClient) buildURI(url string) string {
@@ -202,116 +221,89 @@ func (m *ManagerClient) buildURI(url string) string {
 
 // GetRulesSha256 returns the sha256 string of the latest batch of rules available on the server
 func (m *ManagerClient) GetRulesSha256() (string, error) {
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", api.EptAPIRulesSha256Path, nil)
-		if err != nil {
-			return "", fmt.Errorf("GetRulesSha256 failed to prepare request: %s", err)
-		}
 
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("SetRulesSha256 failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return "", fmt.Errorf("failed to retrieve rules sha256, unexpected HTTP status code %d", resp.StatusCode)
-			}
-			sha256, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return "", fmt.Errorf("GetRulesSha256 failed to read HTTP response body: %s", err)
-			}
-			return string(sha256), nil
-		}
+	if err := m.AuthenticateServer(); err != nil {
+		return "", err
 	}
-	return "", nil
+
+	resp, err := m.PrepareAndDo("GET", api.EptAPIRulesSha256Path, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to issue HTTP request: %s", err)
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return "", err
+	}
+
+	return respBodyAsString(resp)
 }
 
 // GetIoCs get IoCs from manager
-func (m *ManagerClient) GetIoCs() ([]string, error) {
-	ctn := make([]string, 0)
+func (m *ManagerClient) GetIoCs() (iocs []string, err error) {
+	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", api.EptAPIIoCsPath, nil)
-		if err != nil {
-			return ctn, fmt.Errorf("GetContainer failed to prepare request: %s", err)
-		}
+	iocs = make([]string, 0)
 
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return ctn, fmt.Errorf("GetContainer failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return ctn, fmt.Errorf("failed to retrieve container, unexpected HTTP status code %d", resp.StatusCode)
-			}
-			dec := json.NewDecoder(resp.Body)
-			if err = dec.Decode(&ctn); err != nil {
-				return ctn, fmt.Errorf("GetContainer failed to decode container")
-			}
-		}
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return ctn, nil
+
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIIoCsPath, nil); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	if err = dec.Decode(&iocs); err != nil {
+		return
+	}
+
+	return
 }
 
 // GetIoCsSha256 retrieves a sha256 from the IoCs available in the manager
-func (m *ManagerClient) GetIoCsSha256() (string, error) {
+func (m *ManagerClient) GetIoCsSha256() (sha string, err error) {
+	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", api.EptAPIIoCsSha256Path, nil)
-		if err != nil {
-			return "", fmt.Errorf("GetContainerSha256 failed to prepare request: %s", err)
-		}
-
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("GetContainerSha256 failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return "", fmt.Errorf("failed to retrieve container sha256, unexpected HTTP status code %d", resp.StatusCode)
-			}
-			sha256, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return "", fmt.Errorf("GetContainerSha256 failed to read HTTP response body: %s", err)
-			}
-			return string(sha256), nil
-		}
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return "", nil
+
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIIoCsSha256Path, nil); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return respBodyAsString(resp)
 }
 
 // GetRules retrieve the latest batch of Gene rules available on the server
-func (m *ManagerClient) GetRules() (string, error) {
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		req, err := m.Prepare("GET", api.EptAPIRulesPath, nil)
-		if err != nil {
-			return "", fmt.Errorf("GetRules failed to prepare request: %s", err)
-		}
+func (m *ManagerClient) GetRules() (rules string, err error) {
+	var resp *http.Response
 
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("GetRules failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return "", fmt.Errorf("GetRules failed to retrieve rules, unexpected HTTP status code %d", resp.StatusCode)
-			}
-			rules, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return "", fmt.Errorf("GetRules failed to read HTTP response body: %s", err)
-			}
-			return string(rules), nil
-		}
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return "", nil
+
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIRulesPath, nil); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return respBodyAsString(resp)
 }
 
 func (m *ManagerClient) IsFileAboveUploadLimit(path string) bool {
@@ -325,178 +317,150 @@ func (m *ManagerClient) IsFileAboveUploadLimit(path string) bool {
 }
 
 // PostDump client helper to upload a file to the Manager
-func (m *ManagerClient) PostDump(f *FileUpload) error {
-	if auth, up := m.IsServerAuthenticated(); auth {
-		if up {
-			buf := new(bytes.Buffer)
-			enc := json.NewEncoder(buf)
+func (m *ManagerClient) PostDump(f *FileUpload) (err error) {
+	var resp *http.Response
 
-			if err := enc.Encode(f); err != nil {
-				return fmt.Errorf("PostDump failed to encode to JSON")
-			}
-
-			req, err := m.Prepare("POST", api.EptAPIPostDumpPath, buf)
-
-			if err != nil {
-				return fmt.Errorf("PostDump failed to prepare request: %s", err)
-			}
-
-			resp, err := m.HTTPClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("PostDump failed to issue HTTP request: %s", err)
-			}
-
-			if resp != nil {
-				defer resp.Body.Close()
-				if resp.StatusCode != 200 {
-					return fmt.Errorf("PostDump failed to send dump, unexpected HTTP status code %d", resp.StatusCode)
-				}
-				return nil
-			}
-			return fmt.Errorf("PostDump failed to send dump, nil HTTP response")
-		}
-		return fmt.Errorf("PostDump failed because manager is down")
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return fmt.Errorf("PostDump failed, server cannot be authenticated")
+
+	buf := new(bytes.Buffer)
+	enc := json.NewEncoder(buf)
+
+	if err = enc.Encode(f); err != nil {
+		return err
+	}
+
+	if resp, err = m.PrepareAndDo("POST", api.EptAPIPostDumpPath, buf); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return
 }
 
 // PostLogs posts logs to be collected
-func (m *ManagerClient) PostLogs(r io.Reader) error {
-	if auth, up := m.IsServerAuthenticated(); auth {
-		if up {
-			req, err := m.PrepareGzip("POST", api.EptAPIPostLogsPath, r)
+func (m *ManagerClient) PostLogs(r io.Reader) (err error) {
+	var resp *http.Response
 
-			if err != nil {
-				return fmt.Errorf("PostLogs failed to prepare request: %s", err)
-			}
-
-			resp, err := m.HTTPClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("PostLogs failed to issue HTTP request: %s", err)
-			}
-
-			if resp != nil {
-				defer resp.Body.Close()
-				if resp.StatusCode != 200 {
-					return fmt.Errorf("PostLogs failed to send logs, unexpected HTTP status code %d", resp.StatusCode)
-				}
-				return nil
-			}
-			return fmt.Errorf("PostLogs failed to send logs, nil HTTP response")
-		}
-		return fmt.Errorf("PostLogs failed because manager is down, logs not sent")
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return fmt.Errorf("PostLogs failed, server cannot be authenticated")
+
+	if resp, err = m.PrepareAndDoGzip("POST", api.EptAPIPostLogsPath, r); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return
 }
 
-var (
-	ErrNothingToDo = fmt.Errorf("nothing to do")
-)
+var ()
 
-func (m *ManagerClient) PostCommand(command *api.EndpointCommand) error {
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		// stripping unecessary content to send back the command
-		command.Strip()
+func (m *ManagerClient) PostCommand(command *api.EndpointCommand) (err error) {
+	var resp *http.Response
 
-		// command should now contain stdout and stderr
-		jsonCommand, err := json.Marshal(command)
-		if err != nil {
-			return fmt.Errorf("PostCommand failed to marshal command")
-		}
-
-		// send back the response
-		req, err := m.PrepareGzip("POST", api.EptAPICommandPath, bytes.NewBuffer(jsonCommand))
-		if err != nil {
-			return fmt.Errorf("PostCommand failed to prepare POST request")
-		}
-
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("PostCommand failed to issue HTTP request: %s", err)
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("PostCommand failed to send command results, unexpected HTTP status code %d", resp.StatusCode)
-			}
-		}
-		return nil
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return fmt.Errorf("PostCommand failed, server cannot be authenticated")
+
+	// stripping unecessary content to send back the command
+	command.Strip()
+
+	// command should now contain stdout and stderr
+	jsonCommand, err := json.Marshal(command)
+	if err != nil {
+		return fmt.Errorf("PostCommand failed to marshal command")
+	}
+
+	// send back the response
+	if resp, err = m.PrepareAndDoGzip("POST", api.EptAPICommandPath, bytes.NewBuffer(jsonCommand)); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return nil
 
 }
 
-func (m *ManagerClient) FetchCommand() (*api.EndpointCommand, error) {
-	command := api.NewEndpointCommand()
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		// getting command to be executed
-		req, err := m.Prepare("GET", api.EptAPICommandPath, nil)
-		if err != nil {
-			return command, fmt.Errorf("FetchCommand failed to prepare request: %s", err)
-		}
+func (m *ManagerClient) FetchCommand() (command *api.EndpointCommand, err error) {
+	var resp *http.Response
 
-		resp, err := m.HTTPClient.Do(req)
-		if err != nil {
-			return command, fmt.Errorf("FetchCommand failed to issue HTTP request: %s", err)
-		}
-
-		// if there is no command to execute, the server replies with this status code
-		if resp.StatusCode == http.StatusNoContent {
-			// nothing else to do
-			return command, ErrNothingToDo
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			jsonCommand, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return command, fmt.Errorf("FetchCommand failed to read HTTP response body: %s", err)
-			}
-
-			// unmarshal command to be executed
-			if err := json.Unmarshal(jsonCommand, &command); err != nil {
-				return command, fmt.Errorf("FetchCommand failed to unmarshal command: %s", err)
-			}
-
-			return command, nil
-		}
-		return command, fmt.Errorf("FetchCommand unexpected HTTP status %d", resp.StatusCode)
-
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return command, fmt.Errorf("FetchCommand failed, server cannot be authenticated")
+
+	// getting command to be executed
+	if resp, err = m.PrepareAndDo("GET", api.EptAPICommandPath, nil); err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusNoContent, http.StatusOK); err != nil {
+		return
+	}
+
+	// if there is no command to execute, the server replies with this status code
+	if resp.StatusCode == http.StatusNoContent {
+		err = ErrNothingToDo
+		return
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	// unmarshal command to be executed
+	if err = dec.Decode(&command); err != nil {
+		return
+	}
+
+	if command != nil {
+		command.Runnable()
+	}
+
+	return
 }
 
-func (m *ManagerClient) PostSystemInfo(info *sysinfo.SystemInfo) error {
-	funcName := utils.GetCurFuncName()
-	if auth, _ := m.IsServerAuthenticated(); auth {
-		if b, err := json.Marshal(info); err != nil {
-			return fmt.Errorf("%s failed to marshal data: %s", funcName, err)
-		} else {
-			if req, err := m.PrepareGzip("POST", api.EptAPIPostSystemInfo, bytes.NewBuffer(b)); err != nil {
-				return err
-			} else {
-				if resp, err := m.HTTPClient.Do(req); err != nil {
-					return fmt.Errorf("%s failed to issue HTTP request: %s", funcName, err)
-				} else {
-					defer resp.Body.Close()
-					if resp.StatusCode != http.StatusOK {
-						return fmt.Errorf("%s received bad status code %d: %s", funcName, resp.StatusCode, respBodyToString(resp))
-					} else {
-						return nil
-					}
-				}
-			}
-		}
+func (m *ManagerClient) PostSystemInfo(info *sysinfo.SystemInfo) (err error) {
+	var resp *http.Response
+	var data []byte
+
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
-	return fmt.Errorf("%s %w", funcName, ErrServerUnauthenticated)
+
+	if data, err = json.Marshal(info); err != nil {
+		return
+	}
+
+	if resp, err = m.PrepareAndDoGzip("POST", api.EptAPIPostSystemInfo, bytes.NewBuffer(data)); err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
+		return
+	}
+
+	return
 }
 
 func (m *ManagerClient) GetSysmonConfigSha256(schemaVersion string) (sha256 string, err error) {
 	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return "", ErrServerUnauthenticated
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
 
 	if req, err = m.Prepare("GET", api.EptAPISysmonConfigSha256Path, nil); err != nil {
@@ -512,12 +476,12 @@ func (m *ManagerClient) GetSysmonConfigSha256(schemaVersion string) (sha256 stri
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK, http.StatusNoContent); err == nil {
 		if resp.StatusCode == http.StatusNoContent {
 			err = ErrNoSysmonConfig
 			return
 		}
-		sha256 = respBodyToString(resp)
+		sha256, err = respBodyAsString(resp)
 	}
 
 	return
@@ -527,8 +491,8 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return nil, ErrServerUnauthenticated
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
 
 	if req, err = m.Prepare("GET", api.EptAPISysmonConfigPath, nil); err != nil {
@@ -544,7 +508,7 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK, http.StatusNoContent); err == nil {
 		if resp.StatusCode == http.StatusNoContent {
 			err = ErrNoSysmonConfig
 			return
@@ -557,24 +521,19 @@ func (m *ManagerClient) GetSysmonConfig(schemaVersion string) (c *sysmon.Config,
 }
 
 func (m *ManagerClient) GetAgentConfigSha256() (sha256 string, err error) {
-	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return "", ErrServerUnauthenticated
-	}
-
-	if req, err = m.Prepare("GET", api.EptAPIConfigSha256Path, nil); err != nil {
+	if err = m.AuthenticateServer(); err != nil {
 		return
 	}
 
-	if resp, err = m.HTTPClient.Do(req); err != nil {
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIConfigSha256Path, nil); err != nil {
 		return
 	}
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK, http.StatusNoContent); err == nil {
 		if resp.StatusCode == http.StatusNoContent {
 			err = ErrNoAgentConfig
 			return
@@ -586,24 +545,19 @@ func (m *ManagerClient) GetAgentConfigSha256() (sha256 string, err error) {
 }
 
 func (m *ManagerClient) GetAgentConfig() (config *aconfig.Agent, err error) {
-	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return nil, ErrServerUnauthenticated
-	}
-
-	if req, err = m.Prepare("GET", api.EptAPIConfigPath, nil); err != nil {
+	if err = m.AuthenticateServer(); err != nil {
 		return
 	}
 
-	if resp, err = m.HTTPClient.Do(req); err != nil {
+	if resp, err = m.PrepareAndDo("GET", api.EptAPIConfigPath, nil); err != nil {
 		return
 	}
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK, http.StatusNoContent); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK, http.StatusNoContent); err == nil {
 		if resp.StatusCode == http.StatusNoContent {
 			err = ErrNoAgentConfig
 			return
@@ -617,30 +571,24 @@ func (m *ManagerClient) GetAgentConfig() (config *aconfig.Agent, err error) {
 }
 
 func (m *ManagerClient) PostAgentConfig(c *aconfig.Agent) (err error) {
-
 	var b []byte
-	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return ErrServerUnauthenticated
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
 
 	if b, err = utils.Json(c); err != nil {
 		return
 	}
 
-	if req, err = m.PrepareGzip("POST", api.EptAPIConfigPath, bytes.NewBuffer(b)); err != nil {
-		return
-	}
-
-	if resp, err = m.HTTPClient.Do(req); err != nil {
+	if resp, err = m.PrepareAndDoGzip("POST", api.EptAPIConfigPath, bytes.NewBuffer(b)); err != nil {
 		return
 	}
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK); err != nil {
+	if err = ValidateResponse(resp, http.StatusOK); err != nil {
 		return
 	}
 
@@ -651,8 +599,8 @@ func (m *ManagerClient) ListTools() (t map[string]*tools.Tool, err error) {
 	var req *http.Request
 	var resp *http.Response
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return nil, ErrServerUnauthenticated
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
 
 	if req, err = m.Prepare("GET", api.EptAPITools, nil); err != nil {
@@ -667,7 +615,7 @@ func (m *ManagerClient) ListTools() (t map[string]*tools.Tool, err error) {
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK); err == nil {
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&t)
 	}
@@ -680,8 +628,8 @@ func (m *ManagerClient) GetTool(hash string) (t *tools.Tool, err error) {
 	var resp *http.Response
 	var tools map[string]*tools.Tool
 
-	if auth, _ := m.IsServerAuthenticated(); !auth {
-		return nil, ErrServerUnauthenticated
+	if err = m.AuthenticateServer(); err != nil {
+		return
 	}
 
 	if req, err = m.Prepare("GET", api.EptAPITools, nil); err != nil {
@@ -698,7 +646,7 @@ func (m *ManagerClient) GetTool(hash string) (t *tools.Tool, err error) {
 
 	defer resp.Body.Close()
 
-	if err = ValidateRespStatus(resp, http.StatusOK); err == nil {
+	if err = ValidateResponse(resp, http.StatusOK); err == nil {
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&tools)
 		if len(tools) > 0 {

@@ -19,3 +19,12 @@ func respBodyToString(r *http.Response) string {
 		return string(b)
 	}
 }
+
+func respBodyAsString(r *http.Response) (s string, err error) {
+	var b []byte
+	defer r.Body.Close()
+	if b, err = ioutil.ReadAll(r.Body); err != nil {
+		return
+	}
+	return string(b), err
+}

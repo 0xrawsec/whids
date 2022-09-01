@@ -103,7 +103,7 @@ func (l *EventLogger) openLogfile(t time.Time, key string) (il *IndexedLogfile, 
 	}
 
 	// we create output directory
-	if err = os.MkdirAll(dir, utils.DefaultPerms); err != nil {
+	if err = os.MkdirAll(dir, utils.DefaultFileModeFile); err != nil {
 		return
 	}
 

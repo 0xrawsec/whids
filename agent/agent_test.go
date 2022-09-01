@@ -242,12 +242,14 @@ func testHook(h *Agent, e *event.EdrEvent) {
 }
 
 func TestAgent(t *testing.T) {
+	tt := toast.FromT(t)
 	defer cleanup()
-	_, clConf := prepareManager()
+
+	manager, clConf := prepareManager()
+	manager.Logger.ErrorHandler = tt.CheckErr
 
 	installSysmon()
 
-	tt := toast.FromT(t)
 	var gotSysmonEvent bool
 
 	tmp, err := utils.HidsMkTmpDir()

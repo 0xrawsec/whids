@@ -15,7 +15,7 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/golang-utils/fsutil/fswalker"
 	"github.com/0xrawsec/golang-utils/fsutil/logfile"
-	"github.com/0xrawsec/golang-utils/log"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/whids/api/client/config"
 	"github.com/0xrawsec/whids/utils"
 )
@@ -38,6 +38,7 @@ type Forwarder struct {
 	fwdConfig *config.Forwarder
 	logfile   logfile.LogFile
 
+	Logger      *golog.Logger
 	Client      *ManagerClient
 	TimeTresh   time.Duration
 	Sleep       time.Duration
@@ -49,17 +50,17 @@ type Forwarder struct {
 
 // NewForwarder creates a new Forwarder structure
 // Todo: needs update with client
-func NewForwarder(ctx context.Context, c *config.Forwarder) (*Forwarder, error) {
+func NewForwarder(ctx context.Context, c *config.Forwarder, l *golog.Logger) (*Forwarder, error) {
 	var err error
 
 	cctx, cancel := context.WithCancel(ctx)
 
 	// Initialize the Forwarder
-	// TODO: better organize forwarder configuration
 	co := Forwarder{
 		ctx:       cctx,
 		cancel:    cancel,
 		fwdConfig: c,
+		Logger:    l,
 		TimeTresh: time.Second * 10,
 		Sleep:     time.Second,
 		// Writing events too quickly has a perf impact
@@ -82,7 +83,7 @@ func NewForwarder(ctx context.Context, c *config.Forwarder) (*Forwarder, error) 
 	// creating the queue directory
 	if !fsutil.Exists(c.Logging.Dir) && !fsutil.IsDir(c.Logging.Dir) {
 		// TOCTU may happen here so we double check error code
-		if err = os.Mkdir(c.Logging.Dir, utils.DefaultPerms); err != nil && !os.IsExist(err) {
+		if err = os.Mkdir(c.Logging.Dir, utils.DefaultFileModeFile); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("cannot create queue directory : %s", err)
 		}
 	}
@@ -104,11 +105,11 @@ func (f *Forwarder) ArchiveLogs() {
 		for _, fi := range wi.Files {
 			// fullpath
 			fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
-			log.Infof("Archiving old log: %s", fp)
+			f.Logger.Infof("Archiving old log: %s", fp)
 
 			if !strings.HasSuffix(fp, ".gz") {
 				if err := fileutils.GzipFile(fp); err != nil {
-					log.Errorf("Failed to archive log: %s", err)
+					f.Logger.Errorf("Failed to archive log: %s", err)
 				}
 			}
 		}
@@ -126,14 +127,14 @@ func (f *Forwarder) PipeEvent(event interface{}) {
 
 // Save save the piped events to the disks
 func (f *Forwarder) Save() (err error) {
-	log.Debugf("Collector saved logs to be sent later on")
+	f.Logger.Debugf("Collector saved logs to be sent later on")
 
 	// Clean queued files if needed
 	if f.DiskSpaceQueue() > DiskSpaceThreshold {
-		log.Infof("Disk space taken by queued events reached %dMB threshold, need cleanup",
+		f.Logger.Infof("Disk space taken by queued events reached %dMB threshold, need cleanup",
 			DiskSpaceThreshold/logfile.MB)
 		if err := f.CleanOlderQueued(); err != nil {
-			log.Errorf("Error attempting to remove older queue file: %s", err)
+			f.Logger.Errorf("Error attempting to remove older queue file: %s", err)
 		}
 	}
 
@@ -142,8 +143,8 @@ func (f *Forwarder) Save() (err error) {
 		//lf := filepath.Join(f.fwdConfig.LogConf.Dir, "alerts.gz")
 		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts.log")
 		ri := f.fwdConfig.Logging.RotationInterval
-		log.Infof("Rotating logfile every %s", ri)
-		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, utils.DefaultPerms, ri); err != nil {
+		f.Logger.Infof("Rotating logfile every %s", ri)
+		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, utils.DefaultFileModeFile, ri); err != nil {
 			return
 		}
 	}
@@ -185,7 +186,7 @@ func (f *Forwarder) CleanOlderQueued() error {
 	absLogfile, _ := filepath.Abs(f.LogfilePath())
 	// prevent from deleting the current file we are working on
 	if absLogfile != absOlder {
-		log.Infof("Attempt to delete older queue file to make more space: %s", absOlder)
+		f.Logger.Infof("Attempt to delete older queue file to make more space: %s", absOlder)
 		return os.Remove(absOlder)
 	}
 	return nil
@@ -217,7 +218,6 @@ func (f *Forwarder) listLogfiles() (files []string) {
 }
 
 // ProcessQueue processes the events queued
-// Todo: needs update with client
 func (f *Forwarder) ProcessQueue() {
 	f.Lock()
 	defer f.Unlock()
@@ -233,7 +233,7 @@ func (f *Forwarder) ProcessQueue() {
 		return
 	}
 
-	log.Info("Processing queued files")
+	f.Logger.Info("Processing queued files")
 
 	if f.logfile != nil {
 		f.logfile.Close()
@@ -241,16 +241,11 @@ func (f *Forwarder) ProcessQueue() {
 
 	// Reset logfile for latter Save function use
 	f.logfile = nil
-	//for wi := range fswalker.Walk(f.fwdConfig.Logging.Dir) {
-	//for _, fi := range wi.Files {
 	for _, fp := range f.listLogfiles() {
-		// fullpath
-		//fp := filepath.Join(f.fwdConfig.Logging.Dir, fi.Name())
-		//log.Debug("Processing queued file: %s", fp)
-		log.Infof("Processing queued file: %s", fp)
+		f.Logger.Infof("Processing queued file: %s", fp)
 		fd, err := os.Open(fp)
 		if err != nil {
-			log.Errorf("Failed to open queued file (%s): %s", fp, err)
+			f.Logger.Errorf("Failed to open queued file (%s): %s", fp, err)
 			continue
 		}
 		switch {
@@ -259,7 +254,7 @@ func (f *Forwarder) ProcessQueue() {
 			// the file is gzip so we have to pass a gzip reader to prepCollectReq
 			gzr, err = gzip.NewReader(fd)
 			if err != nil {
-				log.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
+				f.Logger.Errorf("Failed to create gzip reader for queued file (%s): %s", fp, err)
 				// close file
 				fd.Close()
 				continue
@@ -275,14 +270,14 @@ func (f *Forwarder) ProcessQueue() {
 
 		// We do not remove the logs if we failed to send
 		if err != nil {
-			log.Errorf("%s", err)
+			f.Logger.Errorf("%s", err)
 			continue
 		}
 
 		// everything went fine, then we can delete the queued file
-		log.Infof("Deleting queue file : %s", fp)
+		f.Logger.Infof("Deleting queue file : %s", fp)
 		if err = os.Remove(fp); err != nil {
-			log.Errorf("Failed to delete queued file (%s): %s", fp, err)
+			f.Logger.Errorf("Failed to delete queued file (%s): %s", fp, err)
 		}
 	}
 }
@@ -310,12 +305,12 @@ func (f *Forwarder) Collect() {
 			// no need to save logs on disk
 			return
 		}
-		log.Errorf("%s", err)
+		f.Logger.Errorf("%s", err)
 	}
 
 	// Save the events in queue directory
 	if err = f.Save(); err != nil {
-		log.Errorf("Failed to save events: %s", err)
+		f.Logger.Errorf("Failed to save events: %s", err)
 	}
 }
 

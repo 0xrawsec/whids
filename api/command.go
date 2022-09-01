@@ -118,6 +118,10 @@ func (c *EndpointCommand) FromExecCmd(cmd *exec.Cmd) {
 	}
 }
 
+func (c *EndpointCommand) Runnable() {
+	c.runnable = true
+}
+
 func (c *EndpointCommand) Unrunnable() {
 	c.runnable = false
 }

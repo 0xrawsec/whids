@@ -18,7 +18,6 @@ import (
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
-	"github.com/0xrawsec/golang-utils/log"
 	"github.com/0xrawsec/whids/utils/powershell"
 	"github.com/pelletier/go-toml"
 )
@@ -174,7 +173,6 @@ func NewWindowsLogger(channel, source string) (wl *WindowsLogger, err error) {
 		return
 	}
 	command := fmt.Sprintf(newEventLog, wl.Source, wl.Channel)
-	log.Debug(command)
 	wl.p.ExecuteString(command)
 	return
 }
@@ -186,7 +184,6 @@ func (w *WindowsLogger) Log(eventid int, entrytype, message string) {
 	}
 	message = strings.Replace(message, "\n", "\\n", -1)
 	command := fmt.Sprintf(writeEventLog, w.Channel, w.Source, eventid, entrytype, message)
-	log.Debug(command)
 	w.p.ExecuteString(command)
 }
 
@@ -194,7 +191,6 @@ func (w *WindowsLogger) Log(eventid int, entrytype, message string) {
 func (w *WindowsLogger) Close() error {
 	command := fmt.Sprintf(removeEventLog, w.Source)
 	w.p.ExecuteString(command)
-	log.Debug(command)
 	time.Sleep(1 * time.Second)
 	return w.p.Kill()
 }

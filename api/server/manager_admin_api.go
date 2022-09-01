@@ -27,8 +27,6 @@ import (
 	"github.com/0xrawsec/whids/utils"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-
-	"github.com/0xrawsec/golang-utils/log"
 )
 
 const (
@@ -149,10 +147,11 @@ func (m *Manager) adminAuthorizationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func admLogHTTPMiddleware(next http.Handler) http.Handler {
+func (m *Manager) admLogHTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// src-ip:src-port http-method http-proto url user-agent UUID content-length
-		fmt.Printf("%s %s %s %s %s \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.ContentLength)
+		//fmt.Printf("%s %s %s %s %s \"%s\" %d\n", time.Now().Format(time.RFC3339Nano), r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.ContentLength)
+		m.Logger.Log(r.RemoteAddr, r.Method, r.Proto, r.URL, r.UserAgent(), r.ContentLength)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -440,7 +439,6 @@ func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request)
 
 			case "POST":
 				c := config.Agent{}
-				log.Info("format=", qpfmt)
 				switch qpfmt {
 				case "toml":
 					err = readPostAsTOML(rq, &c)
@@ -1528,11 +1526,11 @@ func (m *Manager) runAdminAPI() {
 		rt := mux.NewRouter()
 		// Middleware initialization
 		// Manages Request Logging
-		rt.Use(admLogHTTPMiddleware)
+		rt.Use(m.admLogHTTPMiddleware)
 		// Manages Authorization
 		rt.Use(m.adminAuthorizationMiddleware)
 		// Manages Compression
-		rt.Use(gunzipMiddleware)
+		rt.Use(m.gunzipMiddleware)
 		// Set API response headers
 		rt.Use(m.adminRespHeaderMiddleware)
 
@@ -1572,15 +1570,15 @@ func (m *Manager) runAdminAPI() {
 
 		if m.Config.TLS.Empty() {
 			// Bind to a port and pass our router in
-			log.Infof("Running admin HTTP API server on: %s", uri)
+			m.Logger.Infof("Running admin HTTP API server on: %s", uri)
 			if err := m.adminAPI.ListenAndServe(); err != http.ErrServerClosed {
-				log.Panic(err)
+				m.Logger.Abort(1, err)
 			}
 		} else {
 			// Bind to a port and pass our router in
-			log.Infof("Running admin HTTPS API server on: %s", uri)
+			m.Logger.Infof("Running admin HTTPS API server on: %s", uri)
 			if err := m.adminAPI.ListenAndServeTLS(m.Config.TLS.Cert, m.Config.TLS.Key); err != http.ErrServerClosed {
-				log.Panic(err)
+				m.Logger.Abort(1, err)
 			}
 		}
 	}()

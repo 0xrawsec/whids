@@ -13,6 +13,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/code/builder"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
@@ -226,7 +227,7 @@ func prep() (m *Manager, c *client.ManagerClient) {
 	defer cancel()
 
 	// sending logs to manager
-	f, err := client.NewForwarder(ctx, &fconf)
+	f, err := client.NewForwarder(ctx, &fconf, golog.FromStdout())
 	if err != nil {
 		panic(err)
 	}
@@ -275,7 +276,8 @@ func runAdminApiTest(t *testing.T, f func(*testing.T)) {
 				if cmd, err := c.FetchCommand(); err != nil && err != client.ErrNothingToDo {
 					t.Logf("Client failed to fetch command: %s", err)
 					break
-				} else {
+				} else if err != client.ErrNothingToDo {
+					t.Log(cmd)
 					if err := cmd.Run(); err != nil {
 						t.Logf("Failed to run command: %s", err)
 						break
