@@ -13,7 +13,7 @@ import (
 	"github.com/0xrawsec/whids/api"
 	"github.com/0xrawsec/whids/api/server"
 	"github.com/0xrawsec/whids/utils"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 )
 
 const (
@@ -126,7 +126,7 @@ func main() {
 
 	if dumpConfig {
 		enc := toml.NewEncoder(os.Stdout)
-		enc.Order(toml.OrderPreserve)
+		//enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(simpleManagerConfig); err != nil {
 			panic(err)
 		}

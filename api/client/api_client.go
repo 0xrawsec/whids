@@ -216,7 +216,11 @@ func (m *ManagerClient) AuthenticateServer() (err error) {
 
 func (m *ManagerClient) buildURI(url string) string {
 	url = strings.Trim(url, "/")
-	return fmt.Sprintf("%s://%s:%d/%s", m.Config.Proto, m.Config.Host, m.Config.Port, url)
+	network := m.Config.Host
+	if m.Config.Port != 0 {
+		network = fmt.Sprintf("%s:%d", network, m.Config.Port)
+	}
+	return fmt.Sprintf("%s://%s/%s", m.Config.Proto, network, url)
 }
 
 // GetRulesSha256 returns the sha256 string of the latest batch of rules available on the server

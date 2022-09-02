@@ -27,6 +27,10 @@ type Client struct {
 	localAddr string
 }
 
+func (c *Client) HasConnectionSettings() bool {
+	return c.Proto != "" && c.Host != "" && c.UUID != "" && c.Key != ""
+}
+
 // ManagerIP returns the IP address of the manager if any, returns nil otherwise
 func (c *Client) ManagerIP() net.IP {
 	if ip := net.ParseIP(c.Host); ip != nil {
@@ -93,12 +97,7 @@ func (c *Client) DialTLSContext(ctx context.Context, network, addr string) (net.
 // Cert pinning inspired by: https://medium.com/@zmanian/server-public-key-pinning-in-go-7a57bbe39438
 func (c *Client) Transport() http.RoundTripper {
 	return &http.Transport{
-		Proxy: nil,
-		/*DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,*/
+		Proxy:                 nil,
 		DialContext:           c.DialContext,
 		DialTLSContext:        c.DialTLSContext,
 		MaxIdleConns:          100,

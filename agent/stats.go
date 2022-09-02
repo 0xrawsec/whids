@@ -54,11 +54,10 @@ func (m *EventStats) Duration() time.Duration {
 }
 
 func (m *EventStats) Update(e *event.EdrEvent) {
+	m.counter.event++
+	m.counter.dynamic++
 	if e.IsDetection() {
 		m.counter.detection++
-	} else {
-		m.counter.event++
-		m.counter.dynamic++
 	}
 }
 

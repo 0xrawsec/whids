@@ -519,7 +519,8 @@ func (a *Agent) scheduleTasks() {
 					if err := a.updateAgentConfig(); err != nil {
 						a.logger.Error(task, err)
 					}
-				}).Ticker(time.Minute*15).Schedule(time.Now()),
+				}).Ticker(time.Minute*15).
+				Schedule(time.Now()),
 			crony.PrioHigh,
 		)
 
@@ -531,7 +532,8 @@ func (a *Agent) scheduleTasks() {
 				if err := a.updateTools(); err != nil {
 					a.logger.Error(task, err)
 				}
-			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+			}).Ticker(time.Minute*15).
+			Schedule(inLittleWhile),
 			crony.PrioHigh)
 
 		// updating engine
@@ -542,7 +544,8 @@ func (a *Agent) scheduleTasks() {
 				if err := a.update(false); err != nil {
 					a.logger.Error(task, err)
 				}
-			}).Ticker(a.config.RulesConfig.UpdateInterval).Schedule(inLittleWhile),
+			}).Ticker(a.config.RulesConfig.UpdateInterval).
+			Schedule(inLittleWhile),
 			crony.PrioHigh)
 
 		// command runner routine, we run it only once as it creates a go routine to handle commands
@@ -556,7 +559,13 @@ func (a *Agent) scheduleTasks() {
 
 		// uploading dumps
 		a.scheduler.Schedule(crony.NewTask("Upload Dump").
-			Func(a.taskUploadDumps).Ticker(time.Minute),
+			Func(func() {
+				task := "[upload dump]"
+				a.logger.Info(task, "dump upload starting")
+				a.taskUploadDumps()
+				a.logger.Info(task, "dump upload done")
+			}).Ticker(time.Minute).
+			Schedule(time.Now()),
 			crony.PrioMedium)
 
 		// updating sysmon
@@ -567,7 +576,8 @@ func (a *Agent) scheduleTasks() {
 				if err := a.updateSysmonBin(); err != nil {
 					a.logger.Error(task, err)
 				}
-			}).Ticker(time.Hour).Schedule(inLittleWhile),
+			}).Ticker(time.Hour).
+			Schedule(inLittleWhile),
 			crony.PrioMedium)
 
 		// updating sysmon configuration
@@ -578,7 +588,8 @@ func (a *Agent) scheduleTasks() {
 				if err := a.updateSysmonConfig(); err != nil {
 					a.logger.Error(task, err)
 				}
-			}).Ticker(time.Minute*15).Schedule(inLittleWhile),
+			}).Ticker(time.Minute*15).
+			Schedule(inLittleWhile),
 			crony.PrioMedium)
 
 		// Low Prio Tasks
@@ -600,11 +611,12 @@ func (a *Agent) scheduleTasks() {
 	// routines scheduled in any case
 
 	// Forwarder scheduling
-	a.scheduler.Schedule(crony.NewTask("Log forwarder").Func(func() {
-		// this call starts a new go routine so we don't need to create
-		// a new AsyncTask as it is not a blocking call
-		a.forwarder.Run()
-	}).Schedule(time.Now()), crony.PrioHigh)
+	a.scheduler.Schedule(crony.NewTask("Log forwarder").
+		Func(func() {
+			// this call starts a new go routine so we don't need to create
+			// a new AsyncTask as it is not a blocking call
+			a.forwarder.Run()
+		}).Schedule(time.Now()), crony.PrioHigh)
 
 	// routine managing Sysmon archived files cleanup
 	if err := a.scheduleCleanArchivedTask(); err != nil {
@@ -612,19 +624,22 @@ func (a *Agent) scheduleTasks() {
 	}
 
 	// routine creating canary files
-	a.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").Func(func() {
-		task := "[canary configuration]"
-		if err := a.config.CanariesConfig.Configure(); err != nil {
-			a.logger.Error(task, err)
-		}
-	}).Schedule(time.Now()), crony.PrioHigh)
+	a.scheduler.Schedule(crony.NewAsyncTask("Canary configuration").
+		Func(func() {
+			task := "[canary configuration]"
+			if err := a.config.CanariesConfig.Configure(); err != nil {
+				a.logger.Error(task, err)
+			}
+		}).Schedule(time.Now()), crony.PrioHigh)
 
 	// Action handler scheduling
-	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler").Func(func() {
-		a.actionHandler.handleActionsLoop()
-	}).Schedule(time.Now()), crony.PrioHigh)
+	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler").
+		Func(func() {
+			a.actionHandler.handleActionsLoop()
+		}).Schedule(time.Now()), crony.PrioHigh)
 
-	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").Func(func() {
-		a.actionHandler.compressionLoop()
-	}).Schedule(time.Now()), crony.PrioHigh)
+	a.scheduler.Schedule(crony.NewAsyncTask("Action Handler File Compression").
+		Func(func() {
+			a.actionHandler.compressionLoop()
+		}).Schedule(time.Now()), crony.PrioHigh)
 }

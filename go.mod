@@ -1,7 +1,7 @@
 module github.com/0xrawsec/whids
 
 require (
-	github.com/0xrawsec/crony v1.0.2
+	github.com/0xrawsec/crony v1.0.4
 	github.com/0xrawsec/gene/v2 v2.3.0
 	github.com/0xrawsec/golang-etw v1.5.3
 	github.com/0xrawsec/golang-utils v1.3.2
@@ -13,10 +13,13 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
-	github.com/pelletier/go-toml v1.9.3
+	github.com/pelletier/go-toml/v2 v2.0.5
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 )
 
-require golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
+require (
+	github.com/pelletier/go-toml v1.9.3 // indirect
+	golang.org/x/tools v0.0.0-20190625160430-252024b82959 // indirect
+)
 
 go 1.18

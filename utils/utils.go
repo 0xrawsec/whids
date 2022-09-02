@@ -19,7 +19,7 @@ import (
 	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/whids/utils/powershell"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -68,7 +68,7 @@ func JsonStringOrPanic(i interface{}) string {
 func Toml(i interface{}) (b []byte, err error) {
 	buf := new(bytes.Buffer)
 	enc := toml.NewEncoder(buf)
-	enc.Order(toml.OrderPreserve)
+	//enc.Order(toml.OrderPreserve)
 	if err = enc.Encode(i); err != nil {
 		return
 	}
@@ -102,7 +102,7 @@ func Sha256StringArray(array []string) string {
 	return hex.EncodeToString(sha256.Sum(nil))
 }
 
-func toBytes(i any) (b []byte, err error) {
+func ToBytes(i any) (b []byte, err error) {
 	if b, err = json.Marshal(i); err != nil {
 		return
 	}
@@ -121,7 +121,7 @@ func Sha1EventBytes(b []byte) string {
 func Sha1Interface(i interface{}) (h string, err error) {
 	var b []byte
 
-	if b, err = toBytes(i); err != nil {
+	if b, err = ToBytes(i); err != nil {
 		return
 	}
 
@@ -131,7 +131,7 @@ func Sha1Interface(i interface{}) (h string, err error) {
 func Sha256Interface(i interface{}) (h string, err error) {
 	var b []byte
 
-	if b, err = toBytes(i); err != nil {
+	if b, err = ToBytes(i); err != nil {
 		return
 	}
 
@@ -144,6 +144,17 @@ func GetCurFuncName() string {
 		return split[len(split)-1]
 	}
 	return "unk.UnknownFunc"
+}
+
+func DedupStringSlice(in []string) (out []string) {
+	s := datastructs.NewSet()
+	for _, v := range in {
+		if !s.Contains(v) {
+			out = append(out, v)
+			s.Add(v)
+		}
+	}
+	return
 }
 
 /////////////////////////////// Windows Logger ////////////////////////////////

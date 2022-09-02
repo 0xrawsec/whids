@@ -120,6 +120,15 @@ func init() {
 
 }
 
+func testingRule() (r engine.Rule) {
+	r = engine.NewRule()
+	r.Name = "Testing:MatchAllSysmon"
+	// FileCreate, FileDeleted and FileDeletedDetected
+	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {}}
+	r.Meta.Criticality = 10
+	return r
+}
+
 func generateCert(c server.ManagerConfig) {
 	hosts := []string{c.AdminAPI.Host, c.EndpointAPI.Host}
 	key, cert, err := utils.GenerateCert("Test", hosts, time.Hour*24*365)
@@ -269,6 +278,7 @@ func TestAgent(t *testing.T) {
 	installSysmon()
 
 	var gotSysmonEvent bool
+	var gotProcessTermination bool
 
 	tmp, err := utils.HidsMkTmpDir()
 	tt.CheckErr(err)
@@ -279,6 +289,10 @@ func TestAgent(t *testing.T) {
 	c.Logfile = ""
 	c.FwdConfig.Local = false
 	c.FwdConfig.Client = clConf
+	// enable audit policy to trigger FileSystem events hooks
+	c.AuditConfig.Enable = true
+	c.AuditConfig.AuditDirs = []string{`C:\Windows`, `C:\Users`}
+	// empty all actions
 	c.Actions = config.Actions{
 		AvailableActions: AvailableActions,
 		Low:              []string{},
@@ -287,7 +301,14 @@ func TestAgent(t *testing.T) {
 		Critical:         []string{},
 	}
 
+	// creating new agent
 	a, err := NewAgent(c)
+	tt.CheckErr(err)
+
+	// loading testing rule
+	r := testingRule()
+	tt.CheckErr(a.Engine.LoadRule(&r))
+
 	a.logger.ErrorHandler = tt.CheckErr
 	// reduce scheduled task ticker
 	for _, t := range a.scheduler.Tasks() {
@@ -300,6 +321,9 @@ func TestAgent(t *testing.T) {
 	a.preHooks.Hook(func(h *Agent, e *event.EdrEvent) {
 		if e.Channel() == sysmonChannel {
 			gotSysmonEvent = true
+		}
+		if isSysmonProcessTerminate(e) {
+			gotProcessTermination = true
 		}
 		// create fake detection to cover action
 		d := engine.NewDetection(true, true)
@@ -321,8 +345,13 @@ func TestAgent(t *testing.T) {
 	a.Stop()
 
 	tt.Assert(gotSysmonEvent, "failed to monitor Sysmon events")
+	tt.Assert(gotProcessTermination, "failed to get Sysmon process termination event")
 
-	t.Log(utils.PrettyJsonOrPanic(a.Report(false)))
+	report := a.Report(false)
+	for _, c := range report.Commands {
+		// control that we did not get any error
+		tt.Assert(c.Error == "")
+	}
 
 	a.WaitWithTimeout(time.Second * 15)
 

@@ -31,7 +31,7 @@ import (
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/gene/v2/reducer"

@@ -18,7 +18,7 @@ import (
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/agent/sysinfo"
 	"github.com/0xrawsec/whids/utils"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 	"golang.org/x/sys/windows/svc"
 
 	"github.com/0xrawsec/golang-utils/crypto/data"
@@ -89,7 +89,7 @@ func configure() error {
 	defer writer.Close()
 
 	enc := toml.NewEncoder(writer)
-	enc.Order(toml.OrderPreserve)
+	//enc.Order(toml.OrderPreserve)
 	if err := enc.Encode(DefaultHIDSConfig); err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func main() {
 	if flagDumpConfig || flagConfigure {
 		writer := os.Stdout
 		enc := toml.NewEncoder(writer)
-		enc.Order(toml.OrderPreserve)
+		//enc.Order(toml.OrderPreserve)
 		if err := enc.Encode(DefaultHIDSConfig); err != nil {
 			logger.Abort(exitFail, err)
 		}

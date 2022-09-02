@@ -166,7 +166,9 @@ func (a *Agent) Prepare(c *config.Agent) (err error) {
 	a.actionHandler = NewActionHandler(a)
 
 	// Creates missing directories
-	c.Prepare()
+	if err = c.Prepare(); err != nil {
+		return
+	}
 
 	// Create logfile asap if needed
 	if c.Logfile != "" {
@@ -827,7 +829,7 @@ func (a *Agent) Run() {
 	a.scheduler.Start()
 
 	for _, t := range a.scheduler.Tasks() {
-		a.logger.Infof("Scheduler running: %s", t.Name)
+		a.logger.Infof("Scheduler running: %s (async=%t) (scheduled=%t)", t.Name, t.IsAsync(), t.IsScheduled())
 	}
 
 	// Dry run don't do anything

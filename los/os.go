@@ -43,9 +43,17 @@ func GetPathEnv() string {
 }
 
 func BuildPathEnv(value ...string) string {
-	return fmt.Sprintf("%s=%s", PathEnvVar, strings.Join(value, EnvVarSep))
+	// sanitizing values by removing leading and trailing separators
+	for i := range value {
+		value[i] = strings.Trim(value[i], EnvVarSep)
+	}
+	return strings.Join(value, EnvVarSep)
 }
 
 func TrimPathSep(path string) string {
 	return strings.TrimRight(path, PathSep)
+}
+
+func ExecFilename(base string) string {
+	return fmt.Sprintf("%s%s", base, ExecExt)
 }
