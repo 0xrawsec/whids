@@ -2,17 +2,21 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/0xrawsec/gene/v2/engine"
-	"github.com/0xrawsec/golang-utils/datastructs"
+	"github.com/0xrawsec/golang-etw/etw"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/api"
@@ -24,6 +28,7 @@ import (
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/tools"
 	"github.com/0xrawsec/whids/utils"
+	"github.com/0xrawsec/whids/utils/command"
 )
 
 var (
@@ -109,7 +114,37 @@ var (
 	// tools deployment
 	osqueryBin         []byte
 	osqueryTestBinPath = filepath.Join("data", fmt.Sprintf("%s.%s%s", los.OS, tools.ToolOSQueryi, los.ExecExt))
+
+	wmicPidRe = regexp.MustCompile(`ProcessId\s=\s\d+`)
 )
+
+func wmicCreateProcess(cmdLine string) int {
+	var out []byte
+	var err error
+	var s, spid string
+	var ok bool
+	var pid int64
+
+	cmd := command.CommandTimeout(time.Second*5, "cmd", "/c", fmt.Sprintf(`wmic process call create '%s'`, cmdLine))
+	if out, err = cmd.CombinedOutput(); err != nil {
+		panic(fmt.Sprintf("%s:\n%s", err, string(out)))
+	}
+
+	if s = wmicPidRe.FindString(string(out)); s == "" {
+		panic(fmt.Sprintf("pid not found in:\n%s", string(out)))
+	}
+
+	if _, spid, ok = strings.Cut(s, "="); !ok {
+		panic(fmt.Sprintf("could not split %s", s))
+	}
+
+	spid = strings.Trim(spid, " \t")
+	if pid, err = strconv.ParseInt(spid, 0, 32); err != nil {
+		panic(err)
+	}
+
+	return int(pid)
+}
 
 func init() {
 	var err error
@@ -120,11 +155,36 @@ func init() {
 
 }
 
+func drainOldAutologgerEvents(t *testing.T) {
+	tt := toast.FromT(t)
+
+	t.Log("Draining out Autologger trace from old events")
+
+	cnt := 0
+	c := etw.NewRealTimeConsumer(context.Background())
+	// name of the edr trace
+	c.FromTraceNames(config.EdrTraceName)
+
+	tt.CheckErr(c.Start())
+
+	now := time.Now()
+	for e := range c.Events {
+		if e.System.TimeCreated.SystemTime.After(now) {
+			break
+		}
+		cnt++
+	}
+
+	tt.CheckErr(c.Stop())
+	t.Logf("Drained %d old events from autologger", cnt)
+}
+
 func testingRule() (r engine.Rule) {
 	r = engine.NewRule()
 	r.Name = "Testing:MatchAllSysmon"
 	// FileCreate, FileDeleted and FileDeletedDetected
 	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {}}
+	r.Actions = append(r.Actions, ActionFiledump, ActionRegdump, ActionBrief, ActionReport)
 	r.Meta.Criticality = 10
 	return r
 }
@@ -269,6 +329,9 @@ func testHook(h *Agent, e *event.EdrEvent) {
 }
 
 func TestAgent(t *testing.T) {
+	// draining old events from autologger
+	drainOldAutologgerEvents(t)
+
 	tt := toast.FromT(t)
 	defer cleanup()
 
@@ -286,7 +349,7 @@ func TestAgent(t *testing.T) {
 
 	c := BuildDefaultConfig(tmp)
 	// make logger log to stdout
-	c.Logfile = ""
+	c.Logfile = "whids.log"
 	c.FwdConfig.Local = false
 	c.FwdConfig.Client = clConf
 	// enable audit policy to trigger FileSystem events hooks
@@ -321,17 +384,20 @@ func TestAgent(t *testing.T) {
 	a.preHooks.Hook(func(h *Agent, e *event.EdrEvent) {
 		if e.Channel() == sysmonChannel {
 			gotSysmonEvent = true
+			switch e.EventID() {
+			case SysmonDNSQuery, SysmonNetworkConnect:
+				t.Log(utils.PrettyJsonOrPanic(e.Event))
+			}
 		}
 		if isSysmonProcessTerminate(e) {
 			gotProcessTermination = true
 		}
-		// create fake detection to cover action
-		d := engine.NewDetection(true, true)
-		// enable all actions
-		//d.Actions = datastructs.NewInitSet(datastructs.ToInterfaceSlice(AvailableActions)...)
-		d.Actions = datastructs.NewInitSet(ActionFiledump, ActionRegdump, ActionBrief, ActionReport)
-		d.Criticality = 6
-		e.SetDetection(d)
+	}, fltAnyEvent)
+
+	a.postHooks.Hook(func(h *Agent, e *event.EdrEvent) {
+		/*if e.IsDetection() {
+			t.Log(e.GetDetection().Actions.Slice())
+		}*/
 	}, fltAnyEvent)
 
 	tt.TimeIt(
@@ -340,7 +406,13 @@ func TestAgent(t *testing.T) {
 	)
 
 	tt.CheckErr(err)
+	// we start running the agent
 	a.Run()
+	// generate fake network trafic not originating from edr
+	pid := wmicCreateProcess("powershell -Command while(1){powershell -Command wget https://www.google.com;sleep 1}")
+	// terminate wmic process
+	defer terminate(pid)
+
 	time.Sleep(20 * time.Second)
 	a.Stop()
 
