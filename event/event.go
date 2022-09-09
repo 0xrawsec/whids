@@ -1,13 +1,19 @@
 package event
 
 import (
+	"crypto"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-etw/etw"
 	"github.com/0xrawsec/whids/utils"
+)
+
+var (
+	emptySha1 = strings.Repeat("0", crypto.SHA1.Size()*2)
 )
 
 type EdrData struct {
@@ -44,10 +50,19 @@ func (e *EdrEvent) InitEdrData() {
 }
 
 func (e *EdrEvent) Hash() string {
+	var b []byte
+	var err error
+
 	tmp := *e
+
 	// null out EdrData as it does not come into hash calculation
 	tmp.Event.EdrData = nil
-	return utils.Sha1EventBytes(utils.JsonOrPanic(tmp))
+
+	if b, err = utils.Json(tmp); err != nil {
+		return emptySha1
+	}
+
+	return utils.Sha1EventBytes(b)
 }
 
 func (e *EdrEvent) GetStringOr(p *engine.XPath, or string) string {

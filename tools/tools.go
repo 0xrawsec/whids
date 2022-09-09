@@ -51,7 +51,7 @@ func New(os, name, alias string, binary []byte) (t *Tool) {
 	}
 
 	// using tool's uuid for object storage
-	t.Uuid = utils.UnsafeUUIDGen().String()
+	t.Uuid = utils.UnsafeUUID().String()
 	t.Initialize(t.Uuid)
 
 	t.Update(binary)

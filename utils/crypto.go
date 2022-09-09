@@ -125,6 +125,7 @@ func CertFileSha256(certPath string) (fingerprint string, err error) {
 	if certFd, err = os.Open(certPath); err != nil {
 		return
 	}
+	defer certFd.Close()
 
 	fingerprint, err = CertSha256(certFd)
 	return

@@ -24,7 +24,7 @@ import (
 var (
 	testAdminUser = &AdminAPIUser{
 		Identifier: "test",
-		Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
+		Key:        utils.NewKeyOrPanic(api.DefaultKeySize),
 	}
 )
 
@@ -134,7 +134,7 @@ func getEndpointUUID() string {
 func prepareTest() (m *Manager, c *client.ManagerClient) {
 	var err error
 
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)

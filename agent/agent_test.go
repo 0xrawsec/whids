@@ -86,10 +86,10 @@ var (
 
 	testAdminUser = &server.AdminAPIUser{
 		Identifier: "test",
-		Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
+		Key:        utils.NewKeyOrPanic(api.DefaultKeySize),
 	}
 
-	mroot = filepath.Join(os.TempDir(), utils.UnsafeUUIDGen().String(), "data")
+	mroot = filepath.Join(os.TempDir(), utils.UUIDOrPanic().String(), "data")
 	mconf = server.ManagerConfig{
 		AdminAPI: server.AdminAPIConfig{
 			Host: "localhost",
@@ -168,11 +168,17 @@ func drainOldAutologgerEvents(t *testing.T) {
 	tt.CheckErr(c.Start())
 
 	now := time.Now()
-	for e := range c.Events {
-		if e.System.TimeCreated.SystemTime.After(now) {
-			break
+loop:
+	for {
+		select {
+		case e := <-c.Events:
+			if e.System.TimeCreated.SystemTime.After(now) {
+				break loop
+			}
+			cnt++
+		default:
+			break loop
 		}
-		cnt++
 	}
 
 	tt.CheckErr(c.Stop())
@@ -215,8 +221,8 @@ func randport() (port int) {
 func randomIoCs(n int) (iocs []*ioc.IOC) {
 	for ; n > 0; n-- {
 		iocs = append(iocs, &ioc.IOC{
-			Uuid:      utils.UnsafeUUIDGen().String(),
-			GroupUuid: utils.UnsafeUUIDGen().String(),
+			Uuid:      utils.UUIDOrPanic().String(),
+			GroupUuid: utils.UUIDOrPanic().String(),
 			Source:    "Xyz",
 			Value:     fmt.Sprintf("%d.some.random.domain", rand.Intn(10000)),
 			Type:      "domain",
@@ -232,8 +238,8 @@ func makeClientConfig(mc *server.ManagerConfig) (c cconfig.Client) {
 		Proto:  "https",
 		Host:   "localhost",
 		Port:   mc.EndpointAPI.Port,
-		UUID:   utils.UnsafeUUIDGen().String(),
-		Key:    utils.UnsafeUUIDGen().String(),
+		UUID:   utils.UUIDOrPanic().String(),
+		Key:    utils.UUIDOrPanic().String(),
 		Unsafe: true,
 	}
 
@@ -407,7 +413,7 @@ func TestAgent(t *testing.T) {
 
 	tt.CheckErr(err)
 	// we start running the agent
-	a.Run()
+	tt.CheckErr(a.Run())
 	// generate fake network trafic not originating from edr
 	pid := wmicCreateProcess("powershell -Command while(1){powershell -Command wget https://www.google.com;sleep 1}")
 	// terminate wmic process

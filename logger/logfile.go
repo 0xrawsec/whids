@@ -198,7 +198,7 @@ func (f *IndexedLogfile) flush() (err error) {
 	// we commit to index file only if we wrote at least one event
 	if f.indexEntry.EventCount > 0 {
 		header := !fsutil.Exists(f.IndexFile())
-		if indexFd, err = os.OpenFile(f.IndexFile(), os.O_APPEND|os.O_RDWR|os.O_CREATE, utils.DefaultFileModeFile); err != nil {
+		if indexFd, err = os.OpenFile(f.IndexFile(), os.O_APPEND|os.O_RDWR|os.O_CREATE, utils.DefaultFilePerm); err != nil {
 			return
 		}
 		defer indexFd.Close()

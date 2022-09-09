@@ -48,7 +48,7 @@ type EndpointCommand struct {
 
 // NewEndpointCommand creates a new Command to run on an endpoint
 func NewEndpointCommand() *EndpointCommand {
-	id := utils.UnsafeUUIDGen()
+	id := utils.UnsafeUUID()
 	cmd := &EndpointCommand{
 		UUID:     id.String(),
 		Drop:     make([]*EndpointFile, 0),
@@ -79,7 +79,7 @@ func (c *EndpointCommand) AddDropFile(filename, filepath string) error {
 	var err error
 
 	ef := EndpointFile{
-		UUID: utils.UnsafeUUIDGen().String(),
+		UUID: utils.UnsafeUUID().String(),
 		Name: filename}
 	if ef.Data, err = os.ReadFile(filepath); err != nil {
 		return fmt.Errorf("failed at reading file to drop: %w", err)
@@ -98,7 +98,7 @@ func (c *EndpointCommand) AddDropFileFromPath(path string) error {
 
 // AddFetchFile adds a file to fetch from the endpoint.
 func (c *EndpointCommand) AddFetchFile(filepath string) {
-	c.Fetch[filepath] = &EndpointFile{UUID: utils.UnsafeUUIDGen().String()}
+	c.Fetch[filepath] = &EndpointFile{UUID: utils.UnsafeUUID().String()}
 }
 
 func (c *EndpointCommand) FromExecCmd(cmd *exec.Cmd) {

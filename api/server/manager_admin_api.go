@@ -102,7 +102,7 @@ func (r *AdminAPIResponse) UnmarshalData(i interface{}) error {
 func (r *AdminAPIResponse) ToJSON() []byte {
 	b, err := json.Marshal(r)
 	if err != nil {
-		safe := AdminAPIResponse{Error: format("Failed to encode data to JSON: %s", err)}
+		safe := AdminAPIResponse{Error: format("failed to encode data to JSON: %s", err)}
 		sb, _ := json.Marshal(safe)
 		return sb
 	}
@@ -119,6 +119,10 @@ func (r *AdminAPIResponse) Err() error {
 
 func admErr(s interface{}) []byte {
 	return NewAdminAPIRespErrorString(format("%s", s)).ToJSON()
+}
+
+func admErrorf(fmt string, i ...interface{}) []byte {
+	return NewAdminAPIRespErrorString(format(fmt, i...)).ToJSON()
 }
 
 func admJSONResp(data interface{}) []byte {
@@ -180,16 +184,23 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 			wt.Write(admJSONResp(users))
 		}
 	case "PUT":
+		var uuid, key string
+
 		// verify that we have at least an identifier to create the user
 		if identifier == "" {
 			wt.Write(admErr("at least an identifier is needed to create user"))
 			return
 		}
 
+		if uuid, key, err = utils.UUIDKeyPair(api.DefaultKeySize); err != nil {
+			wt.Write(admErr(format("error while generating user's uuid/key pair: %s", err)))
+			return
+		}
+
 		user := AdminAPIUser{
 			Identifier: identifier,
-			Uuid:       utils.UnsafeUUIDGen().String(),
-			Key:        utils.UnsafeKeyGen(api.DefaultKeySize),
+			Uuid:       uuid,
+			Key:        key,
 		}
 
 		if err = m.CreateNewAdminAPIUser(&user); err != nil {
@@ -217,12 +228,18 @@ func (m *Manager) admAPIUsers(wt http.ResponseWriter, rq *http.Request) {
 		// force UUID to lower case
 		user.Uuid = strings.ToLower(user.Uuid)
 		if !noBracketGuidRe.MatchString(user.Uuid) {
-			user.Uuid = utils.UnsafeUUIDGen().String()
+			if user.Uuid, err = utils.NewUUIDString(); err != nil {
+				wt.Write(admErr(format("failed to generate uuid: %s", err)))
+				return
+			}
 		}
 
 		// we generate a new key if needed
 		if user.Key == "" {
-			user.Key = utils.UnsafeKeyGen(api.DefaultKeySize)
+			if user.Key, err = utils.NewKey(api.DefaultKeySize); err != nil {
+				wt.Write(admErr(format("failed to generate key: %s", err)))
+				return
+			}
 		}
 
 		if err = m.CreateNewAdminAPIUser(&user); err != nil {
@@ -260,7 +277,10 @@ func (m *Manager) admAPIUser(wt http.ResponseWriter, rq *http.Request) {
 
 				// updating only some allowed fields of existing user
 				if newKey {
-					user.Key = utils.UnsafeKeyGen(api.DefaultKeySize)
+					if user.Key, err = utils.NewKey(api.DefaultKeySize); err != nil {
+						wt.Write(admErr(format("failed to generate key: %s", err)))
+						return
+					}
 				}
 
 				if new.Key != "" {
@@ -338,12 +358,21 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 		}
 
 	case rq.Method == "PUT":
-		endpt := api.NewEndpoint(utils.UnsafeUUIDGen().String(), utils.UnsafeKeyGen(api.DefaultKeySize))
-		m.db.InsertOrUpdate(endpt)
+		var uuid, key string
+		var err error
+
+		// on error we return
+		if uuid, key, err = utils.UUIDKeyPair(api.DefaultKeySize); err != nil {
+			wt.Write(admErr(format("failed to generate endpoint uuid/key pair: %s", err)))
+			return
+		}
+
+		endpt := api.NewEndpoint(uuid, key)
 		// save endpoint to database
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
-			m.logAPIErrorf("failed to save new endpoint")
+			m.logAPIErrorf("failed to save new endpoint: %s", err)
 		}
+
 		wt.Write(admJSONResp(endpt))
 	}
 }
@@ -382,7 +411,10 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 
 				// if we want to generate a new random key
 				if newKey {
-					endpt.Key = utils.UnsafeKeyGen(api.DefaultKeySize)
+					if endpt.Key, err = utils.NewKey(api.DefaultKeySize); err != nil {
+						wt.Write(admErrorf("failed to generate new endpoint key: %s", err))
+						return
+					}
 				}
 
 				// save endpoint to database

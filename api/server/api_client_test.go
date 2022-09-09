@@ -71,8 +71,8 @@ func TestClientContainer(t *testing.T) {
 	niocs := 1000
 	iocs := make([]ioc.IOC, 0, niocs)
 	del := 0
-	guuid := utils.UnsafeUUIDGen().String()
-	toDelGuuid := utils.UnsafeUUIDGen().String()
+	guuid := utils.UUIDOrPanic().String()
+	toDelGuuid := utils.UUIDOrPanic().String()
 	for i := 0; i < niocs; i++ {
 		key := guuid
 		if rand.Int()%3 == 0 {
@@ -81,7 +81,7 @@ func TestClientContainer(t *testing.T) {
 		}
 
 		iocs = append(iocs, ioc.IOC{
-			Uuid:      utils.UnsafeUUIDGen().String(),
+			Uuid:      utils.UUIDOrPanic().String(),
 			GroupUuid: key,
 			Source:    "Test",
 			Value:     fmt.Sprintf("%d.random.com", i),

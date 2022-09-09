@@ -57,7 +57,7 @@ func NewSystemInfo() (info *SystemInfo) {
 	info.CPU.Count = len(procs)
 
 	if info.Sysmon, err = sysmon.NewSysmonInfo(); err != nil {
-		info.Err = err
+		info.Error = err.Error()
 	}
 
 	return

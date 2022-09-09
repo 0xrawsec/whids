@@ -1,6 +1,10 @@
 package sysinfo
 
-import "github.com/0xrawsec/whids/sysmon"
+import (
+	"errors"
+
+	"github.com/0xrawsec/whids/sysmon"
+)
 
 var (
 	// must be set by main package
@@ -58,5 +62,12 @@ type SystemInfo struct {
 
 	Sysmon *sysmon.Info `json:"sysmon"`
 
-	Err error `json:"error"`
+	Error string `json:"error"`
+}
+
+func (s *SystemInfo) Err() error {
+	if s.Error == "" {
+		return nil
+	}
+	return errors.New(s.Error)
 }

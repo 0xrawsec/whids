@@ -67,7 +67,7 @@ type Audit struct {
 // WARNING: it is very important that any field/structure in Agent config has omitempty in JSON tag otherwise
 // there are Sha256 stability issues because JSON and TOML do not decode empty slices the same way.
 type Agent struct {
-	path string `json:"path,omitempty"`
+	path string
 
 	DatabasePath    string           `json:"db-path,omitempty" toml:"db-path" comment:"Path to local database root directory"`
 	CritTresh       int              `json:"criticality-treshold,omitempty" toml:"criticality-treshold" comment:"Dumps/forward only events above criticality threshold\n or filtered events (i.e. Gene filtering rules)"`

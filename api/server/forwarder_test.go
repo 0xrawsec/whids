@@ -125,7 +125,7 @@ func TestForwarderBasic(t *testing.T) {
 	//defer clean(&mconf, &fconf)
 
 	nevents := 1000
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 	testfile := "Testlog.gz"
 	mconf.Logging.LogBasename = testfile
 
@@ -153,7 +153,9 @@ func TestForwarderBasic(t *testing.T) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			t.Errorf("failed to pipe event: %s", err)
+		}
 	}
 	time.Sleep(5 * time.Second)
 
@@ -172,7 +174,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 
 	nevents := 1000
 	testfile := "TestServerAuthFailure.log.gz"
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 	serverKey := "rogueserver"
 	mconf.Logging.LogBasename = testfile
 
@@ -188,7 +190,7 @@ func TestCollectorAuthFailure(t *testing.T) {
 	defer r.Shutdown()
 
 	fconf.Client.Key = key
-	fconf.Client.ServerKey = utils.UnsafeKeyGen(api.DefaultKeySize)
+	fconf.Client.ServerKey = utils.NewKeyOrPanic(api.DefaultKeySize)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,7 +208,9 @@ func TestCollectorAuthFailure(t *testing.T) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			t.Errorf("failed to pipe event: %s", err)
+		}
 	}
 	time.Sleep(5 * time.Second)
 
@@ -223,8 +227,8 @@ func TestCollectorAuthSuccess(t *testing.T) {
 
 	nevents := 1000
 	testfile := "TestServerAuthSuccess.log.gz"
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
-	serverKey := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
+	serverKey := utils.NewKeyOrPanic(api.DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 	mconf.EndpointAPI.ServerKey = serverKey
 
@@ -255,7 +259,9 @@ func TestCollectorAuthSuccess(t *testing.T) {
 		if cnt == 500 {
 			time.Sleep(2 * time.Second)
 		}
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			t.Errorf("failed to pipe event: %s", err)
+		}
 	}
 	time.Sleep(5 * time.Second)
 
@@ -279,7 +285,7 @@ func TestForwarderParallel(t *testing.T) {
 	nclients, nevents := 100, 1000
 	wg := sync.WaitGroup{}
 	testfile := "TestCollectorParallel.log.gz"
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 
 	r, err := NewManager(&mconf)
@@ -308,7 +314,9 @@ func TestForwarderParallel(t *testing.T) {
 			c.Run()
 			defer c.Close()
 			for e := range emitEvents(nevents, false) {
-				c.PipeEvent(e)
+				if err := c.PipeEvent(e); err != nil {
+					t.Errorf("failed to pipe event: %s", err)
+				}
 			}
 			time.Sleep(2 * time.Second)
 		}()
@@ -333,7 +341,7 @@ func TestForwarderQueueBasic(t *testing.T) {
 	//outfile := fmt.Sprintf("%s.1", testfile)
 
 	// Initialize the receiver
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 	mconf.Logging.LogBasename = testfile
 	clean(&mconf, &fconf)
 
@@ -360,7 +368,9 @@ func TestForwarderQueueBasic(t *testing.T) {
 
 	// Sending events
 	for e := range emitEvents(nevents/2, false) {
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			t.Errorf("failed to pipe event: %s", err)
+		}
 	}
 
 	// Running the receiver after the events have been
@@ -376,7 +386,9 @@ func TestForwarderQueueBasic(t *testing.T) {
 
 	// Sending another wave of events
 	for e := range emitEvents(nevents/2, false) {
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			t.Errorf("failed to pipe event: %s", err)
+		}
 	}
 
 	// reinitialize a Receiver
@@ -441,7 +453,9 @@ func TestForwarderCleanup(t *testing.T) {
 	// every loop should trigger a cleanup
 	for i := 0; i < numberOfFilesToDelete; i++ {
 		for e := range emitEvents(int(f.EventTresh), false) {
-			f.PipeEvent(e)
+			if err := f.PipeEvent(e); err != nil {
+				t.Errorf("failed to pipe event: %s", err)
+			}
 		}
 		time.Sleep(1 * time.Second)
 	}

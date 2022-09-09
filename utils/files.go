@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"archive/zip"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -15,8 +14,10 @@ import (
 )
 
 const (
-	// DefaultFileModeFile default permissions for output files
-	DefaultFileModeFile = 0740
+	// DefaultFilePerm default permissions for output files
+	DefaultFilePerm = 0740
+
+	permUserFullAccess = 0700
 )
 
 // CountFiles counts files in a directory
@@ -74,7 +75,7 @@ func GzipFileBestSpeed(path string) (last error) {
 // HidsMkdirAll is a wrapper around os.MkdirAll with appropriate
 // permissions
 func HidsMkdirAll(dir string) error {
-	return os.MkdirAll(dir, DefaultFileModeFile)
+	return os.MkdirAll(dir, DefaultFilePerm)
 }
 
 func HidsMkTmpDir() (dir string, err error) {
@@ -87,20 +88,21 @@ func HidsMkTmpDir() (dir string, err error) {
 
 	// creating temporary directory
 	dir = filepath.Join(os.TempDir(), randDir.String())
-	err = os.MkdirAll(dir, 0700)
+	// allow full access only to user
+	err = os.MkdirAll(dir, permUserFullAccess)
 
 	return
 }
 
 // HidsCreateFile creates a file with the good permissions
 func HidsCreateFile(filename string) (*os.File, error) {
-	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultFileModeFile)
+	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, DefaultFilePerm)
 }
 
 // HidsWriteData is a wrapper around os.WriteFile to write a file
 // with the good permissions
 func HidsWriteData(dest string, data []byte) error {
-	return os.WriteFile(dest, data, DefaultFileModeFile)
+	return os.WriteFile(dest, data, DefaultFilePerm)
 }
 
 // HidsWriteReader writes the content of a reader to a destination file. If
@@ -139,19 +141,44 @@ func IsPipePath(path string) bool {
 	return strings.HasPrefix(path, `\\.\`)
 }
 
-// ReadFileString reads bytes from a file
-func ReadFileString(path string) (string, error) {
+// ReadFileAsString reads bytes from a file
+func ReadFileAsString(path string) (string, error) {
 	b, err := os.ReadFile(path)
+	return string(b), err
+}
+
+func ReadGzipFile(path string) (b []byte, err error) {
+	var fd *os.File
+	var r *gzip.Reader
+
+	if fd, err = os.Open(path); err != nil {
+		return
+	}
+	defer fd.Close()
+
+	if r, err = gzip.NewReader(fd); err != nil {
+		return
+	}
+
+	if b, err = io.ReadAll(r); err != nil {
+		return
+	}
+
+	return
+}
+
+func ReadGzipFileAsString(path string) (string, error) {
+	b, err := ReadGzipFile(path)
 	return string(b), err
 }
 
 // StdDir makes a directory ending with os separator
 func StdDir(dir string) string {
 	sep := string(os.PathSeparator)
-	return fmt.Sprintf("%s%s", strings.TrimSuffix(dir, sep), sep)
+	return fmt.Sprintf("%s%s", strings.TrimRight(dir, sep), sep)
 }
 
-// StdDirs makes a directories are ending with os separator
+// StdDirs makes sure directories are ending with os separator
 func StdDirs(directories ...string) (o []string) {
 	o = make([]string, len(directories))
 	for i, d := range directories {
@@ -160,46 +187,8 @@ func StdDirs(directories ...string) (o []string) {
 	return
 }
 
-// Unzip helper function to unzip a file to a destination folder
-// source code from : https://stackoverflow.com/questions/20357223/easy-way-to-unzip-file-with-golang
-func Unzip(zipfile, dest string) (err error) {
-	r, err := zip.OpenReader(zipfile)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	// Creating directory
-	os.MkdirAll(dest, 0700)
-
-	for _, f := range r.File {
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		defer rc.Close()
-
-		path := filepath.Join(dest, f.Name)
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, f.Mode())
-		} else {
-			f, err := os.OpenFile(
-				path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			_, err = io.Copy(f, rc)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func RelativePath(path string) string {
+// BinRelativePath builds a path relative to current binary directory
+func BinRelativePath(path string) string {
 	return filepath.Join(filepath.Dir(os.Args[0]), path)
 }
 

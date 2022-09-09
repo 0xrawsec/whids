@@ -2,10 +2,10 @@ package utils
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/0xrawsec/toast"
+	"github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -19,59 +19,51 @@ func TestRegQuery(t *testing.T) {
 }
 
 var (
-	format         = fmt.Sprintf
-	aclDirectories = []string{"C:\\Windows\\System32"}
+	format = fmt.Sprintf
 )
 
 func TestIsValidUUID(t *testing.T) {
 	tt := toast.FromT(t)
 
 	for i := 0; i < 1000; i++ {
-		uuid := UnsafeUUIDGen().String()
+		uuid := UUIDOrPanic().String()
 		tt.Assert(IsValidUUID(uuid))
 		tt.Assert(!IsValidUUID(format("%s42", uuid)))
 		tt.Assert(!IsValidUUID(format("42%s", uuid)))
 	}
 }
 
-func TestSetAuditACL(t *testing.T) {
-	if err := SetEDRAuditACL(aclDirectories...); err != nil {
-		t.Logf("Failed at setting Audit ACL: %s", err)
-		t.FailNow()
-	}
-	t.Logf("Successfully set audit ACL")
-}
-func TestRemoveAuditACL(t *testing.T) {
-	if err := RemoveEDRAuditACL(aclDirectories...); err != nil {
-		t.Logf("Failed at setting Audit ACL: %s", err)
-		t.FailNow()
-	}
-	t.Logf("Successfully set audit ACL")
+type testStruct struct {
+	F []string
 }
 
-func TestDisableFSAuditing(t *testing.T) {
-	if err := DisableAuditPolicy("File System"); err != nil {
-		t.Errorf("Failed at disabling FS Auditing: %s", err)
-	}
-}
-
-func TestEnableFSAuditing(t *testing.T) {
-	if err := EnableAuditPolicy("{0CCE921D-69AE-11D9-BED3-505054503030}"); err != nil {
-		t.Errorf("Failed at enabling FS Auditing: %s", err)
-	}
-}
-
-func TestIsDirEmpty(t *testing.T) {
+func controlHashStability(t *testing.T, test testStruct) (hash string) {
+	var err error
 	tt := toast.FromT(t)
 
-	ok, err := IsDirEmpty(`C:\windows\`)
+	hash, err = Sha256Interface(test)
 	tt.CheckErr(err)
-	tt.Assert(!ok)
 
-	tmp, err := HidsMkTmpDir()
+	tomls, err := Toml(test)
 	tt.CheckErr(err)
-	defer os.Remove(tmp)
-	ok, err = IsDirEmpty(tmp)
+	toml.Unmarshal(tomls, &test)
+	//new, err := Sha256Interface(test)
+	new, err := Sha256Interface(test)
 	tt.CheckErr(err)
-	tt.Assert(ok)
+
+	tt.Assert(hash == new)
+	return
+}
+
+func TestSha256Interface(t *testing.T) {
+	tt := toast.FromT(t)
+
+	test := testStruct{}
+	initTest := testStruct{[]string{"test", "toast"}}
+	//h, err := Sha256Interface(test)
+	hashEmpty := controlHashStability(t, test)
+	hashInit := controlHashStability(t, initTest)
+
+	tt.Assert(hashEmpty != hashInit)
+
 }

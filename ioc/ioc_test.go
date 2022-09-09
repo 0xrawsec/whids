@@ -21,7 +21,7 @@ var (
 )
 
 func uuidGen() string {
-	return utils.UnsafeUUIDGen().String()
+	return utils.UUIDOrPanic().String()
 }
 
 func createIocDB(t *testing.T, size int) (db *sod.DB) {

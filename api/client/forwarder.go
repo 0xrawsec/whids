@@ -83,7 +83,7 @@ func NewForwarder(ctx context.Context, c *config.Forwarder, l *golog.Logger) (*F
 	// creating the queue directory
 	if !fsutil.Exists(c.Logging.Dir) && !fsutil.IsDir(c.Logging.Dir) {
 		// TOCTU may happen here so we double check error code
-		if err = os.Mkdir(c.Logging.Dir, utils.DefaultFileModeFile); err != nil && !os.IsExist(err) {
+		if err = os.Mkdir(c.Logging.Dir, utils.DefaultFilePerm); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("cannot create queue directory : %s", err)
 		}
 	}
@@ -117,12 +117,24 @@ func (f *Forwarder) ArchiveLogs() {
 }
 
 // PipeEvent pipes an event to be sent through the forwarder
-func (f *Forwarder) PipeEvent(event interface{}) {
+func (f *Forwarder) PipeEvent(event interface{}) (err error) {
+	var b []byte
+
 	f.Lock()
 	defer f.Unlock()
-	f.Pipe.Write(utils.JsonOrPanic(event))
-	f.Pipe.WriteByte('\n')
+
+	if b, err = utils.Json(event); err != nil {
+		return err
+	}
+
+	b = append(b, '\n')
+	if _, err = f.Pipe.Write(b); err != nil {
+		return
+	}
+
 	f.EventsPiped++
+
+	return
 }
 
 // Save save the piped events to the disks
@@ -144,7 +156,7 @@ func (f *Forwarder) Save() (err error) {
 		lf := filepath.Join(f.fwdConfig.Logging.Dir, "alerts.log")
 		ri := f.fwdConfig.Logging.RotationInterval
 		f.Logger.Infof("Rotating logfile every %s", ri)
-		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, utils.DefaultFileModeFile, ri); err != nil {
+		if f.logfile, err = logfile.OpenTimeRotateLogFile(lf, utils.DefaultFilePerm, ri); err != nil {
 			return
 		}
 	}

@@ -199,7 +199,7 @@ func prep() (m *Manager, c *client.ManagerClient) {
 	mconf := mconf
 	cconf := makeClientConfig(&mconf)
 
-	key := utils.UnsafeKeyGen(api.DefaultKeySize)
+	key := utils.NewKeyOrPanic(api.DefaultKeySize)
 
 	if m, err = NewManager(&mconf); err != nil {
 		panic(err)
@@ -236,7 +236,9 @@ func prep() (m *Manager, c *client.ManagerClient) {
 
 	// Create fake events on client
 	for e := range emitMixedEvents(50, 50) {
-		f.PipeEvent(e)
+		if err := f.PipeEvent(e); err != nil {
+			panic(fmt.Errorf("failed to pipe event: %s", err))
+		}
 	}
 
 	// Create fake dumps
@@ -336,7 +338,7 @@ func TestOpenApiUserManagement(t *testing.T) {
 			},
 		)
 
-		guid := utils.UnsafeUUIDGen().String()
+		guid := utils.UUIDOrPanic().String()
 		openAPI.Do(usersPath,
 			openapi.Operation{
 				Method:  "POST",
@@ -766,8 +768,8 @@ func TestOpenApiIoCs(t *testing.T) {
 			RequestBody: openapi.JsonRequestBody("",
 				[]ioc.IOC{
 					{
-						Uuid:      utils.UnsafeUUIDGen().String(),
-						GroupUuid: utils.UnsafeUUIDGen().String(),
+						Uuid:      utils.UUIDOrPanic().String(),
+						GroupUuid: utils.UUIDOrPanic().String(),
 						Source:    provider,
 						Value:     "some.random.domain",
 						Type:      "domain",
