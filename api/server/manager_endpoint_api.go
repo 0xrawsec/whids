@@ -18,7 +18,6 @@ import (
 	"github.com/0xrawsec/whids/event"
 	"github.com/0xrawsec/whids/sysmon"
 	"github.com/0xrawsec/whids/tools"
-	"github.com/0xrawsec/whids/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -329,7 +328,6 @@ func (m *Manager) eptAPIUploadDump(wt http.ResponseWriter, rq *http.Request) {
 func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 	defer rq.Body.Close()
 
-	funcName := utils.GetCurFuncName()
 	cnt := 0
 	uuid := rq.Header.Get(api.EndpointUUIDHeader)
 	endpt, _ := m.Endpoint(uuid)
@@ -339,7 +337,6 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 	s := bufio.NewScanner(rq.Body)
 	for s.Scan() {
 		tok := []byte(s.Text())
-		m.Logger.Debugf("%s received Event: %s", funcName, string(tok))
 		e := event.EdrEvent{}
 
 		if err := json.Unmarshal(tok, &e); err != nil {
@@ -348,7 +345,6 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 
 			// building up EdrData
 			edrData := event.EdrData{}
-			edrData.Event.Hash = utils.Sha1EventBytes(tok)
 			edrData.Event.ReceiptTime = time.Now().UTC()
 
 			edrData.Endpoint.UUID = uuid
@@ -373,6 +369,8 @@ func (m *Manager) eptAPICollect(wt http.ResponseWriter, rq *http.Request) {
 
 			// setting EdrData
 			e.Event.EdrData = &edrData
+			// compute event Hash and save it into the event
+			e.Commit()
 
 			// If it is an alert
 			if e.IsDetection() {

@@ -486,7 +486,7 @@ func (a *Agent) fetchIoCsFromManager() (err error) {
 	}
 
 	// we compare the integrity of the container received
-	compSha256 := utils.Sha256StringArray(iocs)
+	compSha256 := utils.Sha256StringSlice(iocs)
 
 	if sha256, err := cl.GetIoCsSha256(); err != nil {
 		return fmt.Errorf("failed to get IoCs sha256: %s", err)

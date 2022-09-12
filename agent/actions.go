@@ -33,8 +33,9 @@ const (
 	ActionReport    = "report"
 	ActionBrief     = "brief"
 
-	reportFilename = "report.json"
-	eventFilename  = "event.json"
+	reportFilename   = "report.json"
+	eventFilename    = "event.json"
+	registryFilename = "registry.json"
 )
 
 var (
@@ -267,9 +268,25 @@ func (m *ActionHandler) memdump(e *event.EdrEvent) (err error) {
 	return
 }
 
+type RegDump struct {
+	Path  string `json:"path"`
+	Data  any    `json:"data"`
+	Error string `json:"error"`
+}
+
+func regDump(path string) (r *RegDump, err error) {
+	r = &RegDump{}
+	r.Path = path
+	if r.Data, err = utils.RegValue(path); err != nil {
+		r.Error = err.Error()
+		return
+	}
+	return
+}
+
 func (m *ActionHandler) regdump(e *event.EdrEvent) {
 	var err error
-	var content string
+	var r *RegDump
 
 	if e.Channel() == sysmonChannel {
 		switch e.EventID() {
@@ -278,17 +295,17 @@ func (m *ActionHandler) regdump(e *event.EdrEvent) {
 				if details, ok := e.GetString(pathSysmonDetails); ok {
 					// We dump only if Details is "Binary Data" since the other kinds can be seen in the raw event
 					if details == "Binary Data" {
-						dumpPath := m.prepare(e, "reg.txt")
-						key, value := filepath.Split(targetObject)
-						if content, err = utils.RegQuery(key, value); err != nil {
-							m.edr.logger.Errorf("Failed to run reg query: %s", err)
-							content = fmt.Sprintf("HIDS error dumping %s: %s", targetObject, err)
+						dumpPath := m.prepare(e, registryFilename)
+						// retrieving registry
+						if r, err = regDump(targetObject); err != nil {
+							m.edr.logger.Errorf("failed to retrieve registry value: registry=%s error=%s", targetObject, err)
 						}
 
-						if err = m.writeReader(dumpPath, bytes.NewBufferString(content)); err != nil {
-							m.edr.logger.Errorf("Failed to write registry content to file: %s", err)
+						// we continue dumping, if any error is encountered, it will be stored in RegDump struct
+						if err = m.dumpAsJson(dumpPath, r); err != nil {
+							m.edr.logger.Errorf("failed to dump registry: registry=%s error=%s", targetObject, err)
 						}
-						// we compress files
+
 						m.queueCompression(dumpPath)
 					}
 				}

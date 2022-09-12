@@ -97,7 +97,7 @@ func TestIocs(t *testing.T) {
 	tt.CheckErr(iocs.FromDB(db))
 
 	t.Logf("len(iocs)=%d", iocs.iocs.Len())
-	hashSlice := utils.Sha256StringArray(iocs.StringSlice())
+	hashSlice := utils.Sha256StringSlice(iocs.StringSlice())
 	tt.Assert(iocs.Hash() == hashSlice, format("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice))
 
 	del := make([]*IOC, 0)
@@ -109,6 +109,6 @@ func TestIocs(t *testing.T) {
 	iocs.Del(del...)
 
 	t.Logf("len(iocs)=%d", iocs.iocs.Len())
-	hashSlice = utils.Sha256StringArray(iocs.StringSlice())
+	hashSlice = utils.Sha256StringSlice(iocs.StringSlice())
 	tt.Assert(iocs.Hash() == hashSlice, format("hash is not stable: iocs.Hash=%s hashSlice=%s", iocs.Hash(), hashSlice))
 }

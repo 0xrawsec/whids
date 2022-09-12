@@ -1,6 +1,7 @@
 package event
 
 import (
+	"bytes"
 	"crypto"
 	"fmt"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-etw/etw"
+	"github.com/0xrawsec/golang-utils/crypto/data"
 	"github.com/0xrawsec/whids/utils"
 )
 
@@ -49,20 +51,28 @@ func (e *EdrEvent) InitEdrData() {
 	e.Event.EdrData = &EdrData{}
 }
 
+func (e *EdrEvent) Commit() {
+	if e.Event.EdrData != nil {
+		e.Event.EdrData.Event.Hash = e.Hash()
+	}
+}
+
 func (e *EdrEvent) Hash() string {
 	var b []byte
 	var err error
 
-	tmp := *e
-
+	edrData := e.Event.EdrData
 	// null out EdrData as it does not come into hash calculation
-	tmp.Event.EdrData = nil
+	e.Event.EdrData = nil
 
-	if b, err = utils.Json(tmp); err != nil {
+	b, err = utils.Json(e)
+	// we restore EdrData
+	e.Event.EdrData = edrData
+	if err != nil {
 		return emptySha1
 	}
 
-	return utils.Sha1EventBytes(b)
+	return data.Sha1(bytes.Trim(b, " \n\r\t"))
 }
 
 func (e *EdrEvent) GetStringOr(p *engine.XPath, or string) string {

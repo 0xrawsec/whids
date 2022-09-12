@@ -36,6 +36,14 @@ func ArgvFromCommandLine(cl string) (argv []string, err error) {
 	return
 }
 
+func GetFileAttributes(filename string) (attrs uint32, err error) {
+	var filenameW *uint16
+	if filenameW, err = syscall.UTF16PtrFromString(filename); err != nil {
+		return
+	}
+	return syscall.GetFileAttributes(filenameW)
+}
+
 // HideFile hides a file in Windows explorer
 // source: https://stackoverflow.com/questions/54139606/how-to-create-a-hidden-file-in-windows-mac-linux
 func HideFile(filename string) error {

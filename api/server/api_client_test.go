@@ -100,7 +100,7 @@ func TestClientContainer(t *testing.T) {
 	tt.Assert(len(strIocs) == niocs)
 	// we control that the integrity of what we received
 	rsha256, _ := c.GetIoCsSha256()
-	tt.Assert(rsha256 == utils.Sha256StringArray(strIocs))
+	tt.Assert(rsha256 == utils.Sha256StringSlice(strIocs))
 
 	// deleting iocs from admin API
 	req := prepare("DELETE",
@@ -115,7 +115,7 @@ func TestClientContainer(t *testing.T) {
 	tt.Assert(len(strIocs) == niocs-del)
 	rsha256, _ = c.GetIoCsSha256()
 	// control integrity of what we downloaded
-	tt.Assert(rsha256 == utils.Sha256StringArray(strIocs))
+	tt.Assert(rsha256 == utils.Sha256StringSlice(strIocs))
 }
 
 func TestClientExecuteCommand(t *testing.T) {

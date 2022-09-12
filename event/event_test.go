@@ -71,6 +71,7 @@ func TestEventWithAction(t *testing.T) {
 		t.Error(err)
 	}
 	h := event.Hash()
+	tt.Assert(h != emptySha1)
 	for i := 0; i < 10000; i++ {
 		// testing hash stability
 		tt.Assert(h == event.Hash())
@@ -82,6 +83,7 @@ func TestEventHashStability(t *testing.T) {
 	tt := toast.FromT(t)
 	for event := range emitEvents(10000, true) {
 		h := event.Hash()
+		tt.Assert(h != emptySha1)
 		for i := 0; i < 100; i++ {
 			tt.Assert(h == event.Hash())
 		}

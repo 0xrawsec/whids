@@ -8,10 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"regexp"
-	"runtime"
-	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -47,19 +44,13 @@ func gobBytes(i any) (b []byte, err error) {
 	return
 }
 
-// Sha256StringArray utility
-func Sha256StringArray(array []string) string {
+// Sha256StringSlice utility
+func Sha256StringSlice(array []string) string {
 	sha256 := sha256.New()
 	for _, e := range array {
 		sha256.Write([]byte(e))
 	}
 	return hex.EncodeToString(sha256.Sum(nil))
-}
-
-// HashEventBytes return a hash from a byte slice assuming
-// the event has been JSON encoded with the json.Marshal
-func Sha1EventBytes(b []byte) string {
-	return data.Sha1(bytes.Trim(b, " \n\r\t"))
 }
 
 func Sha256Interface(i interface{}) (h string, err error) {
@@ -70,14 +61,6 @@ func Sha256Interface(i interface{}) (h string, err error) {
 	}
 
 	return data.Sha256(b), nil
-}
-
-func GetCurFuncName() string {
-	if pc, _, _, ok := runtime.Caller(1); ok {
-		split := strings.Split(runtime.FuncForPC(pc).Name(), "/")
-		return split[len(split)-1]
-	}
-	return "unk.UnknownFunc"
 }
 
 func DedupStringSlice(in []string) (out []string) {
@@ -94,17 +77,11 @@ func DedupStringSlice(in []string) (out []string) {
 // Round float f to precision
 func Round(f float64, precision int) float64 {
 	pow := math.Pow10(precision)
-	return float64(int64(f*pow)) / pow
-}
-
-// RegQuery issues a reg query command to dump registry
-func RegQuery(key, value string) (string, error) {
-	c := exec.Command("reg", "query", key, "/v", value)
-	out, err := c.Output()
-	if err != nil {
-		return "", err
+	i := int64(f * pow)
+	if i%10 > 5 {
+		i++
 	}
-	return string(out), nil
+	return float64(i) / pow
 }
 
 // Utf16ToUtf8 converts a utf16 encoded byte slice to utf8 byte slice
