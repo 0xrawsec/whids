@@ -486,34 +486,34 @@ func (pt *ActivityTracker) IsBlacklisted(cmdLine string) bool {
 }
 
 func (pt *ActivityTracker) SourceTrackFromEvent(e *event.EdrEvent) (t *ProcessTrack) {
+	pt.RLock()
+	defer pt.RUnlock()
 	var guid string
 
-	t = emptyProcessTrack()
-
 	if guid = sourceGUIDFromEvent(e); guid == nullGUID {
-		return
+		return emptyProcessTrack()
 	}
 
-	return pt.GetByGuid(guid)
+	return pt.getByGuid(guid)
 }
 
 func (pt *ActivityTracker) TargetTrackFromEvent(e *event.EdrEvent) (t *ProcessTrack) {
+	pt.RLock()
+	defer pt.RUnlock()
 	var guid string
 
-	t = emptyProcessTrack()
-
 	if guid = targetGUIDFromEvent(e); guid == nullGUID {
-		return
+		return emptyProcessTrack()
 	}
 
-	return pt.GetByGuid(guid)
+	return pt.getByGuid(guid)
 }
 
 func (pt *ActivityTracker) GetParentByGuid(guid string) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
 	if c, ok := pt.guids[guid]; ok {
-		return pt.GetByGuid(c.ParentProcessGUID)
+		return pt.getByGuid(c.ParentProcessGUID)
 	}
 	return emptyProcessTrack()
 }
@@ -539,10 +539,12 @@ func (pt *ActivityTracker) GetByGuid(guid string) *ProcessTrack {
 func (pt *ActivityTracker) GetByPID(pid int64) *ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
+
 	// if we find processes in running processes
 	if t := pt.rpids[pid]; t != nil {
 		return t
 	}
+
 	// if we find process in terminated processes
 	if t := pt.tpids[pid]; t != nil {
 		return t
@@ -606,17 +608,23 @@ func (pt *ActivityTracker) GetModuleOrUpdate(i *ModuleInfo) *ModuleInfo {
 }
 
 func (pt *ActivityTracker) IsTerminated(guid string) bool {
-	if t := pt.GetByGuid(guid); !t.IsZero() {
+	pt.Lock()
+	defer pt.Unlock()
+	if t := pt.getByGuid(guid); !t.IsZero() {
 		return t.Terminated
 	}
 	return true
 }
 
-func (pt *ActivityTracker) Terminate(guid string) error {
+func (pt *ActivityTracker) Terminate(guid string) {
 	pt.Lock()
 	defer pt.Unlock()
 
 	if t := pt.getByGuid(guid); !t.IsZero() {
+		// don't terminate process twice
+		if t.Terminated {
+			return
+		}
 		t.Terminated = true
 		t.TimeTerminated = time.Now()
 		// PID entry must be cleared as soon as possible
@@ -626,5 +634,5 @@ func (pt *ActivityTracker) Terminate(guid string) error {
 		pt.tpids[t.PID] = t
 		pt.free.Push(t)
 	}
-	return nil
+	return
 }

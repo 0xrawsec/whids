@@ -61,11 +61,7 @@ var (
         <SourceImage condition="is">C:\Windows\system32\wbem\wmiprvse.exe</SourceImage>
         <SourceImage condition="is">C:\Windows\System32\VBoxService.exe</SourceImage>
         <SourceImage condition="is">C:\Windows\system32\taskmgr.exe</SourceImage>
-        <GrantedAccess condition="is">0x1000</GrantedAccess>
-        <GrantedAccess condition="is">0x2000</GrantedAccess>
-        <GrantedAccess condition="is">0x3000</GrantedAccess>
         <GrantedAccess condition="is">0x100000</GrantedAccess>
-        <GrantedAccess condition="is">0x101000</GrantedAccess>
       </ProcessAccess>
     </RuleGroup>
     <RuleGroup groupRelation="or">
@@ -115,7 +111,8 @@ var (
 	osqueryBin         []byte
 	osqueryTestBinPath = filepath.Join("data", fmt.Sprintf("%s.%s%s", los.OS, tools.ToolOSQueryi, los.ExecExt))
 
-	wmicPidRe = regexp.MustCompile(`ProcessId\s=\s\d+`)
+	wmicPidRe     = regexp.MustCompile(`ProcessId\s=\s\d+`)
+	powershellCmd = "wget https://www.google.com"
 )
 
 func wmicCreateProcess(cmdLine string) int {
@@ -330,15 +327,15 @@ func installSysmon() {
 	sysmonInstalled = true
 }
 
-func testHook(h *Agent, e *event.EdrEvent) {
-	fmt.Println(utils.PrettyJsonOrPanic(e))
-}
-
 func TestAgent(t *testing.T) {
 	// draining old events from autologger
 	drainOldAutologgerEvents(t)
 
 	tt := toast.FromT(t)
+	// we use tt in separate threads and FailNow breaks
+	// some tests in this case (seems to break thread)
+	tt.FailNow = false
+
 	defer cleanup()
 
 	manager, clConf := prepareManager()
@@ -373,6 +370,7 @@ func TestAgent(t *testing.T) {
 	// creating new agent
 	a, err := NewAgent(c)
 	tt.CheckErr(err)
+	defer a.Stop()
 
 	// loading testing rule
 	r := testingRule()
@@ -386,18 +384,58 @@ func TestAgent(t *testing.T) {
 		}
 	}
 
+	// testing process tracker
+	// this hook is inserted after all others so the process tracker structure
+	// should be in a good state to test it
+	a.preHooks.Hook(func(a *Agent, e *event.EdrEvent) {
+		if e.Channel() == sysmonChannel {
+			//t.Log(utils.JsonStringOrPanic(e))
+			srcGuid := sourceGUIDFromEvent(e)
+			//t.Logf("contains guid:%s : %t", srcGuid, a.tracker.ContainsGuid(srcGuid))
+			if !a.tracker.ContainsGuid(srcGuid) {
+				return
+			}
+
+			tr := a.tracker.GetByGuid(srcGuid)
+			if a.tracker.ContainsGuid(tr.ParentProcessGUID) {
+				tt.Assert(!a.tracker.GetParentByGuid(srcGuid).IsZero())
+			}
+
+			if strings.Contains(tr.CommandLine, powershellCmd) {
+				// don't apply to all events
+				if rand.Int()%2 == 0 {
+					// terminate bogus commands
+					tt.CheckErr(tr.TerminateProcess())
+				}
+			}
+
+			switch e.EventID() {
+			case SysmonProcessCreate:
+				tt.Assert(!a.tracker.IsTerminated(srcGuid))
+			case SysmonProcessTerminate:
+				// at this point process should be always flagged as terminated
+				tt.Assert(a.tracker.IsTerminated(srcGuid))
+			default:
+				// some events come after process termination so it is not a relevant test
+				//tt.Assert(!a.tracker.IsTerminated(srcGuid))
+			}
+		}
+	}, fltAnyEvent)
+
 	// add a final hook to catch all events after enrichment
-	a.preHooks.Hook(func(h *Agent, e *event.EdrEvent) {
+	a.preHooks.Hook(func(a *Agent, e *event.EdrEvent) {
 		if e.Channel() == sysmonChannel {
 			gotSysmonEvent = true
 			switch e.EventID() {
 			case SysmonDNSQuery, SysmonNetworkConnect:
-				t.Log(utils.PrettyJsonOrPanic(e.Event))
+				//t.Log(utils.PrettyJsonOrPanic(e.Event))
 			}
 		}
+
 		if isSysmonProcessTerminate(e) {
 			gotProcessTermination = true
 		}
+		// testing process track structure
 	}, fltAnyEvent)
 
 	a.postHooks.Hook(func(h *Agent, e *event.EdrEvent) {
@@ -411,11 +449,10 @@ func TestAgent(t *testing.T) {
 		func() { tt.CheckErr(a.config.EtwConfig.ConfigureAutologger()) },
 	)
 
-	tt.CheckErr(err)
 	// we start running the agent
 	tt.CheckErr(a.Run())
 	// generate fake network trafic not originating from edr
-	pid := wmicCreateProcess("powershell -Command while(1){powershell -Command wget https://www.google.com;sleep 1}")
+	pid := wmicCreateProcess(format("powershell -Command while(1){powershell -Command %s;sleep 1}", powershellCmd))
 	// terminate wmic process
 	defer terminate(pid)
 

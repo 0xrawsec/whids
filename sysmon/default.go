@@ -44,12 +44,8 @@ var (
 	  <ImageLoad onmatch="exclude"></ImageLoad>
 
     <ProcessAccess onmatch="exclude">
-      <GrantedAccess condition="is">0x1000</GrantedAccess>
-      <GrantedAccess condition="is">0x1400</GrantedAccess>
       <GrantedAccess condition="is">0x2000</GrantedAccess>
-      <GrantedAccess condition="is">0x3000</GrantedAccess>
       <GrantedAccess condition="is">0x100000</GrantedAccess>
-      <GrantedAccess condition="is">0x101000</GrantedAccess>
     </ProcessAccess>
 
 	  <RegistryEvent onmatch="exclude">
