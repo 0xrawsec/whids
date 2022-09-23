@@ -38,7 +38,7 @@ const (
 
 // Microsoft-Windows-Kernel-File/Analytic
 const (
-	KernelFileNameCreate int64 = iota + 10
+	KernelFileNameCreate = iota + 10
 	KernelFileNameDelete
 	KernelFileCreate
 	KernelFileCleanup

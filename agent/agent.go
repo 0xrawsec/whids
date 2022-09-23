@@ -59,6 +59,8 @@ var (
 	archivedRe = regexp.MustCompile(`(CLIP-)??[0-9A-F]{32,}(\..*)?`)
 
 	toolsDir = utils.BinRelativePath("Tools")
+
+	u32PID = uint32(os.Getpid())
 )
 
 // Agent structure
@@ -240,6 +242,13 @@ func (a *Agent) initEventProvider() {
 
 	// open traces
 	a.eventProvider.FromTraceNames(a.config.EtwConfig.UnifiedTraces()...)
+
+	// if we have file trace enabled
+	if a.config.EtwConfig.FileTraceEnabled() {
+		a.eventProvider.EventRecordCallback = a.eventRecordCallback
+		a.eventProvider.PreparedCallback = a.preparedCallback
+	}
+
 }
 
 func (a *Agent) initHooks(advanced bool) {
@@ -818,6 +827,9 @@ func (a *Agent) Report(light bool) (r Report) {
 }
 
 func (a *Agent) eventScanRoutine() {
+	var kernelTracked bool
+	var rtlost uint
+
 	// Trying to raise thread priority
 	if err := kernel32.SetCurrentThreadPriority(win32.THREAD_PRIORITY_ABOVE_NORMAL); err != nil {
 		a.logger.Errorf("Failed to raise IDS thread priority: %s", err)
@@ -826,6 +838,16 @@ func (a *Agent) eventScanRoutine() {
 	for e := range a.eventProvider.Events {
 		event := event.NewEdrEvent(e)
 
+		if uint64(a.stats.counter.event)%1000 == 0 && a.eventProvider.LostEvents > 0 {
+			a.logger.Warnf("Received %d RTLostEvent events, if the agent went off for a while this is normal. If you see this message at every boot or more often it is a symptom of a bad ETW configuration (more events are received than the agent can process).", a.eventProvider.LostEvents)
+			if rtlost > 5 {
+				a.logger.Criticalf("Several events lost, something is wrong with ETW configuration")
+			}
+			// we reset the counter of lost events not to trigger this all the time
+			a.eventProvider.LostEvents = 0
+			rtlost++
+		}
+
 		if yes, eps := a.stats.HasPerfIssue(); yes {
 			a.logger.Warnf("Average event rate above limit of %.2f e/s in the last %s: %.2f e/s", a.stats.Threshold(), a.stats.Duration(), eps)
 
@@ -833,6 +855,13 @@ func (a *Agent) eventScanRoutine() {
 				a.logger.Critical("Event throughput too high for too long, consider filtering out events")
 			} else if crit := a.stats.CriticalEPS(); eps > crit {
 				a.logger.Criticalf("Event throughput above %.0fx the limit, if repeated consider filtering out events", eps/a.stats.Threshold())
+			}
+		}
+
+		// tracking kernel
+		if !kernelTracked {
+			if kernelTracked = a.tracker.TrackKernel(event); kernelTracked {
+				a.logger.Infof("Found kernel GUID=%s PID=%d", a.tracker.kernel.ProcessGUID, a.tracker.kernel.PID)
 			}
 		}
 

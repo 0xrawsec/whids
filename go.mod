@@ -3,7 +3,7 @@ module github.com/0xrawsec/whids
 require (
 	github.com/0xrawsec/crony v1.0.4
 	github.com/0xrawsec/gene/v2 v2.3.0
-	github.com/0xrawsec/golang-etw v1.5.3
+	github.com/0xrawsec/golang-etw v1.6.2
 	github.com/0xrawsec/golang-utils v1.3.2
 	github.com/0xrawsec/golang-win32 v1.0.14
 	github.com/0xrawsec/golog v1.0.3

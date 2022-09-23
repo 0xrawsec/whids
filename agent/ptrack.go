@@ -9,7 +9,6 @@ import (
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-utils/datastructs"
 	"github.com/0xrawsec/whids/event"
-	"github.com/0xrawsec/whids/utils"
 )
 
 type ConStat struct {
@@ -126,13 +125,14 @@ func sysmonHashesToMap(hashes string) map[string]string {
 }
 
 const (
+	naField             = "N/A"
 	ZeroProtectionLevel = uint32(math.MaxUint32) // 0xffffffff is PROTECTION_SAME but it is a flag used by WinAPI and is not a valid protection level
 )
 
 type ProcessTrack struct {
 	/* Private */
-	hashes string
-	empty  bool
+	imageHashes string
+	empty       bool
 
 	/* Public */
 	Image                  string            `json:"image"`
@@ -204,7 +204,7 @@ func (t *ProcessTrack) IsZero() bool {
 }
 
 func (t *ProcessTrack) SetHashes(hashes string) {
-	t.hashes = hashes
+	t.imageHashes = hashes
 	t.HashesMap = sysmonHashesToMap(hashes)
 }
 
@@ -295,19 +295,10 @@ func DriverInfoFromEvent(e *event.EdrEvent) (i *DriverInfo) {
 type KernelFile struct {
 	FileName   string
 	FileObject uint64
-	EventCount map[int64]uint64
-}
-
-func KernelFileFromEvent(e *event.EdrEvent) (f *KernelFile) {
-	f = &KernelFile{
-		EventCount: make(map[int64]uint64),
+	Flags      struct {
+		Read  bool
+		Write bool
 	}
-
-	f.FileName = e.GetStringOr(pathKernelFileFileName, "?")
-	f.FileName = utils.ResolveCDrive(f.FileName)
-	f.FileObject = e.GetUintOr(pathKernelFileFileObject, 0)
-
-	return
 }
 
 func sourceGUIDFromEvent(e *event.EdrEvent) (src string) {
@@ -357,6 +348,7 @@ func targetGUIDFromEvent(e *event.EdrEvent) (target string) {
 
 type ActivityTracker struct {
 	sync.RWMutex
+	kernel *ProcessTrack
 	// to store process track by parent process GUID
 	//pguids      map[string]int
 	guids map[string]*ProcessTrack
@@ -438,6 +430,46 @@ func (pt *ActivityTracker) freeRtn() {
 	}()
 }
 
+func (pt *ActivityTracker) TrackKernel(e *event.EdrEvent) (ok bool) {
+	var image, guid string
+	var pid int64
+
+	if e.Event.System.Provider.Guid != SysmonProviderGuid || pt.kernel != nil {
+		return
+	}
+
+	if image, ok = e.GetString(pathSysmonImage); !ok || !strings.EqualFold(image, "System") {
+		// need to be explicit as it may return true if image is not System
+		return false
+	}
+
+	if guid, ok = e.GetString(pathSysmonProcessGUID); !ok {
+		return
+	}
+
+	if pid, ok = e.GetInt(pathSysmonProcessId); !ok {
+		return
+	}
+
+	kernel := NewProcessTrack(image, naField, guid, pid)
+	kernel.imageHashes = naField
+	kernel.CurrentDirectory = naField
+	kernel.CommandLine = naField
+	kernel.Signature = naField
+	kernel.SignatureStatus = naField
+	kernel.IntegrityLevel = "System"
+	kernel.Services = naField
+	kernel.User = `NT AUTHORITY\SYSTEM`
+
+	// modifying kernel track member
+	pt.Lock()
+	defer pt.Unlock()
+	pt.add(kernel)
+	pt.kernel = kernel
+
+	return
+}
+
 // returns true if DumpCount member of processTrack is below max argument
 // and increments if necessary. This function is used to check whether we
 // should still dump information given a guid
@@ -455,10 +487,7 @@ func (pt *ActivityTracker) CheckDumpCountOrInc(guid string, max int, dfault bool
 	return dfault
 }
 
-func (pt *ActivityTracker) Add(t *ProcessTrack) {
-	pt.Lock()
-	defer pt.Unlock()
-	//pt.pguids[t.ParentProcessGUID]++
+func (pt *ActivityTracker) add(t *ProcessTrack) {
 	if t := pt.guids[t.ParentProcessGUID]; t != nil {
 		t.ChildCount++
 	}
@@ -466,12 +495,18 @@ func (pt *ActivityTracker) Add(t *ProcessTrack) {
 	pt.rpids[t.PID] = t
 }
 
+func (pt *ActivityTracker) Add(t *ProcessTrack) {
+	pt.Lock()
+	defer pt.Unlock()
+	pt.add(t)
+}
+
 func (pt *ActivityTracker) PS() map[string]ProcessTrack {
 	pt.RLock()
 	defer pt.RUnlock()
 	ps := make(map[string]ProcessTrack)
 	for guid, t := range pt.guids {
-		t.HashesMap = sysmonHashesToMap(t.hashes)
+		t.HashesMap = sysmonHashesToMap(t.imageHashes)
 		ps[guid] = *t
 	}
 	return ps

@@ -463,7 +463,7 @@ func hookFileSystemAudit(h *Agent, e *event.EdrEvent) {
 
 	e.SetIf(pathSysmonImage, pt.Image, pt.Image != "")
 	e.SetIf(pathSysmonCommandLine, pt.CommandLine, pt.CommandLine != "")
-	e.SetIf(pathImageHashes, pt.hashes, pt.hashes != "")
+	e.SetIf(pathImageHashes, pt.imageHashes, pt.imageHashes != "")
 	e.SetIf(pathSysmonProcessGUID, pt.ProcessGUID, pt.ProcessGUID != "")
 
 	if obj, ok := e.GetString(pathFSAuditObjectName); ok {
@@ -648,8 +648,8 @@ func hookEnrichAnySysmon(h *Agent, e *event.EdrEvent) {
 				e.SetIfMissing(pathSourceIntegrityLevel, strack.IntegrityLevel)
 			}
 
-			if strack.hashes != "" {
-				e.SetIfMissing(pathSourceHashes, strack.hashes)
+			if strack.imageHashes != "" {
+				e.SetIfMissing(pathSourceHashes, strack.imageHashes)
 			}
 
 			// Source Protection level
@@ -670,8 +670,8 @@ func hookEnrichAnySysmon(h *Agent, e *event.EdrEvent) {
 			if ttrack.ParentProcessGUID != "" {
 				e.SetIfMissing(pathTargetParentProcessGuid, ttrack.ParentProcessGUID)
 			}
-			if ttrack.hashes != "" {
-				e.SetIfMissing(pathTargetHashes, ttrack.hashes)
+			if ttrack.imageHashes != "" {
+				e.SetIfMissing(pathTargetHashes, ttrack.imageHashes)
 			}
 
 			e.SetIfMissing(pathTargetProtectionLevel, toHex(ttrack.ProtectionLevel))
@@ -718,8 +718,8 @@ func hookEnrichAnySysmon(h *Agent, e *event.EdrEvent) {
 			}
 
 			// event never has ImageHashes field since it is not Sysmon standard
-			if track.hashes != "" {
-				e.Set(pathImageHashes, track.hashes)
+			if track.imageHashes != "" {
+				e.Set(pathImageHashes, track.imageHashes)
 			}
 
 			// Signature information
@@ -777,7 +777,33 @@ var (
 )
 
 func hookKernelFiles(h *Agent, e *event.EdrEvent) {
-	fileName := unkFieldValue
+	var ok bool
+	var fileName string
+
+	// Enrich all events with Sysmon Info
+	pt := h.tracker.GetByPID(int64(e.Event.System.Execution.ProcessID))
+
+	// update list of last accessed files
+	if fileName, ok = e.GetString(pathSysmonTargetFilename); ok && !pt.IsZero() {
+		pt.Stats.Files.LastAccessed.Add(fileName)
+	}
+
+	// We enrich event with other data
+	e.SetIfOr(pathSysmonProcessGUID, pt.ProcessGUID, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathSysmonImage, pt.Image, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathSysmonCommandLine, pt.CommandLine, !pt.IsZero(), unkFieldValue)
+	// put hashes in ImageHashes field to avoid confusion in analyst's mind
+	// not to think it is file content hashes
+	e.SetIfOr(pathImageHashes, pt.imageHashes, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathSysmonProcessId, toString(pt.PID), !pt.IsZero(), toString(-1))
+	e.SetIfOr(pathSysmonIntegrityLevel, pt.IntegrityLevel, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathSysmonUser, pt.User, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathServices, pt.Services, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathImageSignature, pt.Signature, !pt.IsZero(), unkFieldValue)
+	e.SetIfOr(pathImageSignatureStatus, pt.SignatureStatus, !pt.IsZero(), unkFieldValue)
+	e.Set(pathSysmonEventType, KernelFileOperations[e.EventID()])
+
+	/*fileName := unkFieldValue
 
 	// Enrich all events with Sysmon Info
 	pt := h.tracker.GetByPID(int64(e.Event.System.Execution.ProcessID))
@@ -839,5 +865,5 @@ func hookKernelFiles(h *Agent, e *event.EdrEvent) {
 		e.SetIfOr(pathImageSignature, pt.Signature, !pt.IsZero(), unkFieldValue)
 		e.SetIfOr(pathImageSignatureStatus, pt.SignatureStatus, !pt.IsZero(), unkFieldValue)
 		e.Set(pathSysmonEventType, KernelFileOperations[e.EventID()])
-	}
+	}*/
 }

@@ -371,6 +371,8 @@ func (m *Manager) admAPIEndpoints(wt http.ResponseWriter, rq *http.Request) {
 		// save endpoint to database
 		if err := m.db.InsertOrUpdate(endpt); err != nil {
 			m.logAPIErrorf("failed to save new endpoint: %s", err)
+			wt.Write(admErr(err))
+			return
 		}
 
 		wt.Write(admJSONResp(endpt))
@@ -420,12 +422,16 @@ func (m *Manager) admAPIEndpoint(wt http.ResponseWriter, rq *http.Request) {
 				// save endpoint to database
 				if err = m.db.InsertOrUpdate(endpt); err != nil {
 					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
+					wt.Write(admErr(err))
+					return
 				}
 
 			case "DELETE":
 				// deleting endpoints from live config
 				if err = m.db.Delete(endpt); err != nil {
 					m.logAPIErrorf("failed to delete endpoint UUID=%s from database", euuid)
+					wt.Write(admErr(err))
+					return
 				}
 			}
 
@@ -487,6 +493,8 @@ func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request)
 
 				if err = m.db.InsertOrUpdate(endpt); err != nil {
 					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
+					wt.Write(admErr(err))
+					return
 				}
 
 			case "DELETE":
@@ -496,6 +504,8 @@ func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request)
 
 				if err = m.db.InsertOrUpdate(endpt); err != nil {
 					m.logAPIErrorf("failed to save updated endpoint UUID=%s", euuid)
+					wt.Write(admErr(err))
+					return
 				}
 			}
 
@@ -525,56 +535,59 @@ func (m *Manager) admAPIEndpointConfig(wt http.ResponseWriter, rq *http.Request)
 func (m *Manager) admAPIEndpointCommand(wt http.ResponseWriter, rq *http.Request) {
 	var euuid string
 	var err error
+	var endpt *api.Endpoint
+	var ok bool
+
+	if euuid, err = muxGetVar(rq, "euuid"); err != nil {
+		wt.Write(admErr(err))
+		return
+	}
+
+	if endpt, ok = m.Endpoint(euuid); !ok {
+		wt.Write(admErrorf("unknown endpoint: %s", euuid))
+		return
+	}
 
 	switch rq.Method {
 	case "GET":
 		// query parameters
 		wait, _ := strconv.ParseBool(rq.URL.Query().Get(api.QpWait))
 
-		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-			wt.Write(admErr(err))
-		} else {
-			if endpt, ok := m.Endpoint(euuid); ok {
-				if endpt.Command != nil {
-					for wait && !endpt.Command.Completed {
-						time.Sleep(time.Millisecond * 50)
-						endpt, _ = m.Endpoint(euuid)
-					}
-				}
-				wt.Write(admJSONResp(endpt.Command))
-			} else {
-				wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
+		if endpt.Command != nil {
+			for wait && !endpt.Command.Completed {
+				time.Sleep(time.Millisecond * 50)
+				endpt, _ = m.Endpoint(euuid)
 			}
 		}
-	case "POST":
-		if euuid, err = muxGetVar(rq, "euuid"); err != nil {
-			wt.Write(admErr(err))
-		} else {
-			if endpt, ok := m.Endpoint(euuid); ok {
-				// add a default timeout if not specified
-				c := CommandAPI{
-					Timeout: CommandTimeout,
-				}
 
-				if err = readPostAsJSON(rq, &c); err != nil {
-					wt.Write(admErr(err))
-				} else {
-					tmpCmd, err := c.ToCommand()
-					if err != nil {
-						wt.Write(admErr(format("Failed to create command to execute: %s", err)))
-					} else {
-						endpt.Command = tmpCmd
-						if err := m.db.InsertOrUpdate(endpt); err != nil {
-							wt.Write(admErr(err))
-						} else {
-							wt.Write(admJSONResp(endpt))
-						}
-					}
-				}
-			} else {
-				wt.Write(admErr(format("Unknown endpoint: %s", euuid)))
-			}
+		wt.Write(admJSONResp(endpt.Command))
+
+	case "POST":
+		// add a default timeout if not specified
+		c := CommandAPI{
+			Timeout: CommandTimeout,
 		}
+
+		// we read POST data
+		if err = readPostAsJSON(rq, &c); err != nil {
+			wt.Write(admErr(err))
+			return
+		}
+
+		tmpCmd, err := c.ToCommand()
+		if err != nil {
+			wt.Write(admErrorf("failed to create command to execute: %s", err))
+			return
+		}
+
+		endpt.Command = tmpCmd
+		// save modification
+		if err := m.db.InsertOrUpdate(endpt); err != nil {
+			wt.Write(admErr(err))
+			return
+		}
+
+		wt.Write(admJSONResp(endpt))
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/0xrawsec/gene/v2/engine"
 	"github.com/0xrawsec/golang-etw/etw"
+	"github.com/0xrawsec/golog"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/agent/config"
 	"github.com/0xrawsec/whids/api"
@@ -34,7 +35,7 @@ import (
 var (
 	sysmonInstalled bool
 
-	sysmonConfig = `<Sysmon schemaversion="4.70">
+	sysmonTestConfig = `<Sysmon schemaversion="%s">
   <HashAlgorithms>*</HashAlgorithms>
   <EventFiltering>
     <ProcessCreate onmatch="exclude"></ProcessCreate>
@@ -61,6 +62,7 @@ var (
         <SourceImage condition="is">C:\Windows\system32\wbem\wmiprvse.exe</SourceImage>
         <SourceImage condition="is">C:\Windows\System32\VBoxService.exe</SourceImage>
         <SourceImage condition="is">C:\Windows\system32\taskmgr.exe</SourceImage>
+		<SourceImage condition="contains all">C:\ProgramData\Microsoft\Windows Defender\Platform\;\MsMpEng.exe</SourceImage>
         <GrantedAccess condition="is">0x100000</GrantedAccess>
       </ProcessAccess>
     </RuleGroup>
@@ -150,6 +152,8 @@ func init() {
 		panic(err)
 	}
 
+	sysmon.SetAgnosticConfig(sysmonTestConfig)
+
 }
 
 func drainOldAutologgerEvents(t *testing.T) {
@@ -165,16 +169,22 @@ func drainOldAutologgerEvents(t *testing.T) {
 	tt.CheckErr(c.Start())
 
 	now := time.Now()
+	i := 0
 loop:
 	for {
 		select {
 		case e := <-c.Events:
+			i = 0
 			if e.System.TimeCreated.SystemTime.After(now) {
 				break loop
 			}
 			cnt++
 		default:
-			break loop
+			if i == 10 {
+				break loop
+			}
+			time.Sleep(500 * time.Millisecond)
+			i++
 		}
 	}
 
@@ -186,7 +196,9 @@ func testingRule() (r engine.Rule) {
 	r = engine.NewRule()
 	r.Name = "Testing:MatchAllSysmon"
 	// FileCreate, FileDeleted and FileDeletedDetected
-	r.Meta.Events = map[string][]int64{"Microsoft-Windows-Sysmon/Operational": {}}
+	r.Meta.Events = map[string][]int64{
+		sysmonChannel:     {},
+		kernelFileChannel: {}}
 	r.Actions = append(r.Actions, ActionFiledump, ActionRegdump, ActionBrief, ActionReport)
 	r.Meta.Criticality = 10
 	return r
@@ -304,7 +316,7 @@ func installSysmon() {
 	}
 
 	// we deserialize config
-	if err = xml.Unmarshal([]byte(sysmonConfig), &c); err != nil {
+	if err = xml.Unmarshal([]byte(sysmonTestConfig), &c); err != nil {
 		panic(err)
 	}
 	// we force the good schema version to be the one of sysmon installed
@@ -351,6 +363,8 @@ func TestAgent(t *testing.T) {
 	defer os.RemoveAll(tmp)
 
 	c := BuildDefaultConfig(tmp)
+	c.EtwConfig.TraceFiles.Read = true
+	c.EtwConfig.TraceFiles.Write = true
 	// make logger log to stdout
 	c.Logfile = "whids.log"
 	c.FwdConfig.Local = false
@@ -366,9 +380,11 @@ func TestAgent(t *testing.T) {
 		High:             []string{},
 		Critical:         []string{},
 	}
+	c.EtwConfig.ConfigureAutologger()
 
 	// creating new agent
 	a, err := NewAgent(c)
+	start := time.Now()
 	tt.CheckErr(err)
 	defer a.Stop()
 
@@ -388,8 +404,8 @@ func TestAgent(t *testing.T) {
 	// this hook is inserted after all others so the process tracker structure
 	// should be in a good state to test it
 	a.preHooks.Hook(func(a *Agent, e *event.EdrEvent) {
+
 		if e.Channel() == sysmonChannel {
-			//t.Log(utils.JsonStringOrPanic(e))
 			srcGuid := sourceGUIDFromEvent(e)
 			//t.Logf("contains guid:%s : %t", srcGuid, a.tracker.ContainsGuid(srcGuid))
 			if !a.tracker.ContainsGuid(srcGuid) {
@@ -405,7 +421,7 @@ func TestAgent(t *testing.T) {
 				// don't apply to all events
 				if rand.Int()%2 == 0 {
 					// terminate bogus commands
-					tt.CheckErr(tr.TerminateProcess())
+					tr.TerminateProcess()
 				}
 			}
 
@@ -424,6 +440,15 @@ func TestAgent(t *testing.T) {
 
 	// add a final hook to catch all events after enrichment
 	a.preHooks.Hook(func(a *Agent, e *event.EdrEvent) {
+		if e.Timestamp().After(start) && !start.IsZero() {
+			t.Log("Caught up late")
+			start = time.Time{}
+		}
+
+		if e.Channel() == kernelFileChannel {
+			t.Log(utils.PrettyJsonOrPanic(e.Event))
+		}
+
 		if e.Channel() == sysmonChannel {
 			gotSysmonEvent = true
 			switch e.EventID() {
@@ -449,6 +474,7 @@ func TestAgent(t *testing.T) {
 		func() { tt.CheckErr(a.config.EtwConfig.ConfigureAutologger()) },
 	)
 
+	t.Log("Running agent")
 	// we start running the agent
 	tt.CheckErr(a.Run())
 	// generate fake network trafic not originating from edr
@@ -457,6 +483,7 @@ func TestAgent(t *testing.T) {
 	defer terminate(pid)
 
 	time.Sleep(20 * time.Second)
+	t.Log("Stopping agent")
 	a.Stop()
 
 	tt.Assert(gotSysmonEvent, "failed to monitor Sysmon events")
@@ -469,6 +496,7 @@ func TestAgent(t *testing.T) {
 	}
 
 	a.WaitWithTimeout(time.Second * 15)
-
+	// to display statistics
+	a.logger = golog.Stdout
 	a.LogStats()
 }

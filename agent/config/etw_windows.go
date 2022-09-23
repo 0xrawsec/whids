@@ -18,10 +18,10 @@ const (
 	EdrTraceGuid        = "{e32c0429-d46b-47a9-ab6c-074012efe5ba}"
 	EdrBufferSize       = 64 // 64kB is the max ETW event size so the buffer needs to be at least this big
 	EdrTraceLogFileMode = 0x8001c0
-	EdrTraceClockTime   = 2 // System Time -> only way to handle time sync properly
+	EdrTraceClockTime   = 2   // System Time -> only way to handle time sync properly
+	EdrTraceMaxFileSize = 500 // 500MB of ETW RT session backup file should be enough not to lose event
 
 	KernelFileProviderName = "Microsoft-Windows-Kernel-File"
-	KernelFileProvider     = KernelFileProviderName + ":0xff:12,14,15,16"
 )
 
 var (
@@ -31,8 +31,22 @@ var (
 		LogFileMode: EdrTraceLogFileMode,
 		BufferSize:  EdrBufferSize,
 		ClockType:   EdrTraceClockTime,
+		MaxFileSize: EdrTraceMaxFileSize,
 	}
 )
+
+func (e *Etw) optimizedKernelFileProvider() string {
+	// create / close event ids
+	eventIds := []string{"12", "14"}
+	if e.TraceFiles.Read {
+		eventIds = append(eventIds, "15")
+	}
+	if e.TraceFiles.Write {
+		eventIds = append(eventIds, "16")
+	}
+
+	return fmt.Sprintf("%s:0xff:%s", KernelFileProviderName, strings.Join(eventIds, ","))
+}
 
 func (c *Etw) ConfigureAutologger() (lastErr error) {
 
@@ -56,14 +70,16 @@ func (c *Etw) ConfigureAutologger() (lastErr error) {
 func (c *Etw) UnifiedProviders() (providers []string) {
 	providers = make([]string, 0, len(c.Providers))
 	for _, p := range c.Providers {
-		if strings.HasPrefix(p, KernelFileProviderName) && c.enTraceFile {
+		// we don't take kernel file provider if we enabled tracing feature
+		if strings.HasPrefix(p, KernelFileProviderName) && c.FileTraceEnabled() {
 			continue
 		}
 		providers = append(providers, p)
 	}
 
-	if c.enTraceFile {
-		providers = append(providers, KernelFileProvider)
+	if c.FileTraceEnabled() {
+		// we append specific kernel file provider
+		providers = append(providers, c.optimizedKernelFileProvider())
 	}
 
 	return utils.DedupStringSlice(providers)

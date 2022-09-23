@@ -10,7 +10,6 @@ import (
 	"github.com/0xrawsec/golang-utils/fsutil"
 	"github.com/0xrawsec/toast"
 	"github.com/0xrawsec/whids/api/client/config"
-	clientConfig "github.com/0xrawsec/whids/api/client/config"
 	"github.com/0xrawsec/whids/los"
 	"github.com/0xrawsec/whids/tools"
 )
@@ -28,10 +27,10 @@ func buildDefaultConfig(root string) Agent {
 			UpdateInterval: 60 * time.Second,
 		},
 
-		FwdConfig: clientConfig.Forwarder{
+		FwdConfig: config.Forwarder{
 			Local:  true,
-			Client: clientConfig.Client{},
-			Logging: clientConfig.ForwarderLogging{
+			Client: config.Client{},
+			Logging: config.ForwarderLogging{
 				Dir:              filepath.Join(logDir, "Alerts"),
 				RotationInterval: time.Hour * 5,
 			},

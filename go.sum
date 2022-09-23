@@ -6,6 +6,12 @@ github.com/0xrawsec/gene/v2 v2.3.0 h1:AuScsQ/PlD8DwPzIaJmRuhDB1SgGnKZaKBB95mih0S
 github.com/0xrawsec/gene/v2 v2.3.0/go.mod h1:Ns5p9jwmvCAAmzIBSMOL5hhMIlszxTXqVxBdJU/jm/w=
 github.com/0xrawsec/golang-etw v1.5.3 h1:EYMebDfCwEX44a/pYwvdSH0CLiNVUEF0m3ExIZzV6rA=
 github.com/0xrawsec/golang-etw v1.5.3/go.mod h1:GHtVXfU9Lyak04kZYiNstAlYn+zpPvJMEgdk88Y6Irk=
+github.com/0xrawsec/golang-etw v1.6.0 h1:LFvsRO1P8V6T1wBQHXapnvQN68WlkeBll/JkZwPFBrA=
+github.com/0xrawsec/golang-etw v1.6.0/go.mod h1:nTLqX2X4dxf/XpYiFmVfWSrjER/CO3A1WOsvc8cac6I=
+github.com/0xrawsec/golang-etw v1.6.1 h1:587UQFLaVdu5B1C5+m1Haw6NoxiPCgtuOAKYD64zLrY=
+github.com/0xrawsec/golang-etw v1.6.1/go.mod h1:nTLqX2X4dxf/XpYiFmVfWSrjER/CO3A1WOsvc8cac6I=
+github.com/0xrawsec/golang-etw v1.6.2 h1:ZXOEL2+hfWBz7QK3iSPVhKeB1VYjz47xGl/WfdqdpzA=
+github.com/0xrawsec/golang-etw v1.6.2/go.mod h1:nTLqX2X4dxf/XpYiFmVfWSrjER/CO3A1WOsvc8cac6I=
 github.com/0xrawsec/golang-evtx v1.2.9 h1:DaL2BICXf3vnCkqsPIwth1Qpfsv4+UYdZ0zTajwYqrI=
 github.com/0xrawsec/golang-evtx v1.2.9/go.mod h1:1dWPugn8hfETOcaZAdu70QWkeVLvT9AUUFz0j+caV00=
 github.com/0xrawsec/golang-utils v1.1.3/go.mod h1:DADTtCFY10qXjWmUVhhJqQIZdSweaHH4soYUDEi8mj0=

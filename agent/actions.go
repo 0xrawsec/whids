@@ -428,7 +428,6 @@ func (m *ActionHandler) queueCompression(path string) {
 }
 
 func (m *ActionHandler) compressionLoop() {
-	m.edr.logger.Info("Compression loop starting")
 	if !m.edr.config.Dump.Compression {
 		return
 	}
