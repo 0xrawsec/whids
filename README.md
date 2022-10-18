@@ -21,7 +21,7 @@
  process memory). This way you are sure you collected the artifacts as soon as you could 
  (near real time).
 
- All this work has been done on my free time in the hope it would help other people, I hope you will enjoy it. Unless I get some funding to further develop this project, I will continue doing so. I will make all I can to fix issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
+All this work has been done on my free time in the hope it would help other people, I hope you will enjoy it. Unless I get some funding to further develop this project, I will continue developing it on a best effort basis. I will make all I can to fix issues in time and provide updates. Feel free to open issues to improve that project and keep it alive.
 
 ## Why
 
@@ -38,26 +38,18 @@
 
 **NB:** the EDR agent can be ran standalone (without being connected to an **EDR manager**)
 
-## Strengths
+## What you have to know
 
-* Open Source
+* It works only on Windows using ETW logs
 * Relies on [Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon) for all the heavy lifting (kernel component)
-* Very powerful but also customizable detection engine
-* Built by an Incident Responder for all Incident Responders to make their job easier  
-* Low footprint (no process injection)
+* Very powerful but also customizable detection engine (powered by [gene](https://github.com/0xrawsec/gene))
+* Built by an Incident Responder for all Incident Responders with the aim of making their job less painful  
+* Low footprint -> no process injection
 * Can co-exist with **any antivirus** product (advised to run it along with **MS Defender**)
 * Designed for high throughput. It can easily enrich and analyze 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
 * Easily integrable with other tools (Splunk, ELK, MISP ...)
 * Integrated with [ATT&CK framework](https://attack.mitre.org/)
-
-## Weaknesses
-
-* Only works on Windows
-* Detection limited to what is available in Windows ~~event logs channels~~ ETW providers/sessions (already a lot in there)
-* No process instrumentation (it is also a strength as it depends on the point of view)
-* No GUI yet (will develop one if requested by the community)
-* ~~No support for ETW~~ (available in beta)
-* Tell me if you notice others ...
+* There is a powerful [administrative API](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json) to ease management of large deployments (no GUI yet)
 
 # Installation
 
