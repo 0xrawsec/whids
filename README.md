@@ -42,11 +42,11 @@ All this work has been done on my free time in the hope it would help other peop
 
 * It works only on Windows using ETW logs
 * Relies on [Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon) for all the heavy lifting (kernel component)
-* Very powerful but also customizable detection engine (powered by [gene](https://github.com/0xrawsec/gene))
+* Very powerful and customizable detection engine (powered by [gene](https://github.com/0xrawsec/gene))
 * Built by an Incident Responder for all Incident Responders with the aim of making their job less painful  
 * Low footprint -> no process injection
 * Can co-exist with **any antivirus** product (advised to run it along with **MS Defender**)
-* Designed for high throughput. It can easily enrich and analyze 4M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
+* Designed for high throughput. It can easily enrich and analyze up to 15M events a day per endpoint without performance impact. Good luck to achieve that with a SIEM.
 * Easily integrable with other tools (Splunk, ELK, MISP ...)
 * Integrated with [ATT&CK framework](https://attack.mitre.org/)
 * There is a powerful [administrative API](https://validator.swagger.io/?url=https://raw.githubusercontent.com/0xrawsec/whids/master/doc/admin.openapi.json) to ease management of large deployments (no GUI yet)
