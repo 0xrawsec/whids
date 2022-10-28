@@ -4,6 +4,7 @@
   <img src="./doc/img/logo.png" alt="logo" width="40%">
 </p>
 
+[![Slack](https://img.shields.io/badge/slack-whids-brightgreen.svg?logo=slack)](https://whids.slack.com/)
 [![Coverage](.github/coverage/badge.svg)](https://raw.githubusercontent.com/0xrawsec/whids/master/.github/coverage/coverage.txt)
 [![Latest Commit](https://badgen.net/github/last-commit/0xrawsec/whids)](https://github.com/0xrawsec/whids/commits/master)
 [![Latest Release](https://badgen.net/github/release/0xrawsec/whids)](https://github.com/0xrawsec/whids/releases)
