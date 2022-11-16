@@ -58,7 +58,7 @@ All this work has been done on my free time in the hope it would help other peop
 
 1. [Install Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon)
 2. **Configure Sysmon**
-    * You can find optimized Sysmon configurations [here](https://github.com/0xrawsec/whids/tree/master/tools/sysmon)
+    * You can find optimized Sysmon configurations [here](https://github.com/0xrawsec/whids/tree/master/utilities/sysmon)
     * Logging any **ProcessCreate** and **ProcessTerminate** is mandatory
 3. Take note of the path to your Sysmon binary because you will need it later on
 
