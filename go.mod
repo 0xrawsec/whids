@@ -14,7 +14,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/pelletier/go-toml/v2 v2.0.5
-	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
+	golang.org/x/sys v0.1.0
 )
 
 require (
