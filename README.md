@@ -28,7 +28,7 @@ All this work has been done on my free time in the hope it would help other peop
 
 * Provide an **Open Source EDR** to the community
 * Make transparency on the detection rules to make analysts understand why a rule triggered
-* Offer powerful detection primitives though a flexible rule engine
+* Offer powerful detection primitives through a flexible rule engine
 * Optimize Incident Response processes by drastically reducing the time between detection and artifact collection
 
 ## How
